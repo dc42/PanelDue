@@ -143,6 +143,7 @@ void DisplayManager::AttachPopup(PopupField * pp, DisplayField *p)
 
 // Set the font and colours, print the label (if any) and leave the cursor at the correct position for the data
 void LabelledField::DoLabel(bool full, PixelNumber xOffset, PixelNumber yOffset)
+pre(full || changed)
 {
 	lcd.setFont(font);
 	lcd.setColor(fcolour);
@@ -152,7 +153,6 @@ void LabelledField::DoLabel(bool full, PixelNumber xOffset, PixelNumber yOffset)
 		lcd.setTextPos(x + xOffset, y + yOffset, x + xOffset + width);
 		lcd.print(label);
 		labelColumns = lcd.getTextX() + 1 - x - xOffset;
-		changed = false;
 	}
 	else
 	{
@@ -167,6 +167,7 @@ void TextField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 		DoLabel(full, xOffset, yOffset);
 		lcd.print(text);
 		lcd.clearToMargin();
+		changed = false;
 	}
 }
 
@@ -183,6 +184,7 @@ void FloatField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 			lcd.print(units);
 		}
 		lcd.clearToMargin();
+		changed = false;
 	}
 }
 
@@ -199,6 +201,7 @@ void IntegerField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 			lcd.print(units);
 		}
 		lcd.clearToMargin();
+		changed = false;
 	}
 }
 
@@ -246,6 +249,7 @@ void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 			lcd.setColor(bcolour);
 			lcd.fillRect(x + xOffset + pixelsSet + 1, y + yOffset + 1, x + xOffset + width - 2, y + yOffset + height - 2);
 		}
+		changed = false;
 	}
 }
 

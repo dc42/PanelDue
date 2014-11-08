@@ -204,6 +204,7 @@ public:
 	void SetPercent(uint8_t pc)
 	{
 		percent = pc;
+		changed = true;
 	}
 };
 

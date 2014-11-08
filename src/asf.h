@@ -75,6 +75,9 @@
 #include <pmc.h>
 #include <sleep.h>
 
+// From module: PWM - Pulse Width Modulation
+#include <pwm.h>
+
 // From module: Part identification macros
 #include <parts.h>
 
@@ -83,6 +86,9 @@
 
 // From module: System Clock Control - SAM3S implementation
 #include <sysclk.h>
+
+// From module: UART - Univ. Async Rec/Trans
+#include <uart.h>
 
 // From module: WDT - Watchdog Timer
 #include <wdt.h>
