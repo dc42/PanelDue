@@ -235,21 +235,33 @@ void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full || changed)
 	{
-		lcd.setColor(fcolour);
+		PixelNumber pixelsSet = ((width - 2) * percent)/100;
 		if (full)
 		{
+			lcd.setColor(fcolour);
 			lcd.drawLine(x + xOffset, y, x + xOffset + width - 1, y + yOffset);
 			lcd.drawLine(x + xOffset, y + yOffset + height - 1, x + xOffset + width - 1, y + yOffset + height - 1);
 			lcd.drawLine(x + xOffset + width - 1, y + yOffset + 1, x + xOffset + width - 1, y + yOffset + height - 2);
+
+			lcd.fillRect(x + xOffset, y + yOffset + 1, x + xOffset + pixelsSet, y + yOffset + height - 2);
+			if (pixelsSet < width - 2)
+			{
+				lcd.setColor(bcolour);
+				lcd.fillRect(x + xOffset + pixelsSet + 1, y + yOffset + 1, x + xOffset + width - 2, y + yOffset + height - 2);
+			}
 		}
-		PixelNumber pixelsSet = ((width - 2) * percent)/100;
-		lcd.fillRect(x + xOffset, y + yOffset + 1, x + xOffset + pixelsSet, y + yOffset + height - 2);
-		if (pixelsSet < width - 2)
+		else if (pixelsSet > lastNumPixelsSet)
+		{
+			lcd.setColor(fcolour);
+			lcd.fillRect(x + xOffset + lastNumPixelsSet, y + yOffset + 1, x + xOffset + pixelsSet, y + yOffset + height - 2);
+		}
+		else if (pixelsSet < lastNumPixelsSet)
 		{
 			lcd.setColor(bcolour);
-			lcd.fillRect(x + xOffset + pixelsSet + 1, y + yOffset + 1, x + xOffset + width - 2, y + yOffset + height - 2);
+			lcd.fillRect(x + xOffset + pixelsSet + 1, y + yOffset + 1, x + xOffset + lastNumPixelsSet, y + yOffset + height - 2);	
 		}
 		changed = false;
+		lastNumPixelsSet = pixelsSet;
 	}
 }
 

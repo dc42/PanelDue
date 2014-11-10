@@ -30,6 +30,7 @@
 #include "Display.hpp"
 #include "UTFT.hpp"
 #include "UTouch.hpp"
+#include "SerialIo.hpp"
 
 // Controller for Ormerod to run on SAM3S2B
 // Coding rules:
@@ -349,6 +350,8 @@ void loop()
 		t2CurrentTemp->SetColours(white, standbyBackColor);
 	    bedActiveTemp->SetColours(white, yellow);
 		
+		SerialIo::checkInput();
+		
 		if (touch.dataAvailable())
 		{
 			touch.read();
@@ -422,20 +425,14 @@ void loop()
 int main(void)
 {
     /* Initialize the SAM system */
-    //SystemInit();
-	sysclk_init();
-	board_init();
+    SystemInit();
+	//sysclk_init();
+	//board_init();
 	
 	wdt_disable(WDT);		// disable watchdog
 	pmc_enable_periph_clk(ID_PIOA);
-	pmc_enable_periph_clk(ID_UART1);
-	pio_configure(PIOB, PIO_PERIPH_A, PIO_PB2 | PIO_PB3, 0);		// enable UART 1 pins
 	
-	sam_uart_opt uartOptions;
-	uartOptions.ul_mck = sysclk_get_main_hz()/2;	// master clock is PLL clock divided by 2
-	uartOptions.ul_baudrate = 115200;
-	uartOptions.ul_mode = US_MR_PAR_NO;			// mode = normal, no parity
-	uart_init(UART1, &uartOptions);
+	SerialIo::init();
 	
 	setup();
 	pio_configure(PIOA, PIO_OUTPUT_0, PIO_PA8, 0);
@@ -450,12 +447,11 @@ void WriteCommand(char c)
 	size_t len = strlen(commandBuffer);
 	commandBuffer[len] = c;
 	commandBuffer[len + 1] = '\0';
-	while(uart_write(UART1, c) != 0) { }
+	SerialIo::putChar(c);
 }
 
 void WriteCommand(const char* array s)
 {
-	//strcat(commandBuffer, s);
 	while (*s != 0)
 	{
 		WriteCommand(*s++);
@@ -476,6 +472,63 @@ decrease(i < 0; i)
 		i %= 10;
 	}
 	WriteCommand((char)((char)i + '0'));
+}
+
+// Public functions called by the SerialIo module
+extern void processIntData(const char * array id, int index, int data)
+{
+	if (strcmp(id, "active") == 0)
+	{
+		IntegerField *f = NULL;
+		switch(index)
+		{
+		case 0:
+			f = bedActiveTemp;
+			break;
+		case 1:
+			f = t1ActiveTemp;
+			break;
+		case 2:
+			f = t2ActiveTemp;
+			break;
+		default:
+			break;
+		}
+		if (f != NULL)
+		{
+			f->SetValue(data);
+		}
+	}	
+}
+
+extern void processFloatData(const char * array id, int index, float data)
+{
+	if (strcmp(id, "current") == 0)
+	{
+		FloatField *f = NULL;
+		switch(index)
+		{
+		case 0:
+			f = bedCurrentTemp;
+			break;
+		case 1:
+			f = t1CurrentTemp;
+			break;
+		case 2:
+			f = t2CurrentTemp;
+			break;
+		default:
+			break;		
+		}
+		if (f != NULL)
+		{
+			f->SetValue(data);
+		}
+	}
+}
+extern void processStringData(const char * array id, int index, const char* array data)
+{
+	
 }
 
 // End

@@ -191,9 +191,10 @@ class ProgressBar : public DisplayField
 {
 	uint8_t height;
 	uint8_t percent;
+	PixelNumber lastNumPixelsSet;
 public:
 	ProgressBar(uint16_t py, uint16_t px, uint8_t ph, uint16_t pw)
-		: DisplayField(py, px, pw), height(ph), percent(0)
+		: DisplayField(py, px, pw), height(ph), percent(0), lastNumPixelsSet(0)
 	{
 	}
 	
