@@ -11,11 +11,9 @@
 #include "Vector.hpp"
 
 typedef String<20> FieldId;
-typedef String<50> StringValue;
+typedef String<50> FieldValue;
 
-extern void processIntData(const char * array id, int index, int data);
-extern void processFloatData(const char * array id, int index, float data);
-extern void processStringData(const char * array id, int index, const char * array data);
+extern void processReceivedValue(const char id[], const char val[], int index);
 
 namespace SerialIo
 {
@@ -34,7 +32,7 @@ namespace SerialIo
 		uart_enable_interrupt(UART1, UART_IER_RXRDY | UART_IER_OVRE | UART_IER_FRAME);
 	}
 	
-	// Send a character to the printer.
+	// Send a character to the 3D printer.
 	// A typical command string is only about 12 characters long, which at 115200 baud takes just over 1ms to send.
 	// So there is no particular reason to use interrupts, and by so doing so we avoid having to handle buffer full situations.
 	void putChar(char c)
@@ -69,32 +67,13 @@ namespace SerialIo
 	
 	JsonState state = jsBegin;
 	
-	FieldId id;
-	StringValue stringVal;
-	unsigned int intVal;
-	unsigned int fracVal, fracDivisor;
-	bool negative;
+	FieldId fieldId;
+	FieldValue fieldVal;
 	int arrayElems = -1;
 	
-	void processStringValue()
+	void processField()
 	{
-		processStringData(id.c_str(), arrayElems, stringVal.c_str());
-	}
-	
-	void processIntValue()
-	{
-		int val = (negative) ? -(int)intVal : (int)intVal;
-		processIntData(id.c_str(), arrayElems, val);
-	}
-	
-	void processFloatValue()
-	{
-		float val = (float)fracVal/(float)fracDivisor + (float)intVal;
-		if (negative)
-		{
-			val = -val;
-		}
-		processFloatData(id.c_str(), arrayElems, val);
+		processReceivedValue(fieldId.c_str(), fieldVal.c_str(), arrayElems);
 	}
 	
 	void checkInput()
@@ -124,7 +103,7 @@ namespace SerialIo
 					case ' ':
 						break;
 					case '"':
-						id.clear();
+						fieldId.clear();
 						state = jsId;
 						break;
 					case '}':
@@ -146,9 +125,9 @@ namespace SerialIo
 						state = jsBegin;
 						break;
 					default:
-						if (c >= ' ' && !id.full())
+						if (c >= ' ' && !fieldId.full())
 						{
-							id.add(c);
+							fieldId.add(c);
 						}
 						else
 						{
@@ -163,6 +142,7 @@ namespace SerialIo
 					{
 					case ':':
 						arrayElems = -1;
+						fieldVal.clear();
 						state = jsVal;
 						break;
 					case ' ':
@@ -179,7 +159,6 @@ namespace SerialIo
 					case ' ':
 						break;
 					case '"':
-						stringVal.clear();
 						state = jsStringVal;
 						break;
 					case '[':
@@ -193,13 +172,13 @@ namespace SerialIo
 						}
 						break;
 					case '-':
+						fieldVal.add(c);
 						state = jsNegIntVal;
 						break;
 					default:
 						if (c >= '0' && c <= '9')
 						{
-							negative = false;
-							intVal = c - '0';
+							fieldVal.add(c);
 							state = jsIntVal;
 							break;
 						}
@@ -214,11 +193,11 @@ namespace SerialIo
 					switch (c)
 					{
 					case '"':
-						processStringValue();
+						processField();
 						state = jsEndVal;
 						break;
 					case '\\':
-						if (!stringVal.full())
+						if (!fieldVal.full())
 						{
 							state = jsStringEscape;
 						}
@@ -228,9 +207,9 @@ namespace SerialIo
 						}
 						break;
 					default:
-						if (c >= ' ' && !stringVal.full())
+						if (c >= ' ' && !fieldVal.full())
 						{
-							stringVal.add(c);
+							fieldVal.add(c);
 						}
 						else
 						{
@@ -245,22 +224,22 @@ namespace SerialIo
 					{
 					case '"':
 					case '\\':
-						stringVal.add(c);
+						fieldVal.add(c);
 						break;
 					case 'b':
-						stringVal.add('\b');
+						fieldVal.add('\b');
 						break;
 					case 'f':
-						stringVal.add('\f');
+						fieldVal.add('\f');
 						break;
 					case 'n':
-						stringVal.add('\n');
+						fieldVal.add('\n');
 						break;
 					case 'r':
-						stringVal.add('\r');
+						fieldVal.add('\r');
 						break;
 					case 't':
-						stringVal.add('\t');
+						fieldVal.add('\t');
 						break;
 					// we don't handle '\uxxxx'
 					default:
@@ -272,8 +251,7 @@ namespace SerialIo
 				case jsNegIntVal:		// had '-' so expecting a integer value
 					if (c >= '0' && c <= '9')
 					{
-						negative = true;
-						intVal = c - '0';
+						fieldVal.add(c);
 						state = jsIntVal;
 					}
 					else
@@ -286,15 +264,15 @@ namespace SerialIo
 					switch(c)
 					{
 					case '.':
-						fracVal = 0;
-						fracDivisor = 1;
+						fieldVal.add(c);
 						state = jsFracVal;
 						break;
 					case ',':
-						processIntValue();
+						processField();
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
+							fieldVal.clear();
 							state = jsVal;
 						}
 						else
@@ -305,7 +283,7 @@ namespace SerialIo
 					case ']':
 						if (arrayElems >= 0)
 						{
-							processIntValue();
+							processField();
 							arrayElems = -1;
 							state = jsEndVal;
 						}
@@ -317,7 +295,7 @@ namespace SerialIo
 					case '}':
 						if (arrayElems == -1)
 						{
-							processIntValue();
+							processField();
 							state = jsBegin;
 						}
 						else
@@ -328,7 +306,7 @@ namespace SerialIo
 					default:
 						if (c >= '0' && c <= '9')
 						{
-							intVal = (10 * intVal) + (c - '0');
+							fieldVal.add(c);
 						}
 						else
 						{
@@ -342,10 +320,11 @@ namespace SerialIo
 					switch(c)
 					{
 					case ',':
-						processFloatValue();
+						processField();
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
+							fieldVal.clear();
 							state = jsVal;
 						}
 						else
@@ -356,7 +335,7 @@ namespace SerialIo
 					case ']':
 						if (arrayElems >= 0)
 						{
-							processFloatValue();
+							processField();
 							arrayElems = -1;
 							state = jsEndVal;
 						}
@@ -368,7 +347,7 @@ namespace SerialIo
 					case '}':
 						if (arrayElems == -1)
 						{
-							processFloatValue();
+							processField();
 							state = jsBegin;
 						}
 						else
@@ -379,8 +358,7 @@ namespace SerialIo
 					default:
 						if (c >= '0' && c <= '9')
 						{
-							fracVal = (10 * fracVal) + (c - '0');
-							fracDivisor *= 10;
+							fieldVal.add(c);
 						}
 						else
 						{

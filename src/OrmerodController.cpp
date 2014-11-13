@@ -474,61 +474,125 @@ decrease(i < 0; i)
 	WriteCommand((char)((char)i + '0'));
 }
 
-// Public functions called by the SerialIo module
-extern void processIntData(const char * array id, int index, int data)
+// Try to get an integer value from a string. if it is actually a floating point value, round it.
+bool getInteger(const char s[], int &rslt)
 {
-	if (strcmp(id, "active") == 0)
+	if (s[0] == 0) return false;			// empty string
+	char* endptr;
+	rslt = (int) strtol(s, &endptr, 10);
+	if (*endptr == 0) return true;			// we parsed an integer
+	double d = strtod(s, &endptr);			// try parsing a floating point number
+	if (*endptr == 0)
 	{
-		IntegerField *f = NULL;
-		switch(index)
-		{
-		case 0:
-			f = bedActiveTemp;
-			break;
-		case 1:
-			f = t1ActiveTemp;
-			break;
-		case 2:
-			f = t2ActiveTemp;
-			break;
-		default:
-			break;
-		}
-		if (f != NULL)
-		{
-			f->SetValue(data);
-		}
-	}	
+		rslt = (int)((d < 0.0) ? d - 0.5 : d + 0.5);
+		return true;
+	}
+	return false;
 }
 
-extern void processFloatData(const char * array id, int index, float data)
+// Try to get a floating point value from a string. if it is actually a floating point value, round it.
+bool getFloat(const char s[], float &rslt)
 {
-	if (strcmp(id, "current") == 0)
+	if (s[0] == 0) return false;			// empty string
+	char* endptr;
+	rslt = (float) strtod(s, &endptr);
+	return *endptr == 0;					// we parsed an integer
+}
+
+// Public functions called by the SerialIo module
+extern void processReceivedValue(const char id[], const char data[], int index)
+{
+	if (index >= 0)			// if this is an element of an array
 	{
-		FloatField *f = NULL;
-		switch(index)
+		if (strcmp(id, "active") == 0)
 		{
-		case 0:
-			f = bedCurrentTemp;
-			break;
-		case 1:
-			f = t1CurrentTemp;
-			break;
-		case 2:
-			f = t2CurrentTemp;
-			break;
-		default:
-			break;		
+			int ival;
+			if (getInteger(data, ival))
+			{
+				switch(index)
+				{
+				case 0:
+					bedActiveTemp->SetValue(ival);
+					break;
+				case 1:
+					t1ActiveTemp->SetValue(ival);
+					break;
+				case 2:
+					t2ActiveTemp->SetValue(ival);
+					break;
+				default:
+					break;
+				}
+			}
 		}
-		if (f != NULL)
+		else if (strcmp(id, "standby") == 0)
 		{
-			f->SetValue(data);
+			int ival;
+			if (getInteger(data, ival))
+			{
+				switch(index)
+				{
+				case 0:
+					bedStandbyTemp->SetValue(ival);
+					break;
+				case 1:
+					t1StandbyTemp->SetValue(ival);
+					break;
+				case 2:
+					t2StandbyTemp->SetValue(ival);
+					break;
+				default:
+					break;
+				}
+			}
+		}
+		else if (strcmp(id, "current") == 0)
+		{
+			float fval;
+			if (getFloat(data, fval))
+			{
+				switch(index)
+				{
+				case 0:
+					bedCurrentTemp->SetValue(fval);
+					break;
+				case 1:
+					t1CurrentTemp->SetValue(fval);
+					break;
+				case 2:
+					t2CurrentTemp->SetValue(fval);
+					break;
+				default:
+					break;
+				}
+			}
+		}
+		else if (strcmp(id, "pos") == 0)
+		{
+			float fval;
+			if (getFloat(data, fval))
+			{
+				switch(index)
+				{
+				case 0:
+					xPos->SetValue(fval);
+					break;
+				case 1:
+					yPos->SetValue(fval);
+					break;
+				case 2:
+					zPos->SetValue(fval);
+					break;
+				default:
+					break;
+				}
+			}
 		}
 	}
-}
-extern void processStringData(const char * array id, int index, const char* array data)
-{
-	
+	else
+	{
+		// Handle non-array values
+	}
 }
 
 // End

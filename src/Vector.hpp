@@ -49,13 +49,18 @@ template<size_t N> int compare(Vector<char, N> v, const char * array s)
 	return (*s == '\0') ? 0 : -1;
 }
 
-template<size_t N> class String : public Vector<char, N>
+template<size_t N> class String : public Vector<char, N + 1>
 {
 public:
+	String() : Vector<char, N + 1>() { this->storage[0] = '\0'; }
+
 	// Redefine 'full' so as to make room for a null terminator
-	bool full() const { return this->filled >= N - 1; }
+	bool full() const { return this->filled == N; }
 		
-	const char* array c_str() { this->storage[this->filled] = 0; return this->storage; }
+	// Redefine 'add' to add a null terminator
+	void add(char x) pre(this->filled < N) { this->storage[this->filled++] = x; this->storage[this->filled] = '\0'; }
+		
+	const char* array c_str() const { return this->storage; }
 };
 
 #endif /* VECTOR_H_ */
