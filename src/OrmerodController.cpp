@@ -52,6 +52,13 @@ UTFT lcd(HX8352A, TMode16bit, 16, 17, 18, 19);   // Remember to change the model
 UTouch touch(23, 24, 22, 21, 20);
 DisplayManager mgr;
 
+volatile uint32_t tickCount;
+
+const uint32_t pollInterval = 2000;			// poll interval in milliseconds
+const uint32_t beepLength = 10;				// beep length in ms
+
+pwm_channel_t pwm_channel_instance;
+
 static char machineName[15] = "dc42's Ormerod";
 
 const Color activeBackColor = red;
@@ -341,112 +348,60 @@ void changeTab(DisplayField *newTab)
 	}
 }
 
-void loop()
+// Process a touch event
+void ProcessTouch(DisplayField *f)
 {
-	for (uint8_t i = 0; i <= 100; ++i)
+	switch(f->GetEvent())
 	{
-		pbar->SetPercent(100-i);
-		t1CurrentTemp->SetColours(white, activeBackColor);
-		t2CurrentTemp->SetColours(white, standbyBackColor);
-	    bedActiveTemp->SetColours(white, yellow);
-		
-		SerialIo::checkInput();
-		
-		if (touch.dataAvailable())
+	case evChangeTab:
+		changeTab(f);
+		break;
+
+	case evSetTemp:
+		mgr.AttachPopup(setTempPopup, f);
+		fieldBeingAdjusted = f;
+		break;
+
+	case evSet:
+		if (fieldBeingAdjusted != NULL)
 		{
-			touch.read();
-			int x = touch.getX();
-			int y = touch.getY();
-			touchX->SetValue(x);	//debug
-			touchY->SetValue(y);	//debug
-			DisplayField *f = mgr.FindEvent(x, y);
-			if (f != NULL)
-			{
-				// generate beep or click here...
-				switch(f->GetEvent())
-				{
-				case evChangeTab:
-					changeTab(f);
-					break;
-
-				case evSetTemp:
-					mgr.AttachPopup(setTempPopup, f);
-					fieldBeingAdjusted = f;
-					break;
-
-				case evSet:
-					if (fieldBeingAdjusted != NULL)
-					{
-						commandBuffer[0] = '\0';
-						((IntegerSettingField*)fieldBeingAdjusted)->Action();
-						commandField->SetChanged();
-					}
-					mgr.SetPopup(NULL);
-					fieldBeingAdjusted = NULL;
-					break;
-
-				case evUp:
-					if (fieldBeingAdjusted != NULL)
-					{
-						((IntegerField*)fieldBeingAdjusted)->Increment(1);
-					}
-					break;
-
-				case evDown:
-					if (fieldBeingAdjusted != NULL)
-					{
-						((IntegerField*)fieldBeingAdjusted)->Increment(-1);
-					}
-					break;
-
-				default:
-					break;
-				}
-			}
+			commandBuffer[0] = '\0';
+			((IntegerSettingField*)fieldBeingAdjusted)->Action();
+			commandField->SetChanged();
 		}
-		freeMem->SetValue(getFreeMemory());
-		mgr.RefreshAll(false);
-		
-//    lcd.drawBitmap(300, 200, 32, 32, tux, 1);
-//    delay(100);
-//		pio_clear(PIOA, PIO_PA8);
-//		delay_ms(1000);
-//		pio_set(PIOA, PIO_PA8);
-//		delay_ms(500);
+		mgr.SetPopup(NULL);
+		fieldBeingAdjusted = NULL;
+		break;
+
+	case evUp:
+		if (fieldBeingAdjusted != NULL)
+		{
+			((IntegerField*)fieldBeingAdjusted)->Increment(1);
+		}
+		break;
+
+	case evDown:
+		if (fieldBeingAdjusted != NULL)
+		{
+			((IntegerField*)fieldBeingAdjusted)->Increment(-1);
+		}
+		break;
+
+	default:
+		break;
 	}
 }
 
-
-/**
- * \brief Application entry point.
- *
- * \return Unused (ANSI-C compatibility).
- */
-int main(void)
+void SysTick_Handler()
 {
-    /* Initialize the SAM system */
-    SystemInit();
-	//sysclk_init();
-	//board_init();
-	
-	wdt_disable(WDT);		// disable watchdog
-	pmc_enable_periph_clk(ID_PIOA);
-	
-	SerialIo::init();
-	
-	setup();
-	pio_configure(PIOA, PIO_OUTPUT_0, PIO_PA8, 0);
-	while (1)
-	{
-		loop();
-	}
+	++tickCount;
 }
 
 void WriteCommand(char c)
 {
-	size_t len = strlen(commandBuffer);
-	commandBuffer[len] = c;
-	commandBuffer[len + 1] = '\0';
+//	size_t len = strlen(commandBuffer);
+//	commandBuffer[len] = c;
+//	commandBuffer[len + 1] = '\0';
 	SerialIo::putChar(c);
 }
 
@@ -595,5 +550,113 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 	}
 }
 
-// End
+void BuzzerInit()
+{	
+	pwm_channel_disable(PWM, PWM_CHANNEL_0);
+	pwm_clock_t clock_setting = 
+	{
+		.ul_clka = 2000 * 100,
+		.ul_clkb = 0,
+		.ul_mck = SystemCoreClock
+	};
+	pwm_init(PWM, &clock_setting);
+	pwm_channel_instance.ul_prescaler = PWM_CMR_CPRE_CLKA;
+	pwm_channel_instance.ul_period = 100;
+	pwm_channel_instance.ul_duty = 50;
+	pwm_channel_instance.channel = PWM_CHANNEL_0;
+	pwm_channel_init(PWM, &pwm_channel_instance);
+	pio_configure(PIOB, PIO_PERIPH_A, PIO_PB0, 0);
+	pio_configure(PIOB, PIO_PERIPH_B, PIO_PB5, 0);
+}
 
+void BuzzerOn()
+{
+	pwm_channel_enable(PWM, PWM_CHANNEL_0);	
+}
+
+void BuzzerOff()
+{
+	pwm_channel_disable(PWM, PWM_CHANNEL_0);
+}
+
+/**
+ * \brief Application entry point.
+ *
+ * \return Unused (ANSI-C compatibility).
+ */
+int main(void)
+{
+    SystemInit();						// set up the click etc.	
+	wdt_disable(WDT);					// disable watchdog for now
+	
+	matrix_set_system_io(CCFG_SYSIO_SYSIO4 | CCFG_SYSIO_SYSIO5 | CCFG_SYSIO_SYSIO6 | CCFG_SYSIO_SYSIO7);	// enable PB4=PB7 pins
+
+	pmc_enable_periph_clk(ID_PIOA);		// enable the PIO clock
+	pmc_enable_periph_clk(ID_PWM);		// enable the PWM clock
+	
+	SerialIo::init();
+	BuzzerInit();
+	
+	setup();
+//	pio_configure(PIOA, PIO_OUTPUT_0, PIO_PA8, 0);
+	
+	SysTick_Config(SystemCoreClock / 1000);
+
+	uint32_t lastPollTime = tickCount;
+	uint32_t lastBeepStartTime = tickCount;
+	unsigned int percent = 0;
+	for (;;)
+	{
+		// Temporarily animate the progress bar so we can see that it is running
+		pbar->SetPercent(percent);
+		++percent;
+		if (percent == 100)
+		{
+			percent = 0;
+		}
+		
+		t1CurrentTemp->SetColours(white, activeBackColor);
+		t2CurrentTemp->SetColours(white, standbyBackColor);
+		bedActiveTemp->SetColours(white, yellow);
+		
+		SerialIo::checkInput();
+		
+		if (touch.dataAvailable())
+		{
+			touch.read();
+			int x = touch.getX();
+			int y = touch.getY();
+			touchX->SetValue(x);	//debug
+			touchY->SetValue(y);	//debug
+			DisplayField * null f = mgr.FindEvent(x, y);
+			if (f != NULL)
+			{
+				BuzzerOn();
+				lastBeepStartTime = tickCount;
+				ProcessTouch(f);
+			}
+		}
+		freeMem->SetValue(getFreeMemory());
+		mgr.RefreshAll(false);
+		
+		if (tickCount - lastPollTime >= pollInterval)
+		{
+			lastPollTime += pollInterval;
+			WriteCommand("M105 S2\n");
+		}
+		
+		if (tickCount - lastBeepStartTime >= beepLength)
+		{
+			BuzzerOff();
+		}
+		
+		//    lcd.drawBitmap(300, 200, 32, 32, tux, 1);
+		//    delay(100);
+		//		pio_clear(PIOA, PIO_PA8);
+		//		delay_ms(1000);
+		//		pio_set(PIOA, PIO_PA8);
+			//		delay_ms(500);
+	}
+}
+
+// End
