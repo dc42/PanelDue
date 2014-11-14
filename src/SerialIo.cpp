@@ -51,7 +51,7 @@ namespace SerialIo
 	enum JsonState 
 	{
 		jsBegin,			// initial state, expecting '{'
-		jsBra,				// just had '{' so expecting a quoted ID
+		jsExpectId,			// just had '{' so expecting a quoted ID
 		jsId,				// expecting an identifier, or in the middle of one
 		jsHadId,			// had a quoted identifier, expecting ':'
 		jsVal,				// had ':', expecting value
@@ -77,7 +77,7 @@ namespace SerialIo
 	
 	void checkInput()
 	{
-		if (nextIn != nextOut)
+		while (nextIn != nextOut)
 		{
 			char c = rxBuffer[nextOut];
 			nextOut = (nextOut + 1) % rxBufsize;
@@ -92,11 +92,11 @@ namespace SerialIo
 				case jsBegin:			// initial state, expecting '{'
 					if (c == '{')
 					{
-						state = jsBra;
+						state = jsExpectId;
 					}
 					break;
 
-				case jsBra:				// just had '{' so expecting a quoted ID
+				case jsExpectId:		// expecting a quoted ID
 					switch (c)
 					{
 					case ' ':
@@ -119,9 +119,6 @@ namespace SerialIo
 					{
 					case '"':
 						state = jsHadId;
-						break;
-					case '\n':
-						state = jsBegin;
 						break;
 					default:
 						if (c >= ' ' && !fieldId.full())
@@ -242,7 +239,7 @@ namespace SerialIo
 						break;
 					// we don't handle '\uxxxx'
 					default:
-						state = jsEndVal;
+						state = jsError;
 						break;
 					}
 					break;
@@ -276,7 +273,7 @@ namespace SerialIo
 						}
 						else
 						{
-							state = jsId;
+							state = jsExpectId;
 						}
 						break;					
 					case ']':
@@ -328,7 +325,7 @@ namespace SerialIo
 						}
 						else
 						{
-							state = jsId;
+							state = jsExpectId;
 						}
 						break;
 					case ']':
@@ -378,7 +375,7 @@ namespace SerialIo
 						}
 						else
 						{
-							state = jsId;
+							state = jsExpectId;
 						}
 						break;
 					case ']':

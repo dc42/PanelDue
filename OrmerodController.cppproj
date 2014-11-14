@@ -514,6 +514,12 @@
     <Compile Include="src\Buzzer.hpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\Misc.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Misc.hpp">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\SysTick.cpp">
       <SubType>compile</SubType>
     </Compile>

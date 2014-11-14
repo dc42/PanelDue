@@ -1,39 +1,3 @@
-/**
- * \file
- *
- * \brief Empty user application template
- *
- */
-
-/**
- * \mainpage User Application template doxygen documentation
- *
- * \par Empty user application template
- *
- * Bare minimum empty user application template
- *
- * \par Content
- *
- * -# Include the ASF header files (through asf.h)
- * -# "Insert system clock initialization code here" comment
- * -# Minimal main function that starts with a call to board_init()
- * -# "Insert application code here" comment
- *
- */
-
-/*
- * Include header files for all drivers that have been imported from
- * Atmel Software Framework (ASF).
- */
-#include "asf.h"
-#include "mem.hpp"
-#include "Display.hpp"
-#include "UTFT.hpp"
-#include "UTouch.hpp"
-#include "SerialIo.hpp"
-#include "Buzzer.hpp"
-#include "SysTick.hpp"
-
 // Controller for Ormerod to run on SAM3S2B
 // Coding rules:
 //
@@ -43,14 +7,23 @@
 // 3. No pure virtual functions. This is because in release builds, having pure virtual functions causes huge amounts of the C++ library to be linked in
 //    (possibly because it wants to print a message if a pure virtual function is called).
 
+#include "asf.h"
+#include "mem.hpp"
+#include "Display.hpp"
+#include "UTFT.hpp"
+#include "UTouch.hpp"
+#include "SerialIo.hpp"
+#include "Buzzer.hpp"
+#include "SysTick.hpp"
+#include "Misc.hpp"
+
 // Declare which fonts we will be using
-//extern uint8_t glcd10x10[];
 extern uint8_t glcd16x16[];
 extern uint8_t glcd19x20[];
 
 #define DEGREE_SYMBOL	"\x81"
 
-UTFT lcd(HX8352A, TMode16bit, 16, 17, 18, 19);   // Remember to change the model parameter to suit your display module!
+UTFT lcd(HX8352A, TMode16bit, 16, 17, 18, 19);		// Remember to change the model parameter to suit your display module!
 UTouch touch(23, 24, 22, 21, 20);
 DisplayManager mgr;
 
@@ -61,6 +34,7 @@ const uint32_t ignoreTouchTime = 200;				// how long we ignore new touches for a
 static uint32_t lastTouchTime;
 
 static char machineName[15] = "dc42's Ormerod";
+static char zprobeBuf[10];
 
 const Color activeBackColor = red;
 const Color standbyBackColor = yellow;
@@ -80,14 +54,14 @@ const Event evTabControl = 1,
 
 static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos;
 static IntegerSettingField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
-static IntegerField *bedStandbyTemp, *zProbe, /* *fanRPM,*/ *freeMem, *touchX, *touchY;
+static IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY;
 static ProgressBar *pbar;
 static StaticTextField *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
 static DisplayField *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
 static DisplayField * null fieldBeingAdjusted = NULL;
 static PopupField *setTempPopup;
-static TextField *commandField;
+static TextField *commandField, *zProbe;
 
 char commandBuffer[80];
 
@@ -206,8 +180,9 @@ void InitLcd()
 	mgr.AddField(new StaticTextField(rowCommon4, columnX, columnY - columnX - 2, Left, "Z"));
 	mgr.AddField(new StaticTextField(rowCommon4, columnY, columnEnd - columnY - 2, Left, "Probe"));
 
-	mgr.AddField(zPos = new FloatField(rowCommon5, columnX, columnY - columnX - 2, NULL, 1));
-	mgr.AddField(zProbe = new IntegerField(rowCommon5, columnY, columnEnd - columnY - 2, NULL, NULL));
+	mgr.AddField(zPos = new FloatField(rowCommon5, columnX, columnY - columnX - 2, NULL, 2));
+	zprobeBuf[0] = 0;
+	mgr.AddField(zProbe = new TextField(rowCommon5, columnY, columnEnd - columnY - 2, NULL, zprobeBuf));
 	
 	DisplayField::SetDefaultColours(white, selectableBackColor);
 	mgr.AddField(tabControl = new StaticTextField(rowTabs, columnTab1, columnTabWidth, Centre, "Control"));
@@ -282,7 +257,7 @@ void InitLcd()
 	
 	mgr.SetRoot(commonRoot);
 	
-	touchCalibInstruction = new StaticTextField(lcd.getDisplayYSize()/2 - 10, 0, lcd.getDisplayXSize(), Centre, "Touch the circle");
+	touchCalibInstruction = new StaticTextField(lcd.getDisplayYSize()/2 - 10, 0, lcd.getDisplayXSize(), Centre, "Touch the spot");
 
 	// Create the popup window used to adjust values
 	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
@@ -336,7 +311,6 @@ void InitLcd()
 	yPos->SetValue(101.0);
 	zPos->SetValue(4.80);
 	//  extrPos->SetValue(43.6);
-	zProbe->SetValue(535);
 	//  fanRPM->SetValue(2354);
  #if 0
 	spd->SetValue(100);
@@ -491,6 +465,15 @@ decrease(i < 0; i)
 	WriteCommand((char)((char)i + '0'));
 }
 
+// Update an integer field, provided it isn't the one being adjusted
+void UpdateField(IntegerField *f, int val)
+{
+	if (f != fieldBeingAdjusted)
+	{
+		f->SetValue(val);
+	}
+}
+
 // Try to get an integer value from a string. if it is actually a floating point value, round it.
 bool getInteger(const char s[], int &rslt)
 {
@@ -529,13 +512,13 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 				switch(index)
 				{
 				case 0:
-					bedActiveTemp->SetValue(ival);
+					UpdateField(bedActiveTemp, ival);
 					break;
 				case 1:
-					t1ActiveTemp->SetValue(ival);
+					UpdateField(t1ActiveTemp, ival);
 					break;
 				case 2:
-					t2ActiveTemp->SetValue(ival);
+					UpdateField(t2ActiveTemp, ival);
 					break;
 				default:
 					break;
@@ -550,20 +533,20 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 				switch(index)
 				{
 				case 0:
-					bedStandbyTemp->SetValue(ival);
+					UpdateField(bedStandbyTemp, ival);
 					break;
 				case 1:
-					t1StandbyTemp->SetValue(ival);
+					UpdateField(t1StandbyTemp, ival);
 					break;
 				case 2:
-					t2StandbyTemp->SetValue(ival);
+					UpdateField(t2StandbyTemp, ival);
 					break;
 				default:
 					break;
 				}
 			}
 		}
-		else if (strcmp(id, "current") == 0)
+		else if (strcmp(id, "heaters") == 0)
 		{
 			float fval;
 			if (getFloat(data, fval))
@@ -605,10 +588,39 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 				}
 			}
 		}
+		else if (strcmp(id, "efactor") == 0)
+		{
+			int ival;
+			if (getInteger(data, ival))
+			{
+				switch(index)
+				{
+				case 0:
+					UpdateField(e1Percent, ival);
+					break;
+				case 1:
+					UpdateField(e2Percent, ival);
+					break;
+				default:
+					break;	
+				}
+			}
+		}
 	}
-	else
+	
+	// Non-array values follow
+	else if (strcmp(id, "sfactor") == 0)
 	{
-		// Handle non-array values
+		int ival;
+		if (getInteger(data, ival))
+		{
+			UpdateField(spd, ival);
+		}
+	}
+	else if (strcmp(id, "probe") == 0)
+	{
+		safeStrncpy(zprobeBuf, data, ARRAY_SIZE(zprobeBuf));
+		zProbe->SetChanged();
 	}
 }
 
