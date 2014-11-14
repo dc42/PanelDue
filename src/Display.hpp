@@ -95,7 +95,9 @@ public:
 	void SetPopup(PopupField * null p, PixelNumber px = 0, PixelNumber py = 0);
 	void AttachPopup(PopupField * pp, DisplayField *p);
 	bool Visible(const DisplayField *p) const;
-	
+	DisplayField * null GetRoot() const { return root; }
+	void SetRoot(DisplayField * null r) { root = r; }
+
 private:
 	LcdColour backgroundColor;
 	DisplayField * null root;

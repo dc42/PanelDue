@@ -33,9 +33,10 @@
     <option id="common.services.basic.clock" value="Add" config="" content-id="Atmel.ASF" />
     <option id="common.services.delay" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.drivers.pio" value="Add" config="" content-id="Atmel.ASF" />
-    <option id="sam.drivers.wdt" value="Add" config="" content-id="Atmel.ASF" />
-    <option id="sam.drivers.uart" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.drivers.pwm" value="Add" config="" content-id="Atmel.ASF" />
+    <option id="sam.drivers.uart" value="Add" config="" content-id="Atmel.ASF" />
+    <option id="sam.drivers.wdt" value="Add" config="" content-id="Atmel.ASF" />
+    <option id="sam.drivers.matrix" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.utils.linker_scripts#atsam3s4" value="Add" config="" content-id="Atmel.ASF" />
   </options>
   <configurations>
@@ -178,6 +179,8 @@
     <file path="src/ASF/sam/drivers/pwm/pwm.h" framework="" version="3.19.0" source="sam\drivers\pwm\pwm.h" changed="False" content-id="Atmel.ASF" />
     <file path="src/ASF/sam/drivers/uart/uart.c" framework="" version="3.19.0" source="sam\drivers\uart\uart.c" changed="False" content-id="Atmel.ASF" />
     <file path="src/ASF/sam/drivers/uart/uart.h" framework="" version="3.19.0" source="sam\drivers\uart\uart.h" changed="False" content-id="Atmel.ASF" />
+    <file path="src/ASF/sam/drivers/matrix/matrix.c" framework="" version="3.19.0" source="sam\drivers\matrix\matrix.c" changed="False" content-id="Atmel.ASF" />
+    <file path="src/ASF/sam/drivers/matrix/matrix.h" framework="" version="3.19.0" source="sam\drivers\matrix\matrix.h" changed="False" content-id="Atmel.ASF" />
   </files>
   <documentation help="http://asf.atmel.com/docs/3.19.0/common.applications.user_application.user_board.sam3s/html/index.html" />
   <offline-documentation help="" />
@@ -229,6 +232,7 @@
       <Value>../src/ASF/sam/drivers/wdt</Value>
       <Value>../src/ASF/sam/drivers/pwm</Value>
       <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
   <armgcc.compiler.optimization.level>Optimize for size (-Os)</armgcc.compiler.optimization.level>
@@ -275,6 +279,7 @@
       <Value>../src/ASF/sam/drivers/wdt</Value>
       <Value>../src/ASF/sam/drivers/pwm</Value>
       <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcccpp.compiler.directories.IncludePaths>
   <armgcccpp.compiler.optimization.level>Optimize for size (-Os)</armgcccpp.compiler.optimization.level>
@@ -299,7 +304,7 @@
   <armgcccpp.linker.miscellaneous.LinkerFlags>-T../src/ASF/sam/utils/linker_scripts/sam3s/sam3s4/gcc/flash.ld</armgcccpp.linker.miscellaneous.LinkerFlags>
   <armgcccpp.assembler.general.IncludePaths>
     <ListValues>
-      <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcccpp.assembler.general.IncludePaths>
   <armgcccpp.preprocessingassembler.general.IncludePaths>
@@ -332,6 +337,7 @@
       <Value>../src/ASF/sam/drivers/wdt</Value>
       <Value>../src/ASF/sam/drivers/pwm</Value>
       <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcccpp.preprocessingassembler.general.IncludePaths>
 </ArmGccCpp>
@@ -377,6 +383,7 @@
       <Value>../src/ASF/sam/drivers/wdt</Value>
       <Value>../src/ASF/sam/drivers/pwm</Value>
       <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
   <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
@@ -424,6 +431,7 @@
       <Value>../src/ASF/sam/drivers/wdt</Value>
       <Value>../src/ASF/sam/drivers/pwm</Value>
       <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcccpp.compiler.directories.IncludePaths>
   <armgcccpp.compiler.optimization.level>Optimize for size (-Os)</armgcccpp.compiler.optimization.level>
@@ -449,7 +457,7 @@
   <armgcccpp.linker.miscellaneous.LinkerFlags>-T../src/ASF/sam/utils/linker_scripts/sam3s/sam3s4/gcc/flash.ld</armgcccpp.linker.miscellaneous.LinkerFlags>
   <armgcccpp.assembler.general.IncludePaths>
     <ListValues>
-      <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcccpp.assembler.general.IncludePaths>
   <armgcccpp.assembler.debugging.DebugLevel>Default (-g)</armgcccpp.assembler.debugging.DebugLevel>
@@ -483,6 +491,7 @@
       <Value>../src/ASF/sam/drivers/wdt</Value>
       <Value>../src/ASF/sam/drivers/pwm</Value>
       <Value>../src/ASF/sam/drivers/uart</Value>
+      <Value>../src/ASF/sam/drivers/matrix</Value>
     </ListValues>
   </armgcccpp.preprocessingassembler.general.IncludePaths>
   <armgcccpp.preprocessingassembler.debugging.DebugLevel>Default (-Wa,-g)</armgcccpp.preprocessingassembler.debugging.DebugLevel>
@@ -490,7 +499,31 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="src\ASF\sam\drivers\matrix\matrix.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\drivers\matrix\matrix.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\ASF\sam\drivers\pwm\pwm.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Buzzer.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Buzzer.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\SysTick.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\StringRef.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\SysTick.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Vector.hpp">
       <SubType>compile</SubType>
     </Compile>
     <None Include="src\ASF\sam\drivers\pwm\pwm.h">
@@ -539,6 +572,12 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Print.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\SerialIo.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\SerialIo.hpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\UTFT.cpp">
@@ -949,9 +988,6 @@
     <None Include="src\ASF\thirdparty\CMSIS\Include\core_cm3.h">
       <SubType>compile</SubType>
     </None>
-    <Compile Include="src\main.c">
-      <SubType>compile</SubType>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="src\" />
@@ -968,6 +1004,7 @@
     <Folder Include="src\ASF\common\utils\interrupt\" />
     <Folder Include="src\ASF\sam\" />
     <Folder Include="src\ASF\sam\drivers\" />
+    <Folder Include="src\ASF\sam\drivers\matrix\" />
     <Folder Include="src\ASF\sam\drivers\pio\" />
     <Folder Include="src\ASF\sam\drivers\pmc\" />
     <Folder Include="src\ASF\sam\drivers\pwm\" />

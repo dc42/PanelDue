@@ -20,7 +20,6 @@ namespace SerialIo
 	// Initialize the serial I/O subsystem
 	void init()
 	{
-		pmc_enable_periph_clk(ID_UART1);
 		pio_configure(PIOB, PIO_PERIPH_A, PIO_PB2 | PIO_PB3, 0);	// enable UART 1 pins
 	
 		sam_uart_opt uartOptions;
