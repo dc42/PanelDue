@@ -29,7 +29,7 @@ UTouch::UTouch(unsigned int tclk, unsigned int tcs, unsigned int din, unsigned i
 {
 }
 
-void UTouch::InitTouch(uint16_t xp, uint16_t yp, DisplayOrientation orientation, TouchPrecision p)
+void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientation, TouchPrecision p)
 {
 	orient					= orientation;
 	nativeOrientation		= InvPortrait;
@@ -179,29 +179,6 @@ void UTouch::setPrecision(TouchPrecision precision)
 	}
 }
 
-#if 0	// unused
-void UTouch::calibrateRead()
-{
-	uint32_t tx=0;
-	uint32_t ty=0;
-
-	portCS.setLow();
-
-	touch_WriteData(0x90); 
-	portCLK.pulseHigh();       
-	tx=touch_ReadData();
-
-	touch_WriteData(0xD0);
-	portCLK.pulseHigh();     
-	ty=touch_ReadData();
-
-	portCS.setHigh();
-
-	TP_X = ty;
-	TP_Y = tx;
-}
-#endif
-
 void UTouch::touch_WriteData(uint8_t data)
 {
 	uint8_t temp = data;
@@ -243,6 +220,14 @@ uint16_t UTouch::touch_ReadData()
 	portCLK.pulseHigh();
 	
 	return(data);
+}
+
+void UTouch::calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh)
+{
+	touch_x_left = (xlow * 4096)/disp_x_size;
+	touch_x_right = (xhigh * 4096)/disp_x_size;
+	touch_y_top = (ylow * 4096)/disp_y_size;
+	touch_y_bottom = (yhigh * 4096)/disp_y_size;
 }
 
 // End

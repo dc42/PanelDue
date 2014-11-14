@@ -56,6 +56,9 @@ DisplayManager mgr;
 
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t beepLength = 10;						// beep length in ms
+const uint32_t ignoreTouchTime = 200;				// how long we ignore new touches for after pressing Set
+
+static uint32_t lastTouchTime;
 
 static char machineName[15] = "dc42's Ormerod";
 
@@ -72,13 +75,14 @@ const Event evTabControl = 1,
 			evSetVal = 6,
 			evUp = 7,
 			evDown = 8,
-			evSet = 9;
+			evSet = 9,
+			evCalTouch = 10;
 
 static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos;
 static IntegerSettingField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
 static IntegerField *bedStandbyTemp, *zProbe, /* *fanRPM,*/ *freeMem, *touchX, *touchY;
 static ProgressBar *pbar;
-static StaticTextField *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo;
+static StaticTextField *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
 static DisplayField *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
 static DisplayField * null fieldBeingAdjusted = NULL;
@@ -157,7 +161,7 @@ void InitLcd()
 {
 	// Setup the LCD
 	lcd.InitLCD(Landscape);
-	mgr.Init(blue);
+	mgr.Init(defaultBackColor);
 	
 	// Create the fields that are always displayed
 	DisplayField::SetDefaultFont(glcd19x20);
@@ -265,26 +269,34 @@ void InitLcd()
 	// Create the fields for the Info tab
 	mgr.SetRoot(commonRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(freeMem = new IntegerField(rowCustom1, 0, 195, "Free RAM: "));
+	mgr.AddField(freeMem = new IntegerField(rowCustom1, 1, 195, "Free RAM: "));
 	mgr.AddField(touchX = new IntegerField(rowCustom1, 200, 130, "Touch: ", ","));
 	mgr.AddField(touchY = new IntegerField(rowCustom1, 330, 50, ""));
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	DisplayField *touchCal = new StaticTextField(rowCustom3, lcd.getDisplayXSize()/2 - 75, 150, Centre, "Calibrate touch");
+	touchCal->SetEvent(evCalTouch);
+	mgr.AddField(touchCal);
+
+	DisplayField::SetDefaultColours(white, defaultBackColor);
 	infoRoot = mgr.GetRoot();
 	
 	mgr.SetRoot(commonRoot);
-	DisplayField::SetDefaultColours(white, defaultBackColor);
+	
+	touchCalibInstruction = new StaticTextField(lcd.getDisplayYSize()/2 - 10, 0, lcd.getDisplayXSize(), Centre, "Touch the circle");
 
 	// Create the popup window used to adjust values
 	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-	setTempPopup = new PopupField(110, 80);
+	setTempPopup = new PopupField(130, 80);
 	DisplayField *tp = new StaticTextField(10, 10, 60, Centre, "+");
 	tp->SetEvent(evUp);
 	setTempPopup->AddField(tp);
-	tp = new StaticTextField(45, 10, 60, Centre, "Set");
+	tp = new StaticTextField(55, 10, 60, Centre, "Set");
 	tp->SetEvent(evSet);
 	setTempPopup->AddField(tp);
-	tp = new StaticTextField(80, 10, 60, Centre, "-");
+	tp = new StaticTextField(100, 10, 60, Centre, "-");
 	tp->SetEvent(evDown);
 	setTempPopup->AddField(tp);
+	
 
 	// Redraw everything
 	mgr.RefreshAll(true);
@@ -333,9 +345,65 @@ void InitLcd()
  #endif
 #endif
 
-	touch.InitTouch(400, 240, InvLandscape, TpMedium);
+	touch.init(400, 240, InvLandscape, TpMedium);
+	lastTouchTime = GetTickCount();
 	currentTab = NULL;
 	changeTab(tabControl);
+}
+
+int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
+{
+	const PixelNumber touchCircleRadius = 8;
+	const PixelNumber touchCalibMaxError = 30;
+	
+	lcd.setColor(white);
+	lcd.fillCircle(x, y, touchCircleRadius);
+	
+	int tx, ty;
+	
+	for (;;)
+	{
+		if (touch.dataAvailable())
+		{
+			touch.read();
+			tx = touch.getX();
+			ty = touch.getY();
+			if (abs(tx - x) <= touchCalibMaxError && abs(ty - y) <= touchCalibMaxError)
+			{
+				BuzzerBeep(beepLength);
+				break;
+			}
+		}
+	}
+	
+	lcd.setColor(defaultBackColor);
+	lcd.fillCircle(x, y, touchCircleRadius);
+	return (wantY) ? ty : tx;
+}
+
+void CalibrateTouch()
+{
+	const PixelNumber touchCalibMargin = 30;
+
+	DisplayField *oldRoot = mgr.GetRoot();
+	mgr.SetRoot(touchCalibInstruction);
+	mgr.ClearAll();
+	mgr.RefreshAll(true);
+	touch.calibrate(0, lcd.getDisplayXSize() - 1, 0, lcd.getDisplayYSize() - 1);
+
+	int yLow = DoTouchCalib(lcd.getDisplayXSize()/2, touchCalibMargin, true);
+	int xHigh = DoTouchCalib(lcd.getDisplayXSize() - touchCalibMargin, lcd.getDisplayYSize()/2, false);
+	int yHigh = DoTouchCalib(lcd.getDisplayXSize()/2, lcd.getDisplayYSize() - touchCalibMargin, true);
+	int xLow = DoTouchCalib(touchCalibMargin, lcd.getDisplayYSize()/2, false);
+	
+	// Extrapolate the values we read to the edges of the screen
+	int xAdjust = (touchCalibMargin * lcd.getDisplayXSize())/(lcd.getDisplayXSize() - 2 * touchCalibMargin);
+	int yAdjust = (touchCalibMargin * lcd.getDisplayYSize())/(lcd.getDisplayYSize() - 2 * touchCalibMargin);
+	touch.calibrate(xLow - xAdjust, xHigh + xAdjust, yLow - yAdjust, yHigh + yAdjust);
+	
+	mgr.SetRoot(oldRoot);
+	mgr.ClearAll();
+	mgr.RefreshAll(true);
 }
 
 // Process a touch event
@@ -365,6 +433,7 @@ void ProcessTouch(DisplayField *f)
 		}
 		mgr.SetPopup(NULL);
 		fieldBeingAdjusted = NULL;
+		lastTouchTime = GetTickCount();		// ignore touches for a little while
 		break;
 
 	case evUp:
@@ -379,6 +448,10 @@ void ProcessTouch(DisplayField *f)
 		{
 			((IntegerField*)fieldBeingAdjusted)->Increment(-1);
 		}
+		break;
+
+	case evCalTouch:
+		CalibrateTouch();
 		break;
 
 	default:
@@ -579,7 +652,7 @@ int main(void)
 		
 		SerialIo::checkInput();
 		
-		if (touch.dataAvailable())
+		if (touch.dataAvailable() && GetTickCount() - lastTouchTime >= ignoreTouchTime)
 		{
 			touch.read();
 			int x = touch.getX();

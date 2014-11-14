@@ -88,6 +88,7 @@ class DisplayManager
 public:
 	DisplayManager();
 	void Init(LcdColour pb);
+	void ClearAll();
 	void AddField(DisplayField *pd);
 	void RefreshAll(bool full = 0);
 	DisplayField * null FindEvent(PixelNumber x, PixelNumber y);

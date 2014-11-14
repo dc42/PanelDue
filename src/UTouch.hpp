@@ -40,14 +40,13 @@ public:
 
 	UTouch(unsigned int tclk, unsigned int tcs, unsigned int tdin, unsigned int dout, unsigned int irq);
 
-	void	InitTouch(uint16_t xp, uint16_t yp, DisplayOrientation orientation = Landscape, TouchPrecision p = TpMedium);
+	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientation = Landscape, TouchPrecision p = TpMedium);
 	void	read();
 	bool	dataAvailable() const;
 	int16_t	getX() const;
 	int16_t	getY() const;
 	void	setPrecision(TouchPrecision precision);
-
-	void	calibrateRead();
+	void	calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh);
     
 private:
 	OneBitPort portCLK, portCS, portDIN, portDOUT, portIRQ;

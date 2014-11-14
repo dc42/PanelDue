@@ -59,6 +59,11 @@ DisplayManager::DisplayManager()
 void DisplayManager::Init(LcdColour bc)
 {
 	backgroundColor = bc;
+	ClearAll();
+}
+
+void DisplayManager::ClearAll()
+{
 	lcd.fillScr(backgroundColor);
 }
 
@@ -129,12 +134,14 @@ void DisplayManager::SetPopup(PopupField * null p, PixelNumber px, PixelNumber p
 
 void DisplayManager::AttachPopup(PopupField * pp, DisplayField *p)
 {
+	const PixelNumber margin = 10;	// don't let the popup get too close to the screen edges where touch position is less reliable
+	
 	// Work out the Y coordinate to place the popup level with the field
 	PixelNumber h = pp->GetHeight()/2;
 	PixelNumber hy = (p->GetMinY() + p->GetMaxY() + 1)/2;
-	PixelNumber y = (hy + h > lcd.getDisplayYSize()) ? lcd.getDisplayYSize() - pp->GetHeight()
-					: (hy > h) ? hy - h 
-						: 0;
+	PixelNumber y = (hy + h > lcd.getDisplayYSize() - margin) ? lcd.getDisplayYSize() - pp->GetHeight() - margin
+					: (hy - h > margin) ? hy - h 
+						: margin;
 	
 	PixelNumber x = (p->GetMaxX() + 5 + pp->GetWidth() < lcd.getDisplayXSize()) ? p->GetMaxX() + 5
 						: p->GetMinX() - pp->GetWidth() - 5;
