@@ -18,8 +18,8 @@ extern void WriteCommand(char c);
 
 // Static fields of class DisplayField
 LcdFont DisplayField::defaultFont = glcd19x20;
-LcdColour DisplayField::defaultFcolour = 0xFFFF;
-LcdColour DisplayField::defaultBcolour = 0;
+Color DisplayField::defaultFcolour = 0xFFFF;
+Color DisplayField::defaultBcolour = 0;
 
 // Find the best match to a touch event in a list of fields
 DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
@@ -56,7 +56,7 @@ DisplayManager::DisplayManager()
 {
 }
 
-void DisplayManager::Init(LcdColour bc)
+void DisplayManager::Init(Color bc)
 {
 	backgroundColor = bc;
 	ClearAll();
@@ -98,10 +98,19 @@ bool DisplayManager::Visible(const DisplayField *p) const
 			   );
 }
 
-// Get the event the corresponds to the field that has been touched, or nullEvent if we can't find one
+// Get the field that has been touched, or null if we can't find one
 DisplayField * null DisplayManager::FindEvent(PixelNumber x, PixelNumber y)
 {
 	return (HavePopup()) ? popupField->FindEvent((int)x - (int)popupX, (int)y - (int)popupY) : DisplayField::FindEvent((int)x, (int)y, root);
+}
+
+// Get the field that has been touched, but search only outside the popup
+DisplayField * null DisplayManager::FindEventOutsidePopup(PixelNumber x, PixelNumber y)
+{
+	if (!HavePopup()) return NULL;
+	
+	DisplayField * null f = DisplayField::FindEvent((int)x, (int)y, root);
+	return (f != NULL && Visible(f)) ? f : NULL;
 }
 
 void DisplayManager::SetPopup(PopupField * null p, PixelNumber px, PixelNumber py)
@@ -146,6 +155,14 @@ void DisplayManager::AttachPopup(PopupField * pp, DisplayField *p)
 	PixelNumber x = (p->GetMaxX() + 5 + pp->GetWidth() < lcd.getDisplayXSize()) ? p->GetMaxX() + 5
 						: p->GetMinX() - pp->GetWidth() - 5;
 	SetPopup(pp, x, y);
+}
+
+// Draw an outline around a field. The field and 1 pixel around it are assumed to be visible.
+// Not sure what will happen of the field goes right up to one of the edges of the display! better avoid that situation.
+void DisplayManager::Outline(DisplayField *f, Color c)
+{
+	lcd.setColor(c);
+	lcd.drawRect(f->GetMinX() - 1, f->GetMinY() - 1, f->GetMaxX() + 1, f->GetMaxY() + 1);
 }
 
 // Set the font and colours, print the label (if any) and leave the cursor at the correct position for the data
@@ -305,18 +322,6 @@ void PopupField::AddField(DisplayField *p)
 DisplayField *PopupField::FindEvent(int px, int py)
 {
 	return DisplayField::FindEvent(px, py, root);
-}
-
-IntegerSettingField::IntegerSettingField(const char* array pc, PixelNumber py, PixelNumber px, PixelNumber pw, const char *pl, const char *pu)
-	: IntegerField(py, px, pw, pl, pu), cmd(pc)
-{
-}
-
-void IntegerSettingField::Action()
-{
-	WriteCommand(cmd);
-	WriteCommand(GetValue());
-	WriteCommand('\n');
 }
 
 // End

@@ -17,12 +17,13 @@ typedef const uint8_t * array LcdFont;
 const Color red = UTFT::fromRGB(255,0,0);
 const Color yellow = UTFT::fromRGB(128,128,0);
 const Color green = UTFT::fromRGB(0,255,0);
+const Color turquoise = UTFT::fromRGB(0,128,128);
 const Color blue = UTFT::fromRGB(0,0,255);
+const Color magenta = UTFT::fromRGB(128,0,128);
 const Color white = 0xFFFF;
 const Color black = 0x0000;
 
 typedef uint16_t PixelNumber;
-typedef uint16_t LcdColour;
 typedef uint16_t Event;
 const Event nullEvent = 0;
 
@@ -34,18 +35,26 @@ class DisplayField
 protected:
 	PixelNumber y, x;							// Coordinates of top left pixel, counting from the top left corner
 	PixelNumber width;							// number of pixels occupied in each direction
-	LcdColour fcolour, bcolour;					// foreground and background colours
+	Color fcolour, bcolour;						// foreground and background colours
 	Event evt;									// event number that is triggered by touching this field, or nullEvent if not touch sensitive
 	LcdFont font;
 	bool changed;
 	
+	union
+	{
+		const char* null sParam;
+		int iParam;
+//		float fParam;
+	} param;
+	
 	static LcdFont defaultFont;
-	static LcdColour defaultFcolour, defaultBcolour;
+	static Color defaultFcolour, defaultBcolour;
 	
 protected:
 	DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
 		: y(py), x(px), width(pw), fcolour(defaultFcolour), bcolour(defaultBcolour), evt(nullEvent), font(defaultFont), changed(true), next(NULL)
 	{
+		param.sParam = NULL;
 	}
 	
 	virtual PixelNumber GetHeight() const { return font[1]; }	// nasty - should fix this, but don't want to run into alignment issues
@@ -54,16 +63,21 @@ public:
 	DisplayField * null next;					// link to next field in list
 
 	virtual void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) { }		// would like to make this pure virtual but then we get 50K of library that we don't want
-	void SetColours(LcdColour pf, LcdColour pb) { fcolour = pf; bcolour = pb; changed = true; }
-	void SetEvent(Event e) { evt = e; }
+	void SetColours(Color pf, Color pb) { fcolour = pf; bcolour = pb; changed = true; }
+	void SetEvent(Event e, const char* null sp ) { evt = e; param.sParam = sp; }
+	void SetEvent(Event e, int ip ) { evt = e; param.iParam = ip; }
+//	void SetEvent(Event e, double fp ) { evt = e; param.fParam = fp; }
 	Event GetEvent() const { return evt; }
 	void SetChanged() { changed = true; }
+	const char* null GetSParam() const { return param.sParam; }
+	int GetIParam() const { return param.iParam; }
+//	float GetFParam() const { return param.fParam; }
 	PixelNumber GetMinX() const { return x; }
 	PixelNumber GetMaxX() const { return x + width - 1; }
 	PixelNumber GetMinY() const { return y; }
 	PixelNumber GetMaxY() const { return y + GetHeight() - 1; }
 
-	static void SetDefaultColours(LcdColour pf, LcdColour pb) { defaultFcolour = pf; defaultBcolour = pb; }
+	static void SetDefaultColours(Color pf, Color pb) { defaultFcolour = pf; defaultBcolour = pb; }
 	static void SetDefaultFont(LcdFont pf) { defaultFont = pf; }
 	static DisplayField * null FindEvent(int x, int y, DisplayField * null p);
 };
@@ -87,20 +101,23 @@ class DisplayManager
 {
 public:
 	DisplayManager();
-	void Init(LcdColour pb);
+	void Init(Color pb);
 	void ClearAll();
 	void AddField(DisplayField *pd);
 	void RefreshAll(bool full = 0);
 	DisplayField * null FindEvent(PixelNumber x, PixelNumber y);
+	DisplayField * null FindEventOutsidePopup(PixelNumber x, PixelNumber y);
 	bool HavePopup() const { return popupField != NULL; }
 	void SetPopup(PopupField * null p, PixelNumber px = 0, PixelNumber py = 0);
 	void AttachPopup(PopupField * pp, DisplayField *p);
 	bool Visible(const DisplayField *p) const;
 	DisplayField * null GetRoot() const { return root; }
 	void SetRoot(DisplayField * null r) { root = r; }
+	void Outline(DisplayField *f, Color c);
+	void RemoveOutline(DisplayField *f) { Outline(f, backgroundColor); }
 
 private:
-	LcdColour backgroundColor;
+	Color backgroundColor;
 	DisplayField * null root;
 	PopupField * null popupField;
 	PixelNumber popupX, popupY;
@@ -149,6 +166,11 @@ public:
 	{
 		val = v;
 		changed = true;
+	}
+	
+	float GetValue() const
+	{
+		return val;
 	}
 };
 
@@ -210,17 +232,6 @@ public:
 		percent = pc;
 		changed = true;
 	}
-};
-
-class IntegerSettingField : public IntegerField
-{
-public:
-	IntegerSettingField(const char* array pc, PixelNumber py, PixelNumber px, PixelNumber pw, const char *pl, const char *pu = NULL);
-
-	void Action();
-	
-private:
-	const char * array cmd;
 };
 
 #endif /* DISPLAY_H_ */

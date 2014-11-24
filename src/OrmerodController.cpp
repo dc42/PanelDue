@@ -29,9 +29,11 @@ DisplayManager mgr;
 
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t beepLength = 10;						// beep length in ms
-const uint32_t ignoreTouchTime = 200;				// how long we ignore new touches for after pressing Set
+const uint32_t longTouchDelay = 200;				// how long we ignore new touches for after pressing Set
+const uint32_t shortTouchDelay = 50;
 
 static uint32_t lastTouchTime;
+static uint32_t ignoreTouchTime;
 
 static char machineName[15] = "dc42's Ormerod";
 static char zprobeBuf[10];
@@ -39,6 +41,7 @@ static char zprobeBuf[10];
 const Color activeBackColor = red;
 const Color standbyBackColor = yellow;
 const Color defaultBackColor = blue;
+const Color errorBackColour = magenta;
 const Color selectableBackColor = black;
 
 const Event evTabControl = 1,
@@ -47,45 +50,55 @@ const Event evTabControl = 1,
 			evTabMsg = 4,
 			evTabInfo = 5,
 			evSetVal = 6,
-			evUp = 7,
-			evDown = 8,
-			evSet = 9,
-			evCalTouch = 10;
+			evAdjustInt = 7,
+			evAdjustFloat = 8,
+			evSetInt = 9,
+			evCalTouch = 10,
+			evSelectHead = 11,
+			evXYPos = 12,
+			evZPos = 13;
 
 static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos;
-static IntegerSettingField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
+static IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
 static IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY;
 static ProgressBar *pbar;
 static StaticTextField *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
 static DisplayField *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
 static DisplayField * null fieldBeingAdjusted = NULL;
-static PopupField *setTempPopup;
-static TextField *commandField, *zProbe;
+static PopupField *setTempPopup, *setXYPopup, *setZPopup;
+//static TextField *commandField;
+static TextField *zProbe;
 
-char commandBuffer[80];
+//char commandBuffer[80];
 
-const PixelNumber column1 = 0;
-const PixelNumber column2 = 71;
-const PixelNumber column3 = 145;
-const PixelNumber column4 = 207;
-const PixelNumber column5 = 269;
+const size_t numHeaters = 3;
+int heaterStatus[numHeaters];
 
-const PixelNumber columnX = 274;
-const PixelNumber columnY = 332;
+// Define the row and column positions. Leave a gap of at least 1 pixel fro the edges of the screen, so that we can highlight
+// a file by drawing an outline.
+const PixelNumber column1 = 1;
+const PixelNumber column2 = 72;
+const PixelNumber column3 = 146;
+const PixelNumber column4 = 208;
+const PixelNumber column5 = 270;
 
-const PixelNumber columnEnd = 400;
+const PixelNumber columnX = 275;
+const PixelNumber columnY = 333;
 
-const PixelNumber rowCommon1 = 0;
-const PixelNumber rowCommon2 = 22;
-const PixelNumber rowCommon3 = 44;
-const PixelNumber rowCommon4 = 66;
-const PixelNumber rowCommon5 = 88;
+const PixelNumber columnEnd = 400;	// should be the same as the display X size
+
+const PixelNumber rowHeight = 22;
+const PixelNumber rowCommon1 = 1;
+const PixelNumber rowCommon2 = rowCommon1 + rowHeight;
+const PixelNumber rowCommon3 = rowCommon2 + rowHeight;
+const PixelNumber rowCommon4 = rowCommon3 + rowHeight;
+const PixelNumber rowCommon5 = rowCommon4 + rowHeight;
 const PixelNumber rowTabs = 120;
 const PixelNumber rowCustom1 = rowTabs + 32;
-const PixelNumber rowCustom2 = rowTabs + 54;
-const PixelNumber rowCustom3 = rowTabs + 76;
-const PixelNumber rowCustom4 = rowTabs + 98;	//120 + 98 = 218, +22 = 240 so it just fits in a 400x240 display
+const PixelNumber rowCustom2 = rowCustom1 + rowHeight;
+const PixelNumber rowCustom3 = rowCustom2 + rowHeight;
+const PixelNumber rowCustom4 = rowCustom3 + rowHeight;	//120 + 98 = 218, +22 = 240 so it just fits in a 400x240 display
 
 const PixelNumber columnTab1 = 2;
 const PixelNumber columnTab2 = 82;
@@ -93,6 +106,8 @@ const PixelNumber columnTab3 = 162;
 const PixelNumber columnTab4 = 242;
 const PixelNumber columnTab5 = 322;
 const PixelNumber columnTabWidth = 75;
+
+const PixelNumber xyPopupX = 3, xyPopupY = 195;
 
 void changeTab(DisplayField *newTab)
 {
@@ -151,50 +166,57 @@ void InitLcd()
 	DisplayField::SetDefaultColours(white, selectableBackColor);
 	mgr.AddField(head2State = new StaticTextField(rowCommon4, column1, column2 - column1 - 4, Left, "Head 2"));
 	mgr.AddField(head1State = new StaticTextField(rowCommon3, column1, column2 - column1 - 4, Left, "Head 1"));
+	mgr.AddField(bedState = new StaticTextField(rowCommon5, column1, column2 - column1 - 4, Left, "Bed"));
+	head1State->SetEvent(evSelectHead, 1);
+	head2State->SetEvent(evSelectHead, 2);
+	bedState->SetEvent(evSelectHead, 0);
 
-	mgr.AddField(t1ActiveTemp = new IntegerSettingField("G10 P1 S", rowCommon3, column3, column4 - column3 - 4, NULL, DEGREE_SYMBOL "C"));
-	mgr.AddField(t1StandbyTemp = new IntegerSettingField("G10 P1 R", rowCommon3, column4, column5 - column4 - 4, NULL, DEGREE_SYMBOL "C"));
-	mgr.AddField(t2ActiveTemp = new IntegerSettingField("G10 P2 S", rowCommon4, column3, column4 - column3 - 4, NULL, DEGREE_SYMBOL "C"));
-	mgr.AddField(t2StandbyTemp = new IntegerSettingField("G10 P2 R", rowCommon4, column4, column5 - column4 - 4, NULL, DEGREE_SYMBOL "C"));
-	mgr.AddField(bedActiveTemp = new IntegerSettingField("M140 S", rowCommon5, column3, column4 - column3 - 4, NULL, DEGREE_SYMBOL "C"));
-	t1ActiveTemp->SetEvent(evSetVal);
-	t1StandbyTemp->SetEvent(evSetVal);
-	t2ActiveTemp->SetEvent(evSetVal);
-	t2StandbyTemp->SetEvent(evSetVal);
-	bedActiveTemp->SetEvent(evSetVal);
+	mgr.AddField(t1ActiveTemp = new IntegerField(rowCommon3, column3, column4 - column3 - 4, NULL, DEGREE_SYMBOL "C"));
+	mgr.AddField(t1StandbyTemp = new IntegerField(rowCommon3, column4, column5 - column4 - 4, NULL, DEGREE_SYMBOL "C"));
+	mgr.AddField(t2ActiveTemp = new IntegerField(rowCommon4, column3, column4 - column3 - 4, NULL, DEGREE_SYMBOL "C"));
+	mgr.AddField(t2StandbyTemp = new IntegerField(rowCommon4, column4, column5 - column4 - 4, NULL, DEGREE_SYMBOL "C"));
+	mgr.AddField(bedActiveTemp = new IntegerField(rowCommon5, column3, column4 - column3 - 4, NULL, DEGREE_SYMBOL "C"));
+	t1ActiveTemp->SetEvent(evSetVal, "G10 P1 S");
+	t1StandbyTemp->SetEvent(evSetVal, "G10 P1 R");
+	t2ActiveTemp->SetEvent(evSetVal, "G10 P2 S");
+	t2StandbyTemp->SetEvent(evSetVal, "G10 P2 R");
+	bedActiveTemp->SetEvent(evSetVal, "M140 S");
 
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	mgr.AddField(t1CurrentTemp = new FloatField(rowCommon3, column2, column3 - column2 - 4, NULL, 1, DEGREE_SYMBOL "C"));
 	mgr.AddField(t2CurrentTemp = new FloatField(rowCommon4, column2, column3 - column2 - 4, NULL, 1, DEGREE_SYMBOL "C"));
 
-	mgr.AddField(bedState = new StaticTextField(rowCommon5, column1, column2 - column1 - 4, Left, "Bed"));
 	mgr.AddField(bedCurrentTemp = new FloatField(rowCommon5, column2, column3 - column2 - 4, NULL, 1, DEGREE_SYMBOL "C"));
 	mgr.AddField(bedStandbyTemp = new IntegerField(rowCommon5, column4, column5 - column4 - 4, NULL, DEGREE_SYMBOL "C"));
 
 	mgr.AddField(new StaticTextField(rowCommon2, columnX, columnY - columnX - 2, Left, "X"));
 	mgr.AddField(new StaticTextField(rowCommon2, columnY, columnEnd - columnY - 2, Left, "Y"));
-
-	mgr.AddField(xPos = new FloatField(rowCommon3, columnX, columnY - columnX - 2, NULL, 1));
-	mgr.AddField(yPos = new FloatField(rowCommon3, columnY, columnEnd - columnY - 2, NULL, 1));
-	
 	mgr.AddField(new StaticTextField(rowCommon4, columnX, columnY - columnX - 2, Left, "Z"));
 	mgr.AddField(new StaticTextField(rowCommon4, columnY, columnEnd - columnY - 2, Left, "Probe"));
 
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	mgr.AddField(xPos = new FloatField(rowCommon3, columnX, columnY - columnX - 2, NULL, 1));
+	mgr.AddField(yPos = new FloatField(rowCommon3, columnY, columnEnd - columnY - 2, NULL, 1));
 	mgr.AddField(zPos = new FloatField(rowCommon5, columnX, columnY - columnX - 2, NULL, 2));
+	xPos->SetEvent(evXYPos, "G1 X");
+	yPos->SetEvent(evXYPos, "G1 Y");
+	zPos->SetEvent(evZPos, "G1 Z");
+
 	zprobeBuf[0] = 0;
+	DisplayField::SetDefaultColours(white, defaultBackColor);
 	mgr.AddField(zProbe = new TextField(rowCommon5, columnY, columnEnd - columnY - 2, NULL, zprobeBuf));
 	
 	DisplayField::SetDefaultColours(white, selectableBackColor);
 	mgr.AddField(tabControl = new StaticTextField(rowTabs, columnTab1, columnTabWidth, Centre, "Control"));
-	tabControl->SetEvent(evTabControl);
+	tabControl->SetEvent(evTabControl, 0);
 	mgr.AddField(tabPrint = new StaticTextField(rowTabs, columnTab2, columnTabWidth, Centre, "Print"));
-	tabPrint->SetEvent(evTabPrint);
+	tabPrint->SetEvent(evTabPrint, 0);
 	mgr.AddField(tabFiles = new StaticTextField(rowTabs, columnTab3, columnTabWidth, Centre, "Files"));
-	tabFiles->SetEvent(evTabFiles);
+	tabFiles->SetEvent(evTabFiles, 0);
 	mgr.AddField(tabMsg = new StaticTextField(rowTabs, columnTab4, columnTabWidth, Centre, "Msg"));
-	tabMsg->SetEvent(evTabMsg);
+	tabMsg->SetEvent(evTabMsg, 0);
 	mgr.AddField(tabInfo = new StaticTextField(rowTabs, columnTab5, columnTabWidth, Centre, "Info"));
-	tabInfo->SetEvent(evTabInfo);
+	tabInfo->SetEvent(evTabInfo, 0);
 	
 	commonRoot = mgr.GetRoot();		// save the root of fields that we always display
 	
@@ -213,21 +235,21 @@ void InitLcd()
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	mgr.AddField(new StaticTextField(rowCustom3, 0, 70, Left, "Speed"));
 	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(spd = new IntegerSettingField("M220 S", rowCustom3, 70, 60, "", "%"));
+	mgr.AddField(spd = new IntegerField(rowCustom3, 70, 60, "", "%"));
 	spd->SetValue(100);
-	spd->SetEvent(evSetVal);
+	spd->SetEvent(evSetVal, "M220 S");
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	mgr.AddField(new StaticTextField(rowCustom3, 140, 30, Left, "E1"));
 	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(e1Percent = new IntegerSettingField("M221 D0 S", rowCustom3, 170, 60, "", "%"));
+	mgr.AddField(e1Percent = new IntegerField(rowCustom3, 170, 60, "", "%"));
 	e1Percent->SetValue(100);
-	e1Percent->SetEvent(evSetVal);
+	e1Percent->SetEvent(evSetVal, "M221 D0 S");
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	mgr.AddField(new StaticTextField(rowCustom3, 250, 30, Left, "E2"));
 	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(e2Percent = new IntegerSettingField("M221 D1 S", rowCustom3, 280, 60, "", "%"));
+	mgr.AddField(e2Percent = new IntegerField(rowCustom3, 280, 60, "", "%"));
 	e2Percent->SetValue(100);
-	e2Percent->SetEvent(evSetVal);
+	e2Percent->SetEvent(evSetVal, "M221 D1 S");
 	
 	printRoot = mgr.GetRoot();
 
@@ -249,7 +271,7 @@ void InitLcd()
 	mgr.AddField(touchY = new IntegerField(rowCustom1, 330, 50, ""));
 	DisplayField::SetDefaultColours(white, selectableBackColor);
 	DisplayField *touchCal = new StaticTextField(rowCustom3, lcd.getDisplayXSize()/2 - 75, 150, Centre, "Calibrate touch");
-	touchCal->SetEvent(evCalTouch);
+	touchCal->SetEvent(evCalTouch, 0);
 	mgr.AddField(touchCal);
 
 	DisplayField::SetDefaultColours(white, defaultBackColor);
@@ -259,19 +281,64 @@ void InitLcd()
 	
 	touchCalibInstruction = new StaticTextField(lcd.getDisplayYSize()/2 - 10, 0, lcd.getDisplayXSize(), Centre, "Touch the spot");
 
-	// Create the popup window used to adjust values
+	// Create the popup window used to adjust temperatures
 	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
 	setTempPopup = new PopupField(130, 80);
 	DisplayField *tp = new StaticTextField(10, 10, 60, Centre, "+");
-	tp->SetEvent(evUp);
+	tp->SetEvent(evAdjustInt, 1);
 	setTempPopup->AddField(tp);
 	tp = new StaticTextField(55, 10, 60, Centre, "Set");
-	tp->SetEvent(evSet);
+	tp->SetEvent(evSetInt, 0);
 	setTempPopup->AddField(tp);
 	tp = new StaticTextField(100, 10, 60, Centre, "-");
-	tp->SetEvent(evDown);
+	tp->SetEvent(evAdjustInt, -1);
 	setTempPopup->AddField(tp);
+
+	// Create the popup window used to adjust XY position
+	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
+	setXYPopup = new PopupField(40, 395);
 	
+	tp = new StaticTextField(10, 5, 60, Centre, "-50");
+	tp->SetEvent(evAdjustFloat, "-50");
+	setXYPopup->AddField(tp);
+	tp = new StaticTextField(10, 70, 60, Centre, "-5");
+	tp->SetEvent(evAdjustFloat, "-5");
+	setXYPopup->AddField(tp);
+	tp = new StaticTextField(10, 135, 60, Centre, "-0.5");
+	tp->SetEvent(evAdjustFloat, "-0.5");
+	setXYPopup->AddField(tp);
+	tp = new StaticTextField(10, 200, 60, Centre, "+0.5");
+	tp->SetEvent(evAdjustFloat, "0.5");
+	setXYPopup->AddField(tp);
+	tp = new StaticTextField(10, 265, 60, Centre, "+5");
+	tp->SetEvent(evAdjustFloat, "5");
+	setXYPopup->AddField(tp);
+	tp = new StaticTextField(10, 330, 60, Centre, "+50");
+	tp->SetEvent(evAdjustFloat, "50");
+	setXYPopup->AddField(tp);
+
+	// Create the popup window used to adjust Z position
+	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
+	setZPopup = new PopupField(40, 395);
+	
+	tp = new StaticTextField(10, 5, 60, Centre, "-5");
+	tp->SetEvent(evAdjustFloat, "-5");
+	setZPopup->AddField(tp);
+	tp = new StaticTextField(10, 70, 60, Centre, "-0.5");
+	tp->SetEvent(evAdjustFloat, "-0.5");
+	setZPopup->AddField(tp);
+	tp = new StaticTextField(10, 135, 60, Centre, "-0.05");
+	tp->SetEvent(evAdjustFloat, "-0.05");
+	setZPopup->AddField(tp);
+	tp = new StaticTextField(10, 200, 60, Centre, "+0.05");
+	tp->SetEvent(evAdjustFloat, "0.05");
+	setZPopup->AddField(tp);
+	tp = new StaticTextField(10, 265, 60, Centre, "+0.5");
+	tp->SetEvent(evAdjustFloat, "0.5");
+	setZPopup->AddField(tp);
+	tp = new StaticTextField(10, 330, 60, Centre, "+5");
+	tp->SetEvent(evAdjustFloat, "5");
+	setZPopup->AddField(tp);
 
 	// Redraw everything
 	mgr.RefreshAll(true);
@@ -292,37 +359,72 @@ void InitLcd()
 	extrPos->SetValue(999.9);
 	zProbe->SetValue(1023);
 	fanRPM->SetValue(9999);
- #if 0
 	spd->SetValue(169);
 	e1Percent->SetValue(169);
 	e2Percent->SetValue(169);
- #endif
 #else
-	// Typical values
-	bedCurrentTemp->SetValue(19.8);
-	t1CurrentTemp->SetValue(181.5);
-	t2CurrentTemp->SetValue(150.1);
-	bedActiveTemp->SetValue(65);
-	t1ActiveTemp->SetValue(180);
-	t2ActiveTemp->SetValue(180);
-	t1StandbyTemp->SetValue(150);
-	t2StandbyTemp->SetValue(150);
-	xPos->SetValue(92.4);
-	yPos->SetValue(101.0);
-	zPos->SetValue(4.80);
+	// Initial values
+	bedCurrentTemp->SetValue(0.0);
+	t1CurrentTemp->SetValue(0.0);
+	t2CurrentTemp->SetValue(0.01);
+	bedActiveTemp->SetValue(0);
+	t1ActiveTemp->SetValue(0);
+	t2ActiveTemp->SetValue(0);
+	t1StandbyTemp->SetValue(0);
+	t2StandbyTemp->SetValue(0);
+	xPos->SetValue(0.0);
+	yPos->SetValue(0.0);
+	zPos->SetValue(0.0);
 	//  extrPos->SetValue(43.6);
 	//  fanRPM->SetValue(2354);
- #if 0
 	spd->SetValue(100);
-	e1Percent->SetValue(96);
+	e1Percent->SetValue(100);
 	e2Percent->SetValue(100);
- #endif
 #endif
 
 	touch.init(400, 240, InvLandscape, TpMedium);
 	lastTouchTime = GetTickCount();
 	currentTab = NULL;
 	changeTab(tabControl);
+}
+
+void SendChar(char c)
+{
+	//	size_t len = strlen(commandBuffer);
+	//	commandBuffer[len] = c;
+	//	commandBuffer[len + 1] = '\0';
+	SerialIo::putChar(c);
+}
+
+void SendString(const char* array s)
+{
+	while (*s != 0)
+	{
+		SendChar(*s++);
+	}
+}
+
+void SendInt(int i)
+decrease(i < 0; i)
+{
+	if (i < 0)
+	{
+		SendChar('-');
+		i = -i;
+	}
+	if (i >= 10)
+	{
+		SendInt(i/10);
+		i %= 10;
+	}
+	SendChar((char)((char)i + '0'));
+}
+
+// Ignore touches for a little while
+void delayTouch(uint32_t ms)
+{
+	lastTouchTime = GetTickCount();
+	ignoreTouchTime = ms;
 }
 
 int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
@@ -394,33 +496,46 @@ void ProcessTouch(DisplayField *f)
 		break;
 
 	case evSetVal:
+		mgr.Outline(f, red);
 		mgr.AttachPopup(setTempPopup, f);
 		fieldBeingAdjusted = f;
+		delayTouch(longTouchDelay);
 		break;
 
-	case evSet:
+	case evSetInt:
 		if (fieldBeingAdjusted != NULL)
 		{
-			commandBuffer[0] = '\0';
-			((IntegerSettingField*)fieldBeingAdjusted)->Action();
-			commandField->SetChanged();
+			const char* null cmd = fieldBeingAdjusted->GetSParam();
+			if (cmd != NULL)
+			{
+				SendString(cmd);
+				SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
+				SendChar('\n');
+			}
+//			commandField->SetChanged();
+			mgr.SetPopup(NULL);
+			mgr.RemoveOutline(fieldBeingAdjusted);
+			fieldBeingAdjusted = NULL;
+			delayTouch(longTouchDelay);
 		}
-		mgr.SetPopup(NULL);
-		fieldBeingAdjusted = NULL;
-		lastTouchTime = GetTickCount();		// ignore touches for a little while
 		break;
 
-	case evUp:
+	case evAdjustInt:
 		if (fieldBeingAdjusted != NULL)
 		{
-			((IntegerField*)fieldBeingAdjusted)->Increment(1);
+			static_cast<IntegerField*>(fieldBeingAdjusted)->Increment(f->GetIParam());
+			delayTouch(shortTouchDelay);
 		}
 		break;
 
-	case evDown:
+	case evAdjustFloat:
 		if (fieldBeingAdjusted != NULL)
 		{
-			((IntegerField*)fieldBeingAdjusted)->Increment(-1);
+			SendString("G91\n");
+			SendString(fieldBeingAdjusted->GetSParam());
+			SendString(f->GetSParam());
+			SendString(" F6000\nG90\n");
+			delayTouch(longTouchDelay);
 		}
 		break;
 
@@ -428,41 +543,83 @@ void ProcessTouch(DisplayField *f)
 		CalibrateTouch();
 		break;
 
+	case evSelectHead:
+		switch(f->GetIParam())
+		{
+		case 0:
+			// There is no command to switch the bed to standby temperature, so we always set it to the active temperature
+			SendString("M140 S");
+			SendInt(bedActiveTemp->GetValue());
+			SendChar('\n');
+			break;
+		
+		case 1:
+			SendString((heaterStatus[1] == 2) ? "T0\n" : "T1\n");
+			break;
+		
+		case 2:
+			SendString((heaterStatus[2] == 2) ? "T0\n" : "T2\n");
+			break;
+		
+		default:
+			break;
+		}
+
+		delayTouch(longTouchDelay);
+		break;
+		
+	case evXYPos:
+		mgr.Outline(f, red);
+		mgr.SetPopup(setXYPopup, xyPopupX, xyPopupY);
+		fieldBeingAdjusted = f;
+		delayTouch(longTouchDelay);
+		break;
+
+	case evZPos:
+		mgr.Outline(f, red);
+		mgr.SetPopup(setZPopup, xyPopupX, xyPopupY);
+		fieldBeingAdjusted = f;
+		delayTouch(longTouchDelay);
+		break;
+
 	default:
 		break;
 	}
 }
 
-void WriteCommand(char c)
+// Process a touch event outside the popup on the field being adjusted
+void ProcessTouchOutsidePopup()
 {
-//	size_t len = strlen(commandBuffer);
-//	commandBuffer[len] = c;
-//	commandBuffer[len + 1] = '\0';
-	SerialIo::putChar(c);
-}
+	switch(fieldBeingAdjusted->GetEvent())
+	{
+	case evSetVal:
+		{
+			const char* null cmd = fieldBeingAdjusted->GetSParam();
+			if (cmd != NULL)
+			{
+				SendString(cmd);
+				SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
+				SendChar('\n');
+			}
+		}
+//		commandField->SetChanged();
+		mgr.SetPopup(NULL);
+		mgr.RemoveOutline(fieldBeingAdjusted);
+		fieldBeingAdjusted = NULL;
+		delayTouch(longTouchDelay);
+		break;
 
-void WriteCommand(const char* array s)
-{
-	while (*s != 0)
-	{
-		WriteCommand(*s++);
+	case evXYPos:
+	case evZPos:
+		mgr.RemoveOutline(fieldBeingAdjusted);
+		mgr.SetPopup(NULL);
+		fieldBeingAdjusted = NULL;
+		delayTouch(longTouchDelay);
+		break;
+	
+	default:
+		break;
 	}
-}
-
-void WriteCommand(int i)
-decrease(i < 0; i)
-{
-	if (i < 0)
-	{
-		WriteCommand('-');
-		i = -i;
-	}
-	if (i >= 10)
-	{
-		WriteCommand(i/10);
-		i %= 10;
-	}
-	WriteCommand((char)((char)i + '0'));
 }
 
 // Update an integer field, provided it isn't the one being adjusted
@@ -567,6 +724,29 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 				}
 			}
 		}
+		else if (strcmp(id, "hstat") == 0)
+		{
+			int ival;
+			if (getInteger(data, ival) && index >= 0 && index < (int)numHeaters)
+			{
+				heaterStatus[index] = ival;
+				Color c = (ival == 1) ? standbyBackColor : (ival == 2) ? activeBackColor : (ival == 3) ? errorBackColour : defaultBackColor;
+				switch(index)
+				{
+				case 0:
+					bedCurrentTemp->SetColours(white, c);
+					break;
+				case 1:
+					t1CurrentTemp->SetColours(white, c);
+					break;
+				case 2:
+					t2CurrentTemp->SetColours(white, c);
+					break;
+				default:
+					break;
+				}
+			}
+		}
 		else if (strcmp(id, "pos") == 0)
 		{
 			float fval;
@@ -658,10 +838,6 @@ int main(void)
 			percent = 0;
 		}
 		
-		t1CurrentTemp->SetColours(white, activeBackColor);
-		t2CurrentTemp->SetColours(white, standbyBackColor);
-		bedActiveTemp->SetColours(white, yellow);
-		
 		SerialIo::checkInput();
 		
 		if (touch.dataAvailable() && GetTickCount() - lastTouchTime >= ignoreTouchTime)
@@ -677,6 +853,15 @@ int main(void)
 				BuzzerBeep(beepLength);
 				ProcessTouch(f);
 			}
+			else
+			{
+				f = mgr.FindEventOutsidePopup(x, y);
+				if (f != NULL && f == fieldBeingAdjusted)
+				{
+					BuzzerBeep(beepLength);
+					ProcessTouchOutsidePopup();					
+				}
+			}
 		}
 		freeMem->SetValue(getFreeMemory());
 		mgr.RefreshAll(false);
@@ -684,7 +869,7 @@ int main(void)
 		if (GetTickCount() - lastPollTime >= printerPollInterval)
 		{
 			lastPollTime += printerPollInterval;
-			WriteCommand("M105 S2\n");
+			SendString("M105 S2\n");
 		}
 	}
 }
