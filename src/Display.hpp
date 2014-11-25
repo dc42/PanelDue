@@ -63,7 +63,7 @@ public:
 	DisplayField * null next;					// link to next field in list
 
 	virtual void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) { }		// would like to make this pure virtual but then we get 50K of library that we don't want
-	void SetColours(Color pf, Color pb) { fcolour = pf; bcolour = pb; changed = true; }
+	void SetColours(Color pf, Color pb);
 	void SetEvent(Event e, const char* null sp ) { evt = e; param.sParam = sp; }
 	void SetEvent(Event e, int ip ) { evt = e; param.iParam = ip; }
 //	void SetEvent(Event e, double fp ) { evt = e; param.fParam = fp; }
@@ -86,10 +86,11 @@ class PopupField
 {
 private:
 	PixelNumber height, width;
+	Color backgroundColour;
 	DisplayField * null root;
 	
 public:
-	PopupField(PixelNumber ph, PixelNumber pw);
+	PopupField(PixelNumber ph, PixelNumber pw, Color pb);
 	PixelNumber GetHeight() override const { return height; }
 	PixelNumber GetWidth() override const { return width; }
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override;
@@ -147,6 +148,12 @@ public:
 	}
 
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override;
+	
+	void SetValue(const char* array s)
+	{
+		text = s;
+		changed = true;
+	}
 };
 
 class FloatField : public LabelledField
@@ -206,10 +213,16 @@ class StaticTextField : public DisplayField
 	TextAlignment align;
 	const char *text;
 public:
-	StaticTextField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char *pt)
+	StaticTextField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char * array pt)
 		: DisplayField(py, px, pw), align(pa), text(pt) {}
 
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override;
+	
+	void SetValue(const char* array pt)
+	{
+		text = pt;
+		changed = true;
+	}
 };
 
 class ProgressBar : public DisplayField

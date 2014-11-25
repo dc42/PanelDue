@@ -16,6 +16,7 @@
 #include "Buzzer.hpp"
 #include "SysTick.hpp"
 #include "Misc.hpp"
+#include "Vector.hpp"
 
 // Declare which fonts we will be using
 extern uint8_t glcd16x16[];
@@ -30,20 +31,36 @@ DisplayManager mgr;
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t beepLength = 10;						// beep length in ms
 const uint32_t longTouchDelay = 200;				// how long we ignore new touches for after pressing Set
-const uint32_t shortTouchDelay = 50;
+const uint32_t shortTouchDelay = 50;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
+
+const uint32_t numFileColumns = 2;
+const uint32_t numFileRows = 6;
+const uint32_t fileFieldSpacing = 4;
+const uint32_t numDisplayedFiles = numFileColumns * numFileRows;
 
 static uint32_t lastTouchTime;
 static uint32_t ignoreTouchTime;
+static uint32_t fileScrollOffset;
+static bool fileListChanged = true;
+static bool gotMachineName = false;
+static const char* array null currentFile = NULL;			// file whose info is displayed in the popup menu
 
-static char machineName[15] = "dc42's Ormerod";
-static char zprobeBuf[10];
+String<15> machineName;
+String<10> zprobeBuf;
+String<30> generatedByText;
+Vector<char, 2048> fileList;					// we use a Vector instead of a String because we store multiple null-terminated strings in it
+Vector<const char* array, 100> fileIndex;		// pointers into the individual filenames in the list
 
 const Color activeBackColor = red;
 const Color standbyBackColor = yellow;
 const Color defaultBackColor = blue;
 const Color errorBackColour = magenta;
 const Color selectableBackColor = black;
+const Color outlineColor = green;
+const Color popupBackColour = green;
+const Color selectablePopupBackColour = UTFT::fromRGB(0, 160, 0);	// dark green
 
+// Event numbers, used to say what we need to do when s field is touched
 const Event evTabControl = 1,
 			evTabPrint = 2,
 			evTabFiles = 3,
@@ -56,19 +73,22 @@ const Event evTabControl = 1,
 			evCalTouch = 10,
 			evSelectHead = 11,
 			evXYPos = 12,
-			evZPos = 13;
+			evZPos = 13,
+			evFile = 14,
+			evPrint = 15, evCancelPrint = 16;
 
-static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos;
+static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos, *fpHeightField, *fpLayerHeightField;
 static IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
-static IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY;
+static IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField;
 static ProgressBar *pbar;
-static StaticTextField *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
-static DisplayField *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
+static StaticTextField *nameField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
+static StaticTextField *filenameFields[12];
+static DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
 static DisplayField * null fieldBeingAdjusted = NULL;
-static PopupField *setTempPopup, *setXYPopup, *setZPopup;
+static PopupField *setTempPopup, *setXYPopup, *setZPopup, *filePopup;
 //static TextField *commandField;
-static TextField *zProbe;
+static TextField *zProbe, *fpNameField, *fpGeneratedByField;
 
 //char commandBuffer[80];
 
@@ -94,11 +114,11 @@ const PixelNumber rowCommon2 = rowCommon1 + rowHeight;
 const PixelNumber rowCommon3 = rowCommon2 + rowHeight;
 const PixelNumber rowCommon4 = rowCommon3 + rowHeight;
 const PixelNumber rowCommon5 = rowCommon4 + rowHeight;
-const PixelNumber rowTabs = 120;
-const PixelNumber rowCustom1 = rowTabs + 32;
+const PixelNumber rowCustom1 = rowCommon5 + rowHeight;
 const PixelNumber rowCustom2 = rowCustom1 + rowHeight;
 const PixelNumber rowCustom3 = rowCustom2 + rowHeight;
-const PixelNumber rowCustom4 = rowCustom3 + rowHeight;	//120 + 98 = 218, +22 = 240 so it just fits in a 400x240 display
+const PixelNumber rowCustom4 = rowCustom3 + rowHeight;	// ends just before row 177
+const PixelNumber rowTabs = 240 - 22 - 1;				// place at bottom of screen with a 1-pixel margin
 
 const PixelNumber columnTab1 = 2;
 const PixelNumber columnTab2 = 82;
@@ -108,6 +128,27 @@ const PixelNumber columnTab5 = 322;
 const PixelNumber columnTabWidth = 75;
 
 const PixelNumber xyPopupX = 3, xyPopupY = 195;
+const PixelNumber filePopupWidth = 330, filePopupHeight = 8 * rowHeight + 20;
+
+void RefreshFileList()
+{
+	for (size_t i = 0; i < numDisplayedFiles; ++i)
+	{
+		StaticTextField *f = filenameFields[i];
+		if (i < fileIndex.size())
+		{
+			f->SetValue(fileIndex[i]);
+			f->SetColours(white, selectableBackColor);
+			f->SetEvent(evFile, i);
+		}
+		else
+		{
+			f->SetValue("");
+			f->SetColours(white, defaultBackColor);
+			f->SetEvent(nullEvent, i);
+		}
+	}
+}
 
 void changeTab(DisplayField *newTab)
 {
@@ -119,29 +160,32 @@ void changeTab(DisplayField *newTab)
 		}
 		newTab->SetColours(red, black);
 		currentTab = newTab;
-		lcd.setColor(defaultBackColor);
-		lcd.fillRect(0, rowCustom1, lcd.getDisplayXSize() - 1, lcd.getDisplayYSize() - 1);
+//		lcd.setColor(defaultBackColor);
+//		lcd.fillRect(0, rowCustom1, lcd.getDisplayXSize() - 1, lcd.getDisplayYSize() - 1);
 		switch(newTab->GetEvent())
 		{
-			case evTabControl:
+		case evTabControl:
 			mgr.SetRoot(controlRoot);
 			break;
-			case evTabPrint:
+		case evTabPrint:
 			mgr.SetRoot(printRoot);
 			break;
-			case evTabFiles:
+		case evTabFiles:
+			SerialIo::SendString("M20 S2\n");		// ask for the list of files
 			mgr.SetRoot(filesRoot);
+			fileScrollOffset = 0;					// scroll to top of file list
 			break;
-			case evTabMsg:
+		case evTabMsg:
 			mgr.SetRoot(messageRoot);
 			break;
-			case evTabInfo:
+		case evTabInfo:
 			mgr.SetRoot(infoRoot);
 			break;
-			default:
+		default:
 			mgr.SetRoot(commonRoot);
 			break;
 		}
+		mgr.ClearAll();
 	}
 	mgr.RefreshAll(true);
 }
@@ -151,12 +195,26 @@ void InitLcd()
 	// Setup the LCD
 	lcd.InitLCD(Landscape);
 	mgr.Init(defaultBackColor);
+	DisplayField::SetDefaultFont(glcd19x20);
 	
 	// Create the fields that are always displayed
-	DisplayField::SetDefaultFont(glcd19x20);
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	mgr.AddField(tabControl = new StaticTextField(rowTabs, columnTab1, columnTabWidth, Centre, "Control"));
+	tabControl->SetEvent(evTabControl, 0);
+	mgr.AddField(tabPrint = new StaticTextField(rowTabs, columnTab2, columnTabWidth, Centre, "Print"));
+	tabPrint->SetEvent(evTabPrint, 0);
+	mgr.AddField(tabFiles = new StaticTextField(rowTabs, columnTab3, columnTabWidth, Centre, "Files"));
+	tabFiles->SetEvent(evTabFiles, 0);
+	mgr.AddField(tabMsg = new StaticTextField(rowTabs, columnTab4, columnTabWidth, Centre, "Msg"));
+	tabMsg->SetEvent(evTabMsg, 0);
+	mgr.AddField(tabInfo = new StaticTextField(rowTabs, columnTab5, columnTabWidth, Centre, "Info"));
+	tabInfo->SetEvent(evTabInfo, 0);
+	
+	baseRoot = mgr.GetRoot();		// save the root of fields that we usually display
+	
 	DisplayField::SetDefaultColours(white, red);
 	
-	mgr.AddField(new StaticTextField(rowCommon1, 0, lcd.getDisplayXSize(), Centre, machineName));
+	mgr.AddField(nameField = new StaticTextField(rowCommon1, 0, lcd.getDisplayXSize(), Centre, machineName.c_str()));
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	
 	mgr.AddField(new StaticTextField(rowCommon2, column2, column3 - column2 - 4, Left, "Current"));
@@ -204,21 +262,9 @@ void InitLcd()
 
 	zprobeBuf[0] = 0;
 	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(zProbe = new TextField(rowCommon5, columnY, columnEnd - columnY - 2, NULL, zprobeBuf));
+	mgr.AddField(zProbe = new TextField(rowCommon5, columnY, columnEnd - columnY - 2, NULL, zprobeBuf.c_str()));
 	
-	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(tabControl = new StaticTextField(rowTabs, columnTab1, columnTabWidth, Centre, "Control"));
-	tabControl->SetEvent(evTabControl, 0);
-	mgr.AddField(tabPrint = new StaticTextField(rowTabs, columnTab2, columnTabWidth, Centre, "Print"));
-	tabPrint->SetEvent(evTabPrint, 0);
-	mgr.AddField(tabFiles = new StaticTextField(rowTabs, columnTab3, columnTabWidth, Centre, "Files"));
-	tabFiles->SetEvent(evTabFiles, 0);
-	mgr.AddField(tabMsg = new StaticTextField(rowTabs, columnTab4, columnTabWidth, Centre, "Msg"));
-	tabMsg->SetEvent(evTabMsg, 0);
-	mgr.AddField(tabInfo = new StaticTextField(rowTabs, columnTab5, columnTabWidth, Centre, "Info"));
-	tabInfo->SetEvent(evTabInfo, 0);
-	
-	commonRoot = mgr.GetRoot();		// save the root of fields that we always display
+	commonRoot = mgr.GetRoot();		// save the root of fields that we usually display
 	
 	// Create the fields for the Control tab
 	DisplayField::SetDefaultColours(white, defaultBackColor);
@@ -254,8 +300,23 @@ void InitLcd()
 	printRoot = mgr.GetRoot();
 
 	// Create the fields for the Files tab
-	mgr.SetRoot(commonRoot);
+	mgr.SetRoot(baseRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
+	mgr.AddField(new StaticTextField(rowCommon1, 1, lcd.getDisplayXSize() - 2, Centre, "Files on SD card"));
+	{
+		PixelNumber fileFieldWidth = (lcd.getDisplayXSize() + fileFieldSpacing - 2)/numFileColumns;
+		unsigned int fileNum = 0;
+		for (unsigned int r = 0; r < numFileRows; ++r)
+		{
+			for (unsigned int c = 0; c < numFileColumns; ++c)
+			{
+				StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 1, (fileFieldWidth * c) + 1, fileFieldWidth - fileFieldSpacing, Left, "");
+				mgr.AddField(t);
+				filenameFields[fileNum] = t;
+				++fileNum;
+			}
+		}
+	}
 	filesRoot = mgr.GetRoot();
 
 	// Create the fields for the Message tab
@@ -282,8 +343,9 @@ void InitLcd()
 	touchCalibInstruction = new StaticTextField(lcd.getDisplayYSize()/2 - 10, 0, lcd.getDisplayXSize(), Centre, "Touch the spot");
 
 	// Create the popup window used to adjust temperatures
-	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-	setTempPopup = new PopupField(130, 80);
+	setTempPopup = new PopupField(130, 80, popupBackColour);
+	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
+
 	DisplayField *tp = new StaticTextField(10, 10, 60, Centre, "+");
 	tp->SetEvent(evAdjustInt, 1);
 	setTempPopup->AddField(tp);
@@ -295,8 +357,8 @@ void InitLcd()
 	setTempPopup->AddField(tp);
 
 	// Create the popup window used to adjust XY position
-	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-	setXYPopup = new PopupField(40, 395);
+	setXYPopup = new PopupField(40, 395, popupBackColour);
+	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
 	
 	tp = new StaticTextField(10, 5, 60, Centre, "-50");
 	tp->SetEvent(evAdjustFloat, "-50");
@@ -318,8 +380,8 @@ void InitLcd()
 	setXYPopup->AddField(tp);
 
 	// Create the popup window used to adjust Z position
-	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-	setZPopup = new PopupField(40, 395);
+	setZPopup = new PopupField(40, 395, popupBackColour);
+	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
 	
 	tp = new StaticTextField(10, 5, 60, Centre, "-5");
 	tp->SetEvent(evAdjustFloat, "-5");
@@ -339,6 +401,31 @@ void InitLcd()
 	tp = new StaticTextField(10, 330, 60, Centre, "+5");
 	tp->SetEvent(evAdjustFloat, "5");
 	setZPopup->AddField(tp);
+	
+	// Create the popup window used to display the file dialog
+	filePopup = new PopupField(filePopupHeight, filePopupWidth, popupBackColour);
+	DisplayField::SetDefaultColours(black, popupBackColour);
+
+	fpNameField = new TextField(10, 10, filePopupWidth - 20, "Filename: ", "");
+	fpSizeField = new IntegerField(10 + rowHeight, 10, filePopupWidth - 20, "Size: ", " bytes");
+	fpLayerHeightField = new FloatField(10 + 2 * rowHeight, 10, filePopupWidth - 20, "Layer height: ", 1, "mm");
+	fpHeightField = new FloatField(10 + 3 * rowHeight, 10, filePopupWidth - 20, "Object height: ", 1, "mm");
+	fpFilamentField = new IntegerField(10 + 4 * rowHeight, 10, filePopupWidth - 20, "Filament needed: ", "mm");
+	fpGeneratedByField = new TextField(10 + 5 * rowHeight, 10, filePopupWidth - 20, "Generated by: ", generatedByText.c_str());
+	filePopup->AddField(fpNameField);
+	filePopup->AddField(fpSizeField);
+	filePopup->AddField(fpLayerHeightField);
+	filePopup->AddField(fpHeightField);
+	filePopup->AddField(fpFilamentField);
+	filePopup->AddField(fpGeneratedByField);
+
+	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
+	tp = new StaticTextField(10 + 7 * rowHeight, 10, filePopupWidth/2 - 20, Centre, "Print");
+	tp->SetEvent(evPrint, 0);
+	filePopup->AddField(tp);
+	tp = new StaticTextField(10 + 7 * rowHeight, filePopupWidth/2 + 10, filePopupWidth/2 - 20, Centre, "Cancel");
+	tp->SetEvent(evCancelPrint, 0);
+	filePopup->AddField(tp);
 
 	// Redraw everything
 	mgr.RefreshAll(true);
@@ -386,38 +473,6 @@ void InitLcd()
 	lastTouchTime = GetTickCount();
 	currentTab = NULL;
 	changeTab(tabControl);
-}
-
-void SendChar(char c)
-{
-	//	size_t len = strlen(commandBuffer);
-	//	commandBuffer[len] = c;
-	//	commandBuffer[len + 1] = '\0';
-	SerialIo::putChar(c);
-}
-
-void SendString(const char* array s)
-{
-	while (*s != 0)
-	{
-		SendChar(*s++);
-	}
-}
-
-void SendInt(int i)
-decrease(i < 0; i)
-{
-	if (i < 0)
-	{
-		SendChar('-');
-		i = -i;
-	}
-	if (i >= 10)
-	{
-		SendInt(i/10);
-		i %= 10;
-	}
-	SendChar((char)((char)i + '0'));
 }
 
 // Ignore touches for a little while
@@ -496,7 +551,7 @@ void ProcessTouch(DisplayField *f)
 		break;
 
 	case evSetVal:
-		mgr.Outline(f, red);
+		mgr.Outline(f, outlineColor);
 		mgr.AttachPopup(setTempPopup, f);
 		fieldBeingAdjusted = f;
 		delayTouch(longTouchDelay);
@@ -508,9 +563,9 @@ void ProcessTouch(DisplayField *f)
 			const char* null cmd = fieldBeingAdjusted->GetSParam();
 			if (cmd != NULL)
 			{
-				SendString(cmd);
-				SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
-				SendChar('\n');
+				SerialIo::SendString(cmd);
+				SerialIo::SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
+				SerialIo::SendChar('\n');
 			}
 //			commandField->SetChanged();
 			mgr.SetPopup(NULL);
@@ -531,10 +586,10 @@ void ProcessTouch(DisplayField *f)
 	case evAdjustFloat:
 		if (fieldBeingAdjusted != NULL)
 		{
-			SendString("G91\n");
-			SendString(fieldBeingAdjusted->GetSParam());
-			SendString(f->GetSParam());
-			SendString(" F6000\nG90\n");
+			SerialIo::SendString("G91\n");
+			SerialIo::SendString(fieldBeingAdjusted->GetSParam());
+			SerialIo::SendString(f->GetSParam());
+			SerialIo::SendString(" F6000\nG90\n");
 			delayTouch(longTouchDelay);
 		}
 		break;
@@ -548,17 +603,17 @@ void ProcessTouch(DisplayField *f)
 		{
 		case 0:
 			// There is no command to switch the bed to standby temperature, so we always set it to the active temperature
-			SendString("M140 S");
-			SendInt(bedActiveTemp->GetValue());
-			SendChar('\n');
+			SerialIo::SendString("M140 S");
+			SerialIo::SendInt(bedActiveTemp->GetValue());
+			SerialIo::SendChar('\n');
 			break;
 		
 		case 1:
-			SendString((heaterStatus[1] == 2) ? "T0\n" : "T1\n");
+			SerialIo::SendString((heaterStatus[1] == 2) ? "T0\n" : "T1\n");
 			break;
 		
 		case 2:
-			SendString((heaterStatus[2] == 2) ? "T0\n" : "T2\n");
+			SerialIo::SendString((heaterStatus[2] == 2) ? "T0\n" : "T2\n");
 			break;
 		
 		default:
@@ -569,17 +624,49 @@ void ProcessTouch(DisplayField *f)
 		break;
 		
 	case evXYPos:
-		mgr.Outline(f, red);
+		mgr.Outline(f, outlineColor);
 		mgr.SetPopup(setXYPopup, xyPopupX, xyPopupY);
 		fieldBeingAdjusted = f;
 		delayTouch(longTouchDelay);
 		break;
 
 	case evZPos:
-		mgr.Outline(f, red);
+		mgr.Outline(f, outlineColor);
 		mgr.SetPopup(setZPopup, xyPopupX, xyPopupY);
 		fieldBeingAdjusted = f;
 		delayTouch(longTouchDelay);
+		break;
+
+	case evFile:
+		currentFile = fileIndex[f->GetIParam()];
+		SerialIo::SendString("M36 /gcodes/");			// ask for the file info
+		SerialIo::SendString(currentFile);
+		SerialIo::SendChar('\n');
+		fpNameField->SetValue(currentFile);
+		// Clear out the old field values, they relate to the previous file we looked at until we process the response
+		fpSizeField->SetValue(0);						// would be better to make it blank
+		fpHeightField->SetValue(0.0);					// would be better to make it blank
+		fpLayerHeightField->SetValue(0.0);				// would be better to make it blank
+		fpFilamentField->SetValue(0);					// would be better to make it blank
+		generatedByText.clear();
+		fpGeneratedByField->SetChanged();
+		mgr.SetPopup(filePopup, (lcd.getDisplayXSize() - filePopupWidth)/2, (lcd.getDisplayYSize() - filePopupHeight)/2);
+		break;
+
+	case evPrint:
+		mgr.SetPopup(NULL);
+		if (currentFile != NULL)
+		{
+			SerialIo::SendString("M23 ");
+			SerialIo::SendString(currentFile);
+			SerialIo::SendString("\nM24\n");
+			currentFile = NULL;			// allow the file list to be updated		
+		}
+		break;
+
+	case evCancelPrint:
+		mgr.SetPopup(NULL);
+		currentFile = NULL;				// allow the file list to be updated
 		break;
 
 	default:
@@ -597,9 +684,9 @@ void ProcessTouchOutsidePopup()
 			const char* null cmd = fieldBeingAdjusted->GetSParam();
 			if (cmd != NULL)
 			{
-				SendString(cmd);
-				SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
-				SendChar('\n');
+				SerialIo::SendString(cmd);
+				SerialIo::SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
+				SerialIo::SendChar('\n');
 			}
 		}
 //		commandField->SetChanged();
@@ -786,6 +873,48 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 				}
 			}
 		}
+		else if (strcmp(id, "files") == 0)
+		{
+			static bool fileListLocked = false;
+			if (index == 0)
+			{
+				if (currentFile == NULL)
+				{
+					fileList.clear();
+					fileIndex.clear();
+					fileListChanged = true;
+					fileListLocked = false;
+				}
+				else				// don't destroy the file list if we are using a pointer into it
+				{
+					fileListLocked = true;
+				}
+			}
+			if (!fileListLocked)
+			{
+				size_t len = strlen(data) + 1;		// we are going to copy the null terminator as well
+				if (len + fileList.size() <= fileList.capacity() && fileIndex.size() < fileIndex.capacity())
+				{
+					fileIndex.add(fileList.c_ptr() + fileList.size());
+					fileList.add(data, len);
+				}
+				fileListChanged = true;
+			}
+		}
+		else if (strcmp(id, "filament") == 0)
+		{
+			static float totalFilament = 0.0;
+			if (index == 0)
+			{
+				totalFilament = 0.0;
+			}
+			float f;
+			if (getFloat(data, f))
+			{
+				totalFilament += f;
+				fpFilamentField->SetValue((int)totalFilament);
+			}
+		}
 	}
 	
 	// Non-array values follow
@@ -799,8 +928,43 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 	}
 	else if (strcmp(id, "probe") == 0)
 	{
-		safeStrncpy(zprobeBuf, data, ARRAY_SIZE(zprobeBuf));
+		zprobeBuf.copyFrom(data);
 		zProbe->SetChanged();
+	}
+	else if (strcmp(id, "myName") == 0)
+	{
+		machineName.copyFrom(data);
+		nameField->SetChanged();
+		gotMachineName = true;
+	}
+	else if (strcmp(id, "size") == 0)
+	{
+		int sz;
+		if (getInteger(data, sz))
+		{
+			fpSizeField->SetValue(sz);
+		}
+	}
+	else if (strcmp(id, "height") == 0)
+	{
+		float f;
+		if (getFloat(data, f))
+		{
+			fpHeightField->SetValue(f);
+		}		
+	}
+	else if (strcmp(id, "layerHeight") == 0)
+	{
+		float f;
+		if (getFloat(data, f))
+		{
+			fpLayerHeightField->SetValue(f);
+		}	
+	}
+	else if (strcmp(id, "generatedBy") == 0)
+	{
+		generatedByText.copyFrom(data);
+		fpGeneratedByField->SetChanged();
 	}
 }
 
@@ -820,7 +984,7 @@ int main(void)
 	pmc_enable_periph_clk(ID_PWM);		// enable the PWM clock
 	pmc_enable_periph_clk(ID_UART1);	// enable UART1 clock
 	
-	SerialIo::init();
+	SerialIo::Init();
 	BuzzerInit();
 	InitLcd();
 	
@@ -838,7 +1002,12 @@ int main(void)
 			percent = 0;
 		}
 		
-		SerialIo::checkInput();
+		SerialIo::CheckInput();
+		if (fileListChanged)
+		{
+			RefreshFileList();
+			fileListChanged = false;
+		}
 		
 		if (touch.dataAvailable() && GetTickCount() - lastTouchTime >= ignoreTouchTime)
 		{
@@ -869,7 +1038,7 @@ int main(void)
 		if (GetTickCount() - lastPollTime >= printerPollInterval)
 		{
 			lastPollTime += printerPollInterval;
-			SendString("M105 S2\n");
+			SerialIo::SendString((gotMachineName) ? "M105 S2\n" : "M105 S3\n");
 		}
 	}
 }

@@ -10,15 +10,12 @@
 #include "SerialIo.hpp"
 #include "Vector.hpp"
 
-typedef String<20> FieldId;
-typedef String<50> FieldValue;
-
 extern void processReceivedValue(const char id[], const char val[], int index);
 
 namespace SerialIo
 {
 	// Initialize the serial I/O subsystem
-	void init()
+	void Init()
 	{
 		pio_configure(PIOB, PIO_PERIPH_A, PIO_PB2 | PIO_PB3, 0);	// enable UART 1 pins
 	
@@ -34,11 +31,35 @@ namespace SerialIo
 	// Send a character to the 3D printer.
 	// A typical command string is only about 12 characters long, which at 115200 baud takes just over 1ms to send.
 	// So there is no particular reason to use interrupts, and by so doing so we avoid having to handle buffer full situations.
-	void putChar(char c)
+	void SendChar(char c)
 	{
 		while(uart_write(UART1, c) != 0) { }
 	}
 	
+	void SendString(const char* array s)
+	{
+		while (*s != 0)
+		{
+			SendChar(*s++);
+		}
+	}
+
+	void SendInt(int i)
+	decrease(i < 0; i)
+	{
+		if (i < 0)
+		{
+			SendChar('-');
+			i = -i;
+		}
+		if (i >= 10)
+		{
+			SendInt(i/10);
+			i %= 10;
+		}
+		SendChar((char)((char)i + '0'));
+	}
+
 	// Receive data processing
 	const size_t rxBufsize = 1024;
 	static char rxBuffer[rxBufsize];
@@ -66,16 +87,17 @@ namespace SerialIo
 	
 	JsonState state = jsBegin;
 	
-	FieldId fieldId;
-	FieldValue fieldVal;
+	String<20> fieldId;
+	String<60> fieldVal;
 	int arrayElems = -1;
 	
-	void processField()
+	static void processField()
 	{
 		processReceivedValue(fieldId.c_str(), fieldVal.c_str(), arrayElems);
+		fieldVal.clear();
 	}
 	
-	void checkInput()
+	void CheckInput()
 	{
 		while (nextIn != nextOut)
 		{
@@ -93,6 +115,7 @@ namespace SerialIo
 					if (c == '{')
 					{
 						state = jsExpectId;
+						fieldVal.clear();
 					}
 					break;
 
@@ -138,7 +161,6 @@ namespace SerialIo
 					{
 					case ':':
 						arrayElems = -1;
-						fieldVal.clear();
 						state = jsVal;
 						break;
 					case ' ':
@@ -268,7 +290,6 @@ namespace SerialIo
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
-							fieldVal.clear();
 							state = jsVal;
 						}
 						else
@@ -320,7 +341,6 @@ namespace SerialIo
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
-							fieldVal.clear();
 							state = jsVal;
 						}
 						else

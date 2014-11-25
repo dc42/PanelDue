@@ -11,9 +11,11 @@
 
 namespace SerialIo
 {
-	void init();
-	void putChar(char c);
-	void checkInput();
+	void Init();
+	void SendChar(char c);
+	void SendString(const char* array s);
+	void SendInt(int i);
+	void CheckInput();
 }
 
 #endif /* SERIALIO_H_ */

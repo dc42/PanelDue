@@ -51,6 +51,16 @@ DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
 	return best;
 }
 
+void DisplayField::SetColours(Color pf, Color pb)
+{
+	if (fcolour != pf || bcolour != pb)
+	{
+		fcolour = pf;
+		bcolour = pb;
+		changed = true;	
+	}
+}
+
 DisplayManager::DisplayManager()
 	: backgroundColor(0), root(NULL), popupField(NULL)
 {
@@ -289,8 +299,8 @@ void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 	}
 }
 
-PopupField::PopupField(PixelNumber ph, PixelNumber pw)
-	: height(ph), width(pw), root(NULL)
+PopupField::PopupField(PixelNumber ph, PixelNumber pw, Color pb)
+	: height(ph), width(pw), backgroundColour(pb), root(NULL)
 {
 }
 
