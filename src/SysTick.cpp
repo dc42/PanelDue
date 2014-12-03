@@ -20,7 +20,7 @@ uint32_t GetTickCount()
 void SysTick_Handler()
 {
 	++tickCount;
-	BuzzerTick();
+	Buzzer::Tick();
 }
 
 // End

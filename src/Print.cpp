@@ -3,6 +3,7 @@
  *
  * Created: 31/10/2014 17:52:30
  *  Author: David
+ * Adapted from Arduino Print module
  */ 
 
 #include "Print.hpp"

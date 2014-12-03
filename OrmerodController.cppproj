@@ -32,11 +32,12 @@
           <option id="common.boards" value="Add" config="" content-id="Atmel.ASF" />
           <option id="common.services.basic.clock" value="Add" config="" content-id="Atmel.ASF" />
           <option id="common.services.delay" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="sam.drivers.matrix" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.pio" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.pwm" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.uart" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.wdt" value="Add" config="" content-id="Atmel.ASF" />
-          <option id="sam.drivers.matrix" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="sam.services.flash" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.utils.linker_scripts#atsam3s4" value="Add" config="" content-id="Atmel.ASF" />
         </options>
         <configurations>
@@ -181,6 +182,10 @@
           <file path="src/ASF/sam/drivers/uart/uart.h" framework="" version="3.19.0" source="sam\drivers\uart\uart.h" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/sam/drivers/matrix/matrix.c" framework="" version="3.19.0" source="sam\drivers\matrix\matrix.c" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/sam/drivers/matrix/matrix.h" framework="" version="3.19.0" source="sam\drivers\matrix\matrix.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/efc/efc.c" framework="" version="3.19.0" source="sam\drivers\efc\efc.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/efc/efc.h" framework="" version="3.19.0" source="sam\drivers\efc\efc.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/services/flash_efc/flash_efc.c" framework="" version="3.19.0" source="sam\services\flash_efc\flash_efc.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/services/flash_efc/flash_efc.h" framework="" version="3.19.0" source="sam\services\flash_efc\flash_efc.h" changed="False" content-id="Atmel.ASF" />
         </files>
         <documentation help="http://asf.atmel.com/docs/3.19.0/common.applications.user_application.user_board.sam3s/html/index.html" />
         <offline-documentation help="" />
@@ -233,9 +238,11 @@
             <Value>../src/ASF/sam/drivers/pwm</Value>
             <Value>../src/ASF/sam/drivers/uart</Value>
             <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/drivers/efc</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcc.compiler.directories.IncludePaths>
-        <armgcc.compiler.optimization.level>Optimize for size (-Os)</armgcc.compiler.optimization.level>
+        <armgcc.compiler.optimization.level>Optimize more (-O2)</armgcc.compiler.optimization.level>
         <armgcc.compiler.optimization.OtherFlags>-fdata-sections</armgcc.compiler.optimization.OtherFlags>
         <armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
         <armgcc.compiler.warnings.AllWarnings>True</armgcc.compiler.warnings.AllWarnings>
@@ -280,9 +287,11 @@
             <Value>../src/ASF/sam/drivers/pwm</Value>
             <Value>../src/ASF/sam/drivers/uart</Value>
             <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/drivers/efc</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcccpp.compiler.directories.IncludePaths>
-        <armgcccpp.compiler.optimization.level>Optimize for size (-Os)</armgcccpp.compiler.optimization.level>
+        <armgcccpp.compiler.optimization.level>Optimize more (-O2)</armgcccpp.compiler.optimization.level>
         <armgcccpp.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcccpp.compiler.optimization.PrepareFunctionsForGarbageCollection>
         <armgcccpp.compiler.warnings.AllWarnings>True</armgcccpp.compiler.warnings.AllWarnings>
         <armgcccpp.linker.general.NoSharedLibraries>True</armgcccpp.linker.general.NoSharedLibraries>
@@ -304,7 +313,7 @@
         <armgcccpp.linker.miscellaneous.LinkerFlags>-T../src/ASF/sam/utils/linker_scripts/sam3s/sam3s4/gcc/flash.ld</armgcccpp.linker.miscellaneous.LinkerFlags>
         <armgcccpp.assembler.general.IncludePaths>
           <ListValues>
-            <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcccpp.assembler.general.IncludePaths>
         <armgcccpp.preprocessingassembler.general.IncludePaths>
@@ -338,6 +347,8 @@
             <Value>../src/ASF/sam/drivers/pwm</Value>
             <Value>../src/ASF/sam/drivers/uart</Value>
             <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/drivers/efc</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcccpp.preprocessingassembler.general.IncludePaths>
       </ArmGccCpp>
@@ -384,6 +395,8 @@
             <Value>../src/ASF/sam/drivers/pwm</Value>
             <Value>../src/ASF/sam/drivers/uart</Value>
             <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/drivers/efc</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcc.compiler.directories.IncludePaths>
         <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
@@ -432,6 +445,8 @@
             <Value>../src/ASF/sam/drivers/pwm</Value>
             <Value>../src/ASF/sam/drivers/uart</Value>
             <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/drivers/efc</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcccpp.compiler.directories.IncludePaths>
         <armgcccpp.compiler.optimization.level>Optimize for size (-Os)</armgcccpp.compiler.optimization.level>
@@ -457,7 +472,7 @@
         <armgcccpp.linker.miscellaneous.LinkerFlags>-T../src/ASF/sam/utils/linker_scripts/sam3s/sam3s4/gcc/flash.ld</armgcccpp.linker.miscellaneous.LinkerFlags>
         <armgcccpp.assembler.general.IncludePaths>
           <ListValues>
-            <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcccpp.assembler.general.IncludePaths>
         <armgcccpp.assembler.debugging.DebugLevel>Default (-g)</armgcccpp.assembler.debugging.DebugLevel>
@@ -492,6 +507,8 @@
             <Value>../src/ASF/sam/drivers/pwm</Value>
             <Value>../src/ASF/sam/drivers/uart</Value>
             <Value>../src/ASF/sam/drivers/matrix</Value>
+            <Value>../src/ASF/sam/drivers/efc</Value>
+            <Value>../src/ASF/sam/services/flash_efc</Value>
           </ListValues>
         </armgcccpp.preprocessingassembler.general.IncludePaths>
         <armgcccpp.preprocessingassembler.debugging.DebugLevel>Default (-Wa,-g)</armgcccpp.preprocessingassembler.debugging.DebugLevel>
@@ -499,6 +516,12 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="src\ASF\sam\drivers\efc\efc.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\drivers\efc\efc.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\ASF\sam\drivers\matrix\matrix.c">
       <SubType>compile</SubType>
     </Compile>
@@ -508,10 +531,28 @@
     <Compile Include="src\ASF\sam\drivers\pwm\pwm.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\ASF\sam\services\flash_efc\flash_efc.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\services\flash_efc\flash_efc.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\Buzzer.cpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Buzzer.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\FlashStorage.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\FlashStorage.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Mem.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Mem.hpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Misc.cpp">
@@ -554,12 +595,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\glcd19x20.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\mem.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\mem.hpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\OneBitPort.cpp">
@@ -1007,12 +1042,15 @@
     <Folder Include="src\ASF\common\utils\interrupt\" />
     <Folder Include="src\ASF\sam\" />
     <Folder Include="src\ASF\sam\drivers\" />
+    <Folder Include="src\ASF\sam\drivers\efc\" />
     <Folder Include="src\ASF\sam\drivers\matrix\" />
     <Folder Include="src\ASF\sam\drivers\pio\" />
     <Folder Include="src\ASF\sam\drivers\pmc\" />
     <Folder Include="src\ASF\sam\drivers\pwm\" />
     <Folder Include="src\ASF\sam\drivers\uart\" />
     <Folder Include="src\ASF\sam\drivers\wdt\" />
+    <Folder Include="src\ASF\sam\services\" />
+    <Folder Include="src\ASF\sam\services\flash_efc\" />
     <Folder Include="src\ASF\sam\utils\" />
     <Folder Include="src\ASF\sam\utils\cmsis\" />
     <Folder Include="src\ASF\sam\utils\cmsis\sam3s\" />

@@ -55,6 +55,8 @@ MEMORY
 /* The stack size used by the application. NOTE: you need to adjust  */
 __stack_size__ = DEFINED(__stack_size__) ? __stack_size__ : 0x2000;
 __ram_end__ = ORIGIN(ram) + LENGTH(ram) - 4;
+__flash_start__ = ORIGIN(rom);
+__flash_end__ = ORIGIN(rom) + LENGTH(rom);
 
 /* Section Definitions */ 
 SECTIONS 

@@ -9,10 +9,13 @@
 #ifndef BUZZER_H_
 #define BUZZER_H_
 
-void BuzzerInit();
+namespace Buzzer
+{
+	void Init();
 
-void BuzzerBeep(uint32_t ms);
+	void Beep(uint32_t frequency, uint32_t ms);
 
-void BuzzerTick();
+	void Tick();
+}
 
 #endif /* BUZZER_H_ */

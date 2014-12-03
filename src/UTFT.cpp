@@ -1493,8 +1493,8 @@ void UTFT::setXY(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
 #if !(defined(DISABLE_SSD1963_480) && defined(DISABLE_SSD1963_800))
 	case SSD1963_480:
 	case SSD1963_800:
-		swap(word, x1, y1);
-		swap(word, x2, y2);
+		swap(x1, y1);
+		swap(x2, y2);
 		LCD_Write_COM(0x2a); 
   		LCD_Write_DATA(x1>>8);
   		LCD_Write_DATA(x1);

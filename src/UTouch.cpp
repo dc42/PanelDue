@@ -29,10 +29,9 @@ UTouch::UTouch(unsigned int tclk, unsigned int tcs, unsigned int din, unsigned i
 {
 }
 
-void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientation, TouchPrecision p)
+void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust, TouchPrecision p)
 {
-	orient					= orientation;
-	nativeOrientation		= InvPortrait;
+	orientAdjust			= orientationAdjust;
 	touch_x_left			= 128;
 	touch_x_right			= 3840;
 	touch_y_top				= 255;
@@ -53,7 +52,7 @@ void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientation, Touc
 	setPrecision(p);
 }
 
-void UTouch::read()
+bool UTouch::read()
 {
 	uint32_t tx = 0;
 	uint32_t ty = 0;
@@ -114,11 +113,13 @@ void UTouch::read()
 	{
 		TP_X = (int16_t)(ty/datacount);
 		TP_Y = (int16_t)(tx/datacount);
+		return true;
 	}
 	else
 	{
 		TP_X = -1;
 		TP_Y = -1;
+		return false;
 	}
 }
 
@@ -132,8 +133,8 @@ int16_t UTouch::getX() const
 	if ((TP_X == -1) || (TP_Y == -1))
 		return -1;
 	
-	int16_t val = ((orient ^ nativeOrientation)	& SwapXY) ? TP_Y : TP_X;
-	if ((orient ^ nativeOrientation) & ReverseX)
+	int16_t val = (orientAdjust	& SwapXY) ? TP_Y : TP_X;
+	if (orientAdjust & ReverseX)
 	{
 		val = 4096 - val;
 	}
@@ -145,10 +146,10 @@ int16_t UTouch::getX() const
 int16_t UTouch::getY() const
 {
 	if ((TP_X == -1) || (TP_Y == -1))
-	return -1;
+		return -1;
 	
-	int16_t val = ((orient ^ nativeOrientation)	& SwapXY) ? TP_X : TP_Y;
-	if ((orient ^ nativeOrientation) & ReverseY)
+	int16_t val = (orientAdjust	& SwapXY) ? TP_X : TP_Y;
+	if (orientAdjust & ReverseY)
 	{
 		val = 4096 - val;
 	}

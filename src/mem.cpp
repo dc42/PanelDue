@@ -6,7 +6,7 @@
  */ 
 
 #include "ecv.h"
-#include "mem.hpp"
+#include "Mem.hpp"
 
 //#include <new>
 //void* operator new(size_t objsize, std::nothrow_t dummy) {

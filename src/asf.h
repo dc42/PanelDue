@@ -62,6 +62,12 @@
 // From module: Delay routines
 #include <delay.h>
 
+// From module: EEFC - Enhanced Embedded Flash Controller
+#include <efc.h>
+
+// From module: Flash - SAM Flash Service API
+#include <flash_efc.h>
+
 // From module: Generic board support
 #include <board.h>
 

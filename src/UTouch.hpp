@@ -40,8 +40,8 @@ public:
 
 	UTouch(unsigned int tclk, unsigned int tcs, unsigned int tdin, unsigned int dout, unsigned int irq);
 
-	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientation = Landscape, TouchPrecision p = TpMedium);
-	void	read();
+	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust = Default, TouchPrecision p = TpMedium);
+	bool	read();
 	bool	dataAvailable() const;
 	int16_t	getX() const;
 	int16_t	getY() const;
@@ -50,14 +50,13 @@ public:
     
 private:
 	OneBitPort portCLK, portCS, portDIN, portDOUT, portIRQ;
-	DisplayOrientation orient, nativeOrientation;
+	DisplayOrientation orientAdjust;
 	uint8_t	prec;
-//	uint8_t	display_model;
 	uint16_t disp_x_size, disp_y_size;
 	int16_t	touch_x_left, touch_x_right, touch_y_top, touch_y_bottom;
 
 	void	touch_WriteData(uint8_t data);
-	uint16_t	touch_ReadData();
+	uint16_t touch_ReadData();
 };
 
 #endif

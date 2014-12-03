@@ -21,6 +21,21 @@ LcdFont DisplayField::defaultFont = glcd19x20;
 Color DisplayField::defaultFcolour = 0xFFFF;
 Color DisplayField::defaultBcolour = 0;
 
+DisplayField::DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
+	: y(py), x(px), width(pw), fcolour(defaultFcolour), bcolour(defaultBcolour),
+		evt(nullEvent), font(defaultFont), changed(true), visible(true), next(NULL)
+{
+	param.sParam = NULL;
+}
+
+void DisplayField::Show(bool v)
+{
+	if (visible != v)
+	{
+		visible = changed = v;
+	}
+}
+	
 // Find the best match to a touch event in a list of fields
 DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
 {	
@@ -29,7 +44,7 @@ DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
 	DisplayField * null best = NULL;
 	while (p != NULL)
 	{
-		if (p->GetEvent() != nullEvent)
+		if (p->visible && p->GetEvent() != nullEvent)
 		{
 			int xError = (x < (int)p->GetMinX()) ? (int)p->GetMinX() - x
 									: (x > (int)p->GetMaxX()) ? x - (int)p->GetMaxX()
@@ -84,12 +99,12 @@ void DisplayManager::AddField(DisplayField *d)
 	root = d;
 }
 
-// Refresh all fields. if 'full' is true then we rewrite them all, else we just rewrite those that have changed.
+// Refresh all fields. If 'full' is true then we rewrite them all, else we just rewrite those that have changed.
 void DisplayManager::RefreshAll(bool full)
 {
 	for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
 	{
-		if (full || Visible(pp))
+		if (Visible(pp))
 		{
 			pp->Refresh(full, 0, 0);
 		}		
@@ -102,10 +117,12 @@ void DisplayManager::RefreshAll(bool full)
 
 bool DisplayManager::Visible(const DisplayField *p) const
 {
-	return !HavePopup()
-			|| (   p->GetMaxY() < popupY || p->GetMinY() >= popupY + popupField->GetHeight()
-				|| p->GetMaxX() < popupX || p->GetMinX() >= popupX + popupField->GetWidth()
-			   );
+	return p->IsVisible() &&
+			(    !HavePopup()
+			  || (   p->GetMaxY() < popupY || p->GetMinY() >= popupY + popupField->GetHeight()
+				  || p->GetMaxX() < popupX || p->GetMinX() >= popupX + popupField->GetWidth()
+			     )
+			);
 }
 
 // Get the field that has been touched, or null if we can't find one
@@ -169,10 +186,40 @@ void DisplayManager::AttachPopup(PopupField * pp, DisplayField *p)
 
 // Draw an outline around a field. The field and 1 pixel around it are assumed to be visible.
 // Not sure what will happen of the field goes right up to one of the edges of the display! better avoid that situation.
-void DisplayManager::Outline(DisplayField *f, Color c)
+void DisplayManager::Outline(DisplayField *f, Color c, PixelNumber numPixels)
 {
 	lcd.setColor(c);
-	lcd.drawRect(f->GetMinX() - 1, f->GetMinY() - 1, f->GetMaxX() + 1, f->GetMaxY() + 1);
+	for (PixelNumber i = 1; i <= numPixels; ++i)
+	{
+		lcd.drawRect(f->GetMinX() - i, f->GetMinY() - i, f->GetMaxX() + i, f->GetMaxY() + i);	
+	}
+}
+
+//TODO: make this work properly when field f is obscured by a popup
+void DisplayManager::Show(DisplayField *f, bool v)
+{
+	if (f->IsVisible() != v)
+	{
+		f->Show(v);
+
+		// Check whether the field is currently in the display list, if so then show or hide it
+		for (DisplayField *p = root; p != NULL; p = p->next)
+		{
+			if (p == f)
+			{
+				if (v)
+				{
+					f->Refresh(true, 0, 0);
+				}
+				else
+				{
+					lcd.setColor(backgroundColor);
+					lcd.fillRect(f->GetMinX(), f->GetMinY(), f->GetMaxX(), f->GetMaxY());
+				}
+				break;
+			}
+		}
+	}
 }
 
 // Set the font and colours, print the label (if any) and leave the cursor at the correct position for the data

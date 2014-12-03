@@ -7,56 +7,61 @@
 
 #include "ecv.h"
 #include "asf.h"
-#include "buzzer.hpp"
+#include "Buzzer.hpp"
 #include "SysTick.hpp"
 
-const uint32_t frequency = 2000;
-
-static pwm_channel_t pwm_channel_instance;
-static uint32_t beepTicksToGo = 0;
-static bool inBuzzer = true;
-
-void BuzzerInit()
+namespace Buzzer
 {
-	pwm_channel_disable(PWM, PWM_CHANNEL_0);
-	pwm_clock_t clock_setting =
+	static const uint32_t pwmClockFrequency = 2000000;		// 2MHz clock
+	static pwm_channel_t pwm_channel_instance =
 	{
-		.ul_clka = frequency * 100,
-		.ul_clkb = 0,
-		.ul_mck = SystemCoreClock
+		.channel = 0,
+		.ul_prescaler = PWM_CMR_CPRE_CLKA		
 	};
-	pwm_init(PWM, &clock_setting);
-	pwm_channel_instance.ul_prescaler = PWM_CMR_CPRE_CLKA;
-	pwm_channel_instance.ul_period = 100;
-	pwm_channel_instance.ul_duty = 50;
-	pwm_channel_instance.channel = PWM_CHANNEL_0;
-	pwm_channel_init(PWM, &pwm_channel_instance);
-	pio_configure(PIOB, PIO_PERIPH_A, PIO_PB0, 0);		// enable HI output
-	pio_configure(PIOB, PIO_PERIPH_B, PIO_PB5, 0);		// enable LO output
-	beepTicksToGo = 0;
-	inBuzzer = false;
-}
+	static uint32_t beepTicksToGo = 0;
+	static bool inBuzzer = true;
 
-void BuzzerBeep(uint32_t ms)
-{
-	inBuzzer = true;
-	if (beepTicksToGo == 0)
+	void Init()
 	{
-		pwm_channel_enable(PWM, PWM_CHANNEL_0);
+		pwm_channel_disable(PWM, PWM_CHANNEL_0);
+		pwm_clock_t clock_setting =
+		{
+			.ul_clka = pwmClockFrequency,
+			.ul_clkb = 0,
+			.ul_mck = SystemCoreClock
+		};
+		pwm_init(PWM, &clock_setting);
+		pio_configure(PIOB, PIO_PERIPH_A, PIO_PB0, 0);		// enable HI output
+		pio_configure(PIOB, PIO_PERIPH_B, PIO_PB5, 0);		// enable LO output
+		beepTicksToGo = 0;
+		inBuzzer = false;
 	}
-	beepTicksToGo = ms;
-	inBuzzer = false;
-}
 
-// This is called from the tick ISR
-void BuzzerTick()
-{
-	if (!inBuzzer && beepTicksToGo != 0)
+	void Beep(uint32_t frequency, uint32_t ms)
 	{
-		--beepTicksToGo;
+		inBuzzer = true;		// tell the tick interrupt to leave us alone
 		if (beepTicksToGo == 0)
 		{
-			pwm_channel_disable(PWM, PWM_CHANNEL_0);
+			uint32_t period = pwmClockFrequency/frequency;
+			pwm_channel_instance.ul_period = period;
+			pwm_channel_instance.ul_duty = period/2;
+			pwm_channel_init(PWM, &pwm_channel_instance);
+			pwm_channel_enable(PWM, PWM_CHANNEL_0);
+			beepTicksToGo = ms;
+		}
+		inBuzzer = false;
+	}
+
+	// This is called from the tick ISR
+	void Tick()
+	{
+		if (!inBuzzer && beepTicksToGo != 0)
+		{
+			--beepTicksToGo;
+			if (beepTicksToGo == 0)
+			{
+				pwm_channel_disable(PWM, PWM_CHANNEL_0);
+			}
 		}
 	}
 }

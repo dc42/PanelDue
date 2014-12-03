@@ -8,7 +8,7 @@
 // By disabling the controllers you don't need you can reduce the memory footprint
 // of the library by several Kb.
 //
-// Uncomment the lines for the displaycontrollers that you don't use to save
+// Uncomment the lines for the display controllers that you don't use to save
 // some flash memory by not including the init code for that particular
 // controller.
 
@@ -23,7 +23,7 @@
 #define DISABLE_ST7735			1
 #define DISABLE_PCF8833			1
 #define DISABLE_S1D19122		1
-#define DISABLE_SSD1963_480		1
+//#define DISABLE_SSD1963_480		1
 #define DISABLE_SSD1963_800		1
 #define DISABLE_S6D1121			1
 

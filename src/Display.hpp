@@ -39,6 +39,7 @@ protected:
 	Event evt;									// event number that is triggered by touching this field, or nullEvent if not touch sensitive
 	LcdFont font;
 	bool changed;
+	bool visible;
 	
 	union
 	{
@@ -51,17 +52,15 @@ protected:
 	static Color defaultFcolour, defaultBcolour;
 	
 protected:
-	DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
-		: y(py), x(px), width(pw), fcolour(defaultFcolour), bcolour(defaultBcolour), evt(nullEvent), font(defaultFont), changed(true), next(NULL)
-	{
-		param.sParam = NULL;
-	}
+	DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw);
 	
 	virtual PixelNumber GetHeight() const { return font[1]; }	// nasty - should fix this, but don't want to run into alignment issues
 
 public:
 	DisplayField * null next;					// link to next field in list
 
+	bool IsVisible() const { return visible; }
+	void Show(bool v);
 	virtual void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) { }		// would like to make this pure virtual but then we get 50K of library that we don't want
 	void SetColours(Color pf, Color pb);
 	void SetEvent(Event e, const char* null sp ) { evt = e; param.sParam = sp; }
@@ -114,8 +113,9 @@ public:
 	bool Visible(const DisplayField *p) const;
 	DisplayField * null GetRoot() const { return root; }
 	void SetRoot(DisplayField * null r) { root = r; }
-	void Outline(DisplayField *f, Color c);
-	void RemoveOutline(DisplayField *f) { Outline(f, backgroundColor); }
+	void Outline(DisplayField *f, Color c, PixelNumber numPixels);
+	void RemoveOutline(DisplayField *f, PixelNumber numPixels) { Outline(f, backgroundColor, numPixels); }
+	void Show(DisplayField *f, bool v);
 
 private:
 	Color backgroundColor;
