@@ -9,8 +9,7 @@
 #include "asf.h"
 #include "SerialIo.hpp"
 #include "Vector.hpp"
-
-extern void processReceivedValue(const char id[], const char val[], int index);
+#include "PanelDue.hpp"
 
 namespace SerialIo
 {

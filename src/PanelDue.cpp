@@ -18,14 +18,15 @@
 #include "Misc.hpp"
 #include "Vector.hpp"
 #include "FlashStorage.hpp"
+#include "PanelDue.hpp"
 
 #define DISPLAY_TYPE_ITDB02_32WD	(0)					// Itead 3.2 inch widescreen display (400x240)
 #define DISPLAY_TYPE_ITDB02_43		(1)					// Itead 4.3 inch display (480 x 272)
 #define DISPLAY_TYPE_ITDB02_50		(2)					// Itead 5.0 inch display (800 x 480)
 
 // Define DISPLAY_TYPE to be one of the above 3 types of display
-//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
-#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_32WD
+#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
+//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_32WD
 
 // From the display type, we determine the display controller type and touch screen orientation adjustment
 #if DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_32WD
@@ -155,6 +156,8 @@ String<30> generatedByText;
 Vector<char, 2048> fileList;						// we use a Vector instead of a String because we store multiple null-terminated strings in it
 Vector<const char* array, 100> fileIndex;			// pointers into the individual filenames in the list
 static const char* array null currentFile = NULL;	// file whose info is displayed in the popup menu
+
+static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight
 
 struct FlashData
 {
@@ -1184,8 +1187,20 @@ int main(void)
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
 	}
 	
+	BacklightPort.setMode(OneBitPort::Output);
+	BacklightPort.setHigh();				// turn the backlight on (no PWM for now, it only woks with the 3.2" display anyway)
+	
 	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
 	lastResponseTime = GetTickCount();		// pretend we just received a response
+	
+#if 0 //test
+	uint32_t cc = 0;
+	for (;;)
+	{
+		pio_sync_output_write(PIOA, cc);
+		++cc;
+	}
+#else	
 	for (;;)
 	{
 		// 1. Check for input from the serial port and process it.
@@ -1253,6 +1268,7 @@ int main(void)
 			SerialIo::SendString((gotMachineName) ? "M105 S2\n" : "M105 S3\n");
 		}
 	}
+#endif
 }
 
 // End
