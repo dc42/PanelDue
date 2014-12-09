@@ -25,25 +25,35 @@
 #define DISPLAY_TYPE_ITDB02_50		(2)					// Itead 5.0 inch display (800 x 480)
 
 // Define DISPLAY_TYPE to be one of the above 3 types of display
-#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
 //#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_32WD
+//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
+#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_50
 
 // From the display type, we determine the display controller type and touch screen orientation adjustment
 #if DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_32WD
+
 # define DISPLAY_CONTROLLER		HX8352A
-# define TOUCH_ORIENT_ADJUST	static_cast<DisplayOrientation>(SwapXY | ReverseY)
+const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
+const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
 # define DISPLAY_X				(400)
 # define DISPLAY_Y				(240)
+
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_43
+
 # define DISPLAY_CONTROLLER		SSD1963_480
-# define TOUCH_ORIENT_ADJUST	Default
+const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
+const DisplayOrientation TouchOrientAdjust = Default;
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
+
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_50
+
 # define DISPLAY_CONTROLLER		SSD1963_800
-# define TOUCH_ORIENT_ADJUST	Default
+const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
+const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(ReverseY);
 # define DISPLAY_X				(800)
 # define DISPLAY_Y				(480)
+
 #else
 # error DISPLAY_TYPE is not defined correctly
 #endif
@@ -73,7 +83,7 @@ const PixelNumber rowHeight = 22;
 
 const PixelNumber rowTabs = DISPLAY_Y - 22 - margin;	// place at bottom of screen with a 1-pixel margin
 
-#elif DISPLAY_X == 480
+#elif DISPLAY_X >= 480
 
 const PixelNumber margin = 2;
 const PixelNumber outlinePixels = 2;
@@ -292,7 +302,7 @@ void changeTab(DisplayField *newTab)
 void InitLcd()
 {
 	// Setup the LCD
-	lcd.InitLCD(Landscape);
+	lcd.InitLCD(DisplayOrientAdjust);
 	mgr.Init(defaultBackColor);
 	DisplayField::SetDefaultFont(glcd19x20);
 	
@@ -1173,7 +1183,7 @@ int main(void)
 	SerialIo::Init();
 	Buzzer::Init();
 	InitLcd();
-	touch.init(lcd.getDisplayXSize(), lcd.getDisplayYSize(), TOUCH_ORIENT_ADJUST, TpMedium);
+	touch.init(lcd.getDisplayXSize(), lcd.getDisplayYSize(), TouchOrientAdjust, TpMedium);
 	lastTouchTime = GetTickCount();
 	
 	SysTick_Config(SystemCoreClock / 1000);
@@ -1188,7 +1198,7 @@ int main(void)
 	}
 	
 	BacklightPort.setMode(OneBitPort::Output);
-	BacklightPort.setHigh();				// turn the backlight on (no PWM for now, it only woks with the 3.2" display anyway)
+	BacklightPort.setHigh();				// turn the backlight on (no PWM for now, it only works with the 3.2" display anyway, and only on prototype boards)
 	
 	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
 	lastResponseTime = GetTickCount();		// pretend we just received a response
