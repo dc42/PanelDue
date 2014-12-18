@@ -31,32 +31,25 @@
 #include "OneBitPort.hpp"
 #include "DisplayOrientation.hpp"
 
-enum TouchPrecision { TpLow, TpMedium, TpHigh, TpExtreme };
-
 class UTouch
 {
 public:
-	int16_t	TP_X ,TP_Y;
-
 	UTouch(unsigned int tclk, unsigned int tcs, unsigned int tdin, unsigned int dout, unsigned int irq);
 
-	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust = Default, TouchPrecision p = TpMedium);
-	bool	read();
-	bool	dataAvailable() const;
-	int16_t	getX() const;
-	int16_t	getY() const;
-	void	setPrecision(TouchPrecision precision);
+	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust = Default);
+	bool	read(uint16_t &x, uint16_t &y);
 	void	calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh);
     
 private:
 	OneBitPort portCLK, portCS, portDIN, portDOUT, portIRQ;
 	DisplayOrientation orientAdjust;
-	uint8_t	prec;
 	uint16_t disp_x_size, disp_y_size;
 	int16_t	touch_x_left, touch_x_right, touch_y_top, touch_y_bottom;
 
-	void	touch_WriteData(uint8_t data);
-	uint16_t touch_ReadData();
+	bool	getTouchData(bool wantY, uint16_t &rslt);
+	void	touch_WriteCommand(uint8_t command);
+	uint16_t touch_ReadData(uint8_t command);
+	uint16_t diff(uint16_t a, uint16_t b) { return (a < b) ? b - a : a - b; }
 };
 
 #endif

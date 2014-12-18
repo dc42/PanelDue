@@ -29,7 +29,7 @@ UTouch::UTouch(unsigned int tclk, unsigned int tcs, unsigned int din, unsigned i
 {
 }
 
-void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust, TouchPrecision p)
+void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust)
 {
 	orientAdjust			= orientationAdjust;
 	touch_x_left			= 128;
@@ -48,146 +48,103 @@ void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust
 	portCS.setHigh();
 	portCLK.setHigh();
 	portDIN.setHigh();
-	
-	setPrecision(p);
 }
 
-bool UTouch::read()
+// If the panel is touched, return the coordinates in x and y and return true; else return false
+bool UTouch::read(uint16_t &px, uint16_t &py)
 {
-	uint32_t tx = 0;
-	uint32_t ty = 0;
-	uint16_t minx = 9999, maxx = 0;
-	uint16_t miny = 9999, maxy = 0;
-	uint8_t datacount = 0;
-
-	portCS.setLow();
-	for (uint8_t i=0; i < prec; i++)
+	bool ret = false;
+	if (!portIRQ.read())			// if screen is touched
 	{
-		if (!portIRQ.read())
+		portCS.setLow();
+		uint16_t tx;
+		if (getTouchData(false, tx))
 		{
-			touch_WriteData(0x90);		// Start, A=1, 12 bit, differential, power down between conversions
-			portCLK.pulseHigh();       
-			uint16_t temp_x = touch_ReadData();
-
-			if (!portIRQ.read())
+			uint16_t ty;
+			if (getTouchData(true, ty))
 			{
-				touch_WriteData(0xD0);		// Start, A=5, 12 bit, differential, power down between conversions 
-				portCLK.pulseHigh();     
-				uint16_t temp_y = touch_ReadData();
-
-				tx += temp_x;
-				ty += temp_y;
-				if (prec > 5)
+				if (!portIRQ.read())
 				{
-					if (temp_x < minx)
+					int16_t valx = (orientAdjust & SwapXY) ? ty : tx;
+					if (orientAdjust & ReverseX)
 					{
-						minx = temp_x;
+						valx = 4096 - valx;
 					}
-					if (temp_x > maxx)
+						
+					int16_t cx = (int16_t)(((int32_t)(valx - touch_x_left) * (int32_t)disp_x_size) / (touch_x_right - touch_x_left));
+					px = (cx < 0) ? 0 : (cx >= disp_x_size) ? disp_x_size - 1 : cx;
+
+					int16_t valy = (orientAdjust & SwapXY) ? tx : ty;
+					if (orientAdjust & ReverseY)
 					{
-						maxx = temp_x;
+						valy = 4096 - valy;
 					}
-					if (temp_y < miny)
-					{
-						miny = temp_y;
-					}
-					if (temp_y > maxy)
-					{
-						maxy = temp_y;
-					}
-				}
-				datacount++;
+	
+					int16_t cy = (int16_t)(((int32_t)(valy - touch_y_top) * (int32_t)disp_y_size) / (touch_y_bottom - touch_y_top));
+					py = (cy < 0) ? 0 : (cy >= disp_y_size) ? disp_y_size - 1 : cy;
+					ret = true;
+				}				
 			}
 		}
+		portCS.setHigh();
 	}
-	portCS.setHigh();
-
-	if (datacount > 5)
-	{
-		tx = tx - (minx + maxx);
-		ty = ty - (miny + maxy);
-		datacount -= 2;
-	}
-
-	if ((datacount == prec - 2) || (prec == 1 && datacount == 1))
-	{
-		TP_X = (int16_t)(ty/datacount);
-		TP_Y = (int16_t)(tx/datacount);
-		return true;
-	}
-	else
-	{
-		TP_X = -1;
-		TP_Y = -1;
-		return false;
-	}
+	return ret;
 }
 
-bool UTouch::dataAvailable() const
+// Get data from the touch chip. CS has already been set low.
+// We need to allow the touch chip ADC input to settle. See TI app note http://www.ti.com/lit/pdf/sbaa036.
+bool UTouch::getTouchData(bool wantY, uint16_t &rslt)
 {
-	return !portIRQ.read();
-}
+	uint8_t command = (wantY) ? 0xD0 : 0x90;		// start, channel 5 (y) or 1 (x), 12-bit, differential mode, power down between conversions
+	touch_WriteCommand(command);					// send the command
+	touch_ReadData(command);						// discard the first result and send the same command again
 
-int16_t UTouch::getX() const
-{
-	if ((TP_X == -1) || (TP_Y == -1))
-		return -1;
-	
-	int16_t val = (orientAdjust	& SwapXY) ? TP_Y : TP_X;
-	if (orientAdjust & ReverseX)
+	const size_t numReadings = 4;
+	const uint16_t maxDiff = 4;
+	const unsigned int maxAttempts = 16;
+
+	uint16_t ring[numReadings];
+	uint16_t sum = 0;
+	for (size_t i = 0; i < numReadings; ++i)
 	{
-		val = 4096 - val;
+		uint16_t val = touch_ReadData(command);
+		ring[i] = val;
+		sum += val;
 	}
-	
-	int16_t c = ((int32_t)(val - touch_x_left) * (int32_t)disp_x_size) / (int32_t)(touch_x_right - touch_x_left);
-	return (c < 0) ? 0 : (c >= disp_x_size) ? disp_x_size - 1 : c;
-}
 
-int16_t UTouch::getY() const
-{
-	if ((TP_X == -1) || (TP_Y == -1))
-		return -1;
-	
-	int16_t val = (orientAdjust	& SwapXY) ? TP_X : TP_Y;
-	if (orientAdjust & ReverseY)
+	uint16_t avg;
+	bool ok;
+	size_t last = 0;
+	for (unsigned int i = 0; i < maxAttempts; ++i)
 	{
-		val = 4096 - val;
+		avg = sum/numReadings;
+		ok = true;
+		for (size_t i = 0; ok && i < numReadings; ++i)
+		{
+			ok = diff(avg, ring[i]) < maxDiff;
+		}
+		if (ok)
+		{
+			break;
+		}
+		sum -= ring[last];
+		uint16_t val = touch_ReadData(command);
+		ring[last] = val;
+		sum += val;
+		last = (last + 1) % numReadings;
 	}
 	
-	int16_t c = ((int32_t)(val - touch_y_top) * (int32_t)disp_y_size) / (int32_t)(touch_y_bottom - touch_y_top);
-	return (c < 0) ? 0 : (c >= disp_y_size) ? disp_y_size - 1 : c;
+	touch_ReadData(0);
+	rslt = avg;
+	return ok;
 }
 
-void UTouch::setPrecision(TouchPrecision precision)
+// Send the first command in a chain. The chip latches the data bit on the rising edge of the clock. We have already set CS low.
+void UTouch::touch_WriteCommand(uint8_t command)
 {
-	switch (precision)
-	{
-	case TpLow:
-		prec = 1;	// DO NOT CHANGE!
-		break;
-	case TpMedium:
-		prec = 12;	// Iterations + 2
-		break;
-	case TpHigh:
-		prec = 27;	// Iterations + 2
-		break;
-	case TpExtreme:
-		prec = 102;	// Iterations + 2
-		break;
-	default:
-		prec = 12;	// Iterations + 2
-		break;
-	}
-}
-
-void UTouch::touch_WriteData(uint8_t data)
-{
-	uint8_t temp = data;
-	portCLK.setLow();
-
 	for(uint8_t count=0; count<8; count++)
 	{
-		if (temp & 0x80)
+		if (command & 0x80)
 		{
 			portDIN.setHigh();
 		}
@@ -195,40 +152,51 @@ void UTouch::touch_WriteData(uint8_t data)
 		{
 			portDIN.setLow();
 		}
-		temp <<= 1;
-		portCLK.pulseLow();
+		command <<= 1;
+		portCLK.pulseHigh();
 	}
 }
 
-uint16_t UTouch::touch_ReadData()
+// Read the data, and write another command at the same time. We have already set CS low.
+// The chip produces its data bit after the falling edge of the clock. After sending 8 clocks, we can send a command again.
+uint16_t UTouch::touch_ReadData(uint8_t command)
 {
+	uint16_t cmd = (uint16_t)command;
 	uint16_t data = 0;
 
-	for (uint8_t count=0; count<12; count++)
+	for (uint8_t count=0; count<16; count++)
 	{
-		data <<= 1;
-		portCLK.pulseHigh();
-		if (portDOUT.read())
+		if (cmd & 0x8000)
 		{
-			data++;
+			portDIN.setHigh();
+		}
+		else
+		{
+			portDIN.setLow();
+		}
+		cmd <<= 1;
+		OneBitPort::delay(OneBitPort::delay_100ns);					// need 100ns setup time from writing data to clock rising edge
+		portCLK.pulseHigh();
+		if (count < 12)
+		{
+			OneBitPort::delay(OneBitPort::delay_200ns);				// need 200ns setup time form clock falling edge to reading data
+			data <<= 1;
+			if (portDOUT.read())
+			{
+				data++;
+			}
 		}
 	}
-
-	// The chip datasheet says we must read another 4 bits before the chip is not busy	
-	portCLK.pulseHigh();
-	portCLK.pulseHigh();
-	portCLK.pulseHigh();
-	portCLK.pulseHigh();
 	
 	return(data);
 }
 
 void UTouch::calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh)
 {
-	touch_x_left = (xlow * 4096)/disp_x_size;
-	touch_x_right = (xhigh * 4096)/disp_x_size;
-	touch_y_top = (ylow * 4096)/disp_y_size;
-	touch_y_bottom = (yhigh * 4096)/disp_y_size;
+	touch_x_left = ((int32_t)xlow * 4096)/disp_x_size;
+	touch_x_right = ((int32_t)xhigh * 4096)/disp_x_size;
+	touch_y_top = ((int32_t)ylow * 4096)/disp_y_size;
+	touch_y_bottom = ((int32_t)yhigh * 4096)/disp_y_size;
 }
 
 // End

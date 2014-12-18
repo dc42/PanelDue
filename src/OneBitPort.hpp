@@ -39,8 +39,19 @@ public:
 #endif
 	}
 		
-	void pulseHigh() const { setHigh(); setLow(); }
-	void pulseLow() const { setLow(); setHigh(); }
+	// Pulse the pin high. On the SAM3S the pulse is about 400ns wide.
+	void pulseHigh() const
+	{
+		setHigh();
+		setLow();
+	}
+
+	// Pulse the pin high. On the SAM3S the pulse is about 400ns wide.
+	void pulseLow() const
+	{
+		setLow();
+		setHigh();
+	}
 		
 	bool read() const
 	{
@@ -51,6 +62,11 @@ public:
 #endif		
 	}
 	
+	static void delay(uint8_t del);
+	
+	static const uint8_t delay_100ns = 1;		// delay argument for 100ns
+	static const uint8_t delay_200ns = 2;		// delay argument for 200ns
+
 private:
 
 #if defined(SAM3S)

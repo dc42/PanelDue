@@ -26,15 +26,15 @@
 
 // Define DISPLAY_TYPE to be one of the above 3 types of display
 //#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_32WD
-//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
-#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_50
+#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
+//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_50
 
 // From the display type, we determine the display controller type and touch screen orientation adjustment
 #if DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_32WD
 
 # define DISPLAY_CONTROLLER		HX8352A
 const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
-const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
+const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(ReverseY);
 # define DISPLAY_X				(400)
 # define DISPLAY_Y				(240)
 
@@ -42,7 +42,7 @@ const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(Swa
 
 # define DISPLAY_CONTROLLER		SSD1963_480
 const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
-const DisplayOrientation TouchOrientAdjust = Default;
+const DisplayOrientation TouchOrientAdjust = SwapXY;
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
 
@@ -50,7 +50,7 @@ const DisplayOrientation TouchOrientAdjust = Default;
 
 # define DISPLAY_CONTROLLER		SSD1963_800
 const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
-const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(ReverseY);
+const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
 # define DISPLAY_X				(800)
 # define DISPLAY_Y				(480)
 
@@ -617,16 +617,13 @@ int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
 	lcd.setColor(white);
 	lcd.fillCircle(x, y, touchCircleRadius);
 	
-	int tx, ty;
+	uint16_t tx, ty;
 	
 	for (;;)
 	{
-		if (touch.dataAvailable())
+		if (touch.read(tx, ty))
 		{
-			touch.read();
-			tx = touch.getX();
-			ty = touch.getY();
-			if (abs(tx - x) <= touchCalibMaxError && abs(ty - y) <= touchCalibMaxError)
+			if (abs((int)tx - (int)x) <= touchCalibMaxError && abs((int)ty - (int)y) <= touchCalibMaxError)
 			{
 				TouchBeep();
 				break;
@@ -636,7 +633,7 @@ int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
 	
 	lcd.setColor(defaultBackColor);
 	lcd.fillCircle(x, y, touchCircleRadius);
-	return (wantY) ? ty : tx;
+	return (wantY) ? (int)ty : (int)tx;
 }
 
 void CalibrateTouch()
@@ -1183,7 +1180,7 @@ int main(void)
 	SerialIo::Init();
 	Buzzer::Init();
 	InitLcd();
-	touch.init(lcd.getDisplayXSize(), lcd.getDisplayYSize(), TouchOrientAdjust, TpMedium);
+	touch.init(lcd.getDisplayXSize(), lcd.getDisplayYSize(), TouchOrientAdjust);
 	lastTouchTime = GetTickCount();
 	
 	SysTick_Config(SystemCoreClock / 1000);
@@ -1224,14 +1221,13 @@ int main(void)
 		}
 		
 		// 3. Check for a touch on the touch panel.
-		if (touch.dataAvailable() && GetTickCount() - lastTouchTime >= ignoreTouchTime)
+		if (GetTickCount() - lastTouchTime >= ignoreTouchTime)
 		{
-			if (touch.read())
+			uint16_t x, y;
+			if (touch.read(x, y))
 			{
-				int x = touch.getX();
-				int y = touch.getY();
-				touchX->SetValue(x);	//debug
-				touchY->SetValue(y);	//debug
+				touchX->SetValue((int)x);	//debug
+				touchY->SetValue((int)y);	//debug
 				DisplayField * null f = mgr.FindEvent(x, y);
 				if (f != NULL)
 				{

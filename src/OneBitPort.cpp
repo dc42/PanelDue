@@ -32,4 +32,13 @@ void OneBitPort::setMode(PortMode mode)
 #endif
 }
 
+/*static*/ void OneBitPort::delay(uint8_t del)
+{
+	while (del != 0)
+	{
+		asm volatile ("nop\n" "nop\n" "nop\n");
+		--del;
+	}
+}
+	
 // End
