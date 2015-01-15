@@ -25,7 +25,7 @@
 #ifndef UTouch_h
 #define UTouch_h
 
-#define UTOUCH_VERSION	124
+//#define UTOUCH_VERSION	124
 
 #include "asf.h"
 #include "OneBitPort.hpp"
@@ -39,6 +39,7 @@ public:
 	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust = Default);
 	bool	read(uint16_t &x, uint16_t &y);
 	void	calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh);
+	void	adjustOrientation(DisplayOrientation a) { orientAdjust = (DisplayOrientation) (orientAdjust ^ a); }
     
 private:
 	OneBitPort portCLK, portCS, portDIN, portDOUT, portIRQ;

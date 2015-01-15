@@ -20,13 +20,16 @@
 #include "FlashStorage.hpp"
 #include "PanelDue.hpp"
 
-#define DISPLAY_TYPE_ITDB02_32WD	(0)					// Itead 3.2 inch widescreen display (400x240)
-#define DISPLAY_TYPE_ITDB02_43		(1)					// Itead 4.3 inch display (480 x 272)
-#define DISPLAY_TYPE_ITDB02_50		(2)					// Itead 5.0 inch display (800 x 480)
+#define DISPLAY_TYPE_ITDB02_32WD		(0)					// Itead 3.2 inch widescreen display (400x240)
+#define DISPLAY_TYPE_ITDB02_43			(1)					// Itead 4.3 inch display (480 x 272) or alternative 4.3 inch display
+#define DISPLAY_TYPE_INVERTED_43		(2)					// 4.3 inch display inverted, e.g. SainSmart with the controller board on the left
+#define DISPLAY_TYPE_ITDB02_50			(3)					// Itead 5.0 inch display (800 x 480)
 
 // Define DISPLAY_TYPE to be one of the above 3 types of display
+
 //#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_32WD
 #define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
+//#define DISPLAY_TYPE	DISPLAY_TYPE_INVERTED_43
 //#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_50
 
 // From the display type, we determine the display controller type and touch screen orientation adjustment
@@ -46,6 +49,14 @@ const DisplayOrientation TouchOrientAdjust = SwapXY;
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
 
+#elif DISPLAY_TYPE == DISPLAY_TYPE_INVERTED_43
+
+# define DISPLAY_CONTROLLER		SSD1963_480
+const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
+const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY);
+# define DISPLAY_X				(480)
+# define DISPLAY_Y				(272)
+
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_50
 
 # define DISPLAY_CONTROLLER		SSD1963_800
@@ -57,6 +68,9 @@ const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(Swa
 #else
 # error DISPLAY_TYPE is not defined correctly
 #endif
+
+const PixelNumber DisplayX = DISPLAY_X;
+const PixelNumber DisplayY = DISPLAY_Y;
 
 // Define the row and column positions. Leave a gap of at least 1 pixel from the edges of the screen, so that we can highlight
 // a field by drawing an outline.
@@ -76,12 +90,12 @@ const PixelNumber column5 = 270;
 const PixelNumber columnX = 275;
 const PixelNumber columnY = 333;
 
-const PixelNumber columnEnd = DISPLAY_X;
+const PixelNumber columnEnd = DisplayX;
 
 const PixelNumber rowCommon1 = margin;
 const PixelNumber rowHeight = 22;
 
-const PixelNumber rowTabs = DISPLAY_Y - 22 - margin;	// place at bottom of screen with a 1-pixel margin
+const PixelNumber rowTabs = DisplayY - 22 - margin;	// place at bottom of screen with a 1-pixel margin
 
 #elif DISPLAY_X >= 480
 
@@ -98,12 +112,12 @@ const PixelNumber column5 = 311;
 const PixelNumber columnX = 326;
 const PixelNumber columnY = 400;
 
-const PixelNumber columnEnd = DISPLAY_X;
+const PixelNumber columnEnd = DisplayX;
 
 const PixelNumber rowCommon1 = margin;
 const PixelNumber rowHeight = 24;
 
-const PixelNumber rowTabs = DISPLAY_Y - 22 - margin;	// place at bottom of screen with a 2-pixel margin
+const PixelNumber rowTabs = DisplayY - 22 - margin;	// place at bottom of screen with a 2-pixel margin
 
 #endif
 
@@ -116,7 +130,7 @@ const PixelNumber rowCustom2 = rowCustom1 + rowHeight;
 const PixelNumber rowCustom3 = rowCustom2 + rowHeight;
 const PixelNumber rowCustom4 = rowCustom3 + rowHeight;
 
-const PixelNumber columnTabWidth = (DISPLAY_X - 2*margin - 4*fieldSpacing)/5;
+const PixelNumber columnTabWidth = (DisplayX - 2*margin - 4*fieldSpacing)/5;
 
 const PixelNumber columnTab1 = margin;
 const PixelNumber columnTab2 = columnTab1 + columnTabWidth + fieldSpacing;
@@ -125,10 +139,10 @@ const PixelNumber columnTab4 = columnTab3 + columnTabWidth + fieldSpacing;
 const PixelNumber columnTab5 = columnTab4 + columnTabWidth + fieldSpacing;
 
 const PixelNumber xyPopupX = 3, xyPopupY = 195;
-const PixelNumber filePopupWidth = DISPLAY_X - 40, filePopupHeight = 8 * rowHeight + 20;
+const PixelNumber filePopupWidth = DisplayX - 40, filePopupHeight = 8 * rowHeight + 20;
 
 const uint32_t numFileColumns = 2;
-const uint32_t numFileRows = (DISPLAY_Y - margin)/rowHeight - 2;
+const uint32_t numFileRows = (DisplayY - margin)/rowHeight - 2;
 const uint32_t numDisplayedFiles = numFileColumns * numFileRows;
 
 // Declare which fonts we will be using
@@ -167,7 +181,7 @@ Vector<char, 2048> fileList;						// we use a Vector instead of a String because
 Vector<const char* array, 100> fileIndex;			// pointers into the individual filenames in the list
 static const char* array null currentFile = NULL;	// file whose info is displayed in the popup menu
 
-static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight
+static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
 
 struct FlashData
 {
@@ -269,8 +283,6 @@ void changeTab(DisplayField *newTab)
 		}
 		newTab->SetColours(red, black);
 		currentTab = newTab;
-//		lcd.setColor(defaultBackColor);
-//		lcd.fillRect(0, rowCustom1, lcd.getDisplayXSize() - 1, lcd.getDisplayYSize() - 1);
 		switch(newTab->GetEvent())
 		{
 		case evTabControl:
@@ -316,7 +328,7 @@ void InitLcd()
 	tabFiles->SetEvent(evTabFiles, 0);
 	mgr.AddField(tabMsg = new StaticTextField(rowTabs, columnTab4, columnTabWidth, Centre, "Msg"));
 	tabMsg->SetEvent(evTabMsg, 0);
-	mgr.AddField(tabInfo = new StaticTextField(rowTabs, columnTab5, columnTabWidth, Centre, "Info"));
+	mgr.AddField(tabInfo = new StaticTextField(rowTabs, columnTab5, columnTabWidth, Centre, "Setup"));
 	tabInfo->SetEvent(evTabInfo, 0);
 	
 	baseRoot = mgr.GetRoot();		// save the root of fields that we usually display
@@ -396,10 +408,10 @@ void InitLcd()
 	mgr.SetRoot(commonRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	printingFile.copyFrom("(unknown)");
-	mgr.AddField(printingField = new TextField(rowCustom1, 0, DISPLAY_X, "Printing ", printingFile.c_str()));
+	mgr.AddField(printingField = new TextField(rowCustom1, 0, DisplayX, "Printing ", printingFile.c_str()));
 	
 	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-	mgr.AddField(printProgressBar = new ProgressBar(rowCustom2, margin, 8, DISPLAY_X - 2*margin));
+	mgr.AddField(printProgressBar = new ProgressBar(rowCustom2, margin, 8, DisplayX - 2*margin));
 	mgr.Show(printProgressBar, false);
 
 	DisplayField::SetDefaultColours(white, defaultBackColor);
@@ -426,9 +438,9 @@ void InitLcd()
 	// Create the fields for the Files tab
 	mgr.SetRoot(baseRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(new StaticTextField(rowCommon1, margin, DISPLAY_X - 2*margin, Centre, "Files on SD card"));
+	mgr.AddField(new StaticTextField(rowCommon1, margin, DisplayX - 2*margin, Centre, "Files on SD card"));
 	{
-		PixelNumber fileFieldWidth = (DISPLAY_X + fieldSpacing - 2*margin)/numFileColumns;
+		PixelNumber fileFieldWidth = (DisplayX + fieldSpacing - 2*margin)/numFileColumns;
 		unsigned int fileNum = 0;
 		for (unsigned int r = 0; r < numFileRows; ++r)
 		{
@@ -455,7 +467,7 @@ void InitLcd()
 	mgr.AddField(touchX = new IntegerField(rowCustom1, 200, 130, "Touch: ", ","));
 	mgr.AddField(touchY = new IntegerField(rowCustom1, 330, 50, ""));
 	DisplayField::SetDefaultColours(white, selectableBackColor);
-	DisplayField *touchCal = new StaticTextField(rowCustom3, DISPLAY_X/2 - 75, 150, Centre, "Calibrate touch");
+	DisplayField *touchCal = new StaticTextField(rowCustom3, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
 	touchCal->SetEvent(evCalTouch, 0);
 	mgr.AddField(touchCal);
 
@@ -464,7 +476,7 @@ void InitLcd()
 	
 	mgr.SetRoot(commonRoot);
 	
-	touchCalibInstruction = new StaticTextField(DISPLAY_Y/2 - 10, 0, DISPLAY_X, Centre, "Touch the spot");
+	touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "Touch the spot");
 
 	// Create the popup window used to adjust temperatures
 	setTempPopup = new PopupField(130, 80, popupBackColour);
@@ -554,27 +566,7 @@ void InitLcd()
 	// Redraw everything
 	mgr.RefreshAll(true);
 
-#if 0
-	// Widest expected values
-	bedCurrentTemp->SetValue(129.0);
-	t1CurrentTemp->SetValue(299.0);
-	t2CurrentTemp->SetValue(299.0);
-	bedActiveTemp->SetValue(120);
-	t1ActiveTemp->SetValue(280);
-	t2ActiveTemp->SetValue(280);
-	t1StandbyTemp->SetValue(280);
-	t2StandbyTemp->SetValue(280);
-	xPos->SetValue(220.9);
-	yPos->SetValue(220.9);
-	zPos->SetValue(199.99);
-	extrPos->SetValue(999.9);
-	zProbe->SetValue(1023);
-	fanRPM->SetValue(9999);
-	spd->SetValue(169);
-	e1Percent->SetValue(169);
-	e2Percent->SetValue(169);
-#else
-	// Initial values
+	// Set initial values
 	bedCurrentTemp->SetValue(0.0);
 	t1CurrentTemp->SetValue(0.0);
 	t2CurrentTemp->SetValue(0.01);
@@ -591,10 +583,8 @@ void InitLcd()
 	spd->SetValue(100);
 	e1Percent->SetValue(100);
 	e2Percent->SetValue(100);
-#endif
 
 	currentTab = NULL;
-	changeTab(tabControl);
 }
 
 // Ignore touches for a little while
@@ -609,7 +599,9 @@ void TouchBeep()
 	Buzzer::Beep(touchBeepFrequency, touchBeepLength);	
 }
 
-int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
+// Draw a spot and wait util the user touches it, returning the touch coordinates in tx and ty.
+// The alternative X and Y locations are so that the caller can allow for the touch panel being possibly inverted.
+void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber altY, uint16_t& tx, uint16_t& ty)
 {
 	const PixelNumber touchCircleRadius = 8;
 	const PixelNumber touchCalibMaxError = 40;
@@ -617,13 +609,13 @@ int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
 	lcd.setColor(white);
 	lcd.fillCircle(x, y, touchCircleRadius);
 	
-	uint16_t tx, ty;
-	
 	for (;;)
 	{
 		if (touch.read(tx, ty))
 		{
-			if (abs((int)tx - (int)x) <= touchCalibMaxError && abs((int)ty - (int)y) <= touchCalibMaxError)
+			if (   (abs((int)tx - (int)x) <= touchCalibMaxError || abs((int)tx - (int)altX) <= touchCalibMaxError)
+				&& (abs((int)ty - (int)y) <= touchCalibMaxError || abs((int)ty - (int)altY) <= touchCalibMaxError)
+			   ) 
 			{
 				TouchBeep();
 				break;
@@ -633,7 +625,6 @@ int DoTouchCalib(PixelNumber x, PixelNumber y, bool wantY)
 	
 	lcd.setColor(defaultBackColor);
 	lcd.fillCircle(x, y, touchCircleRadius);
-	return (wantY) ? (int)ty : (int)tx;
 }
 
 void CalibrateTouch()
@@ -644,18 +635,31 @@ void CalibrateTouch()
 	mgr.SetRoot(touchCalibInstruction);
 	mgr.ClearAll();
 	mgr.RefreshAll(true);
-	touch.calibrate(0, lcd.getDisplayXSize() - 1, 0, lcd.getDisplayYSize() - 1);
+	touch.calibrate(0, lcd.getDisplayXSize() - 1, 0, lcd.getDisplayYSize() - 1);		// clear the current calibration
 
-	int yLow = DoTouchCalib(lcd.getDisplayXSize()/2, touchCalibMargin, true);
-	int xHigh = DoTouchCalib(lcd.getDisplayXSize() - touchCalibMargin - 1, lcd.getDisplayYSize()/2, false);
-	int yHigh = DoTouchCalib(lcd.getDisplayXSize()/2, lcd.getDisplayYSize() - touchCalibMargin - 1, true);
-	int xLow = DoTouchCalib(touchCalibMargin, lcd.getDisplayYSize()/2, false);
+	// Draw spots on the edges of the screen, one at a time, and ask the user to touch them.
+	// For the first two, we allow for the touch panel being the wrong way round.
+	uint16_t xLow, xHigh, yLow, yHigh, dummy;
+	DoTouchCalib(DisplayX/2, touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin,	dummy, yLow);
+	if (yLow > DisplayY/2)
+	{
+		touch.adjustOrientation(ReverseY);
+		yLow = DisplayY - 1 - yLow;
+	}
+	DoTouchCalib(DisplayX - touchCalibMargin - 1, DisplayY/2, touchCalibMargin, DisplayY/2, xHigh, dummy);
+	if (xHigh < DisplayX/2)
+	{
+		touch.adjustOrientation(ReverseX);
+		xHigh = DisplayX - 1 - xHigh;
+	}
+	DoTouchCalib(DisplayX/2, DisplayY - 1 - touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin, dummy, yHigh);
+	DoTouchCalib(touchCalibMargin, DisplayY/2, touchCalibMargin, DisplayY/2, xLow, dummy);
 	
 	// Extrapolate the values we read to the edges of the screen
-	nvData.xmin = xLow - touchCalibMargin;
-	nvData.xmax = xHigh + touchCalibMargin;
-	nvData.ymin = yLow - touchCalibMargin;
-	nvData.ymax = yHigh + touchCalibMargin;
+	nvData.xmin = (int)xLow - (int)touchCalibMargin;
+	nvData.xmax = (int)xHigh + (int)touchCalibMargin;
+	nvData.ymin = (int)yLow - (int)touchCalibMargin;
+	nvData.ymax = (int)yHigh + (int)touchCalibMargin;
 	touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
 	nvData.magic = magicVal;
 	FlashStorage::write(0, &nvData, sizeof(nvData));
@@ -695,7 +699,6 @@ void ProcessTouch(DisplayField *f)
 				SerialIo::SendInt(static_cast<const IntegerField*>(fieldBeingAdjusted)->GetValue());
 				SerialIo::SendChar('\n');
 			}
-//			commandField->SetChanged();
 			mgr.SetPopup(NULL);
 			mgr.RemoveOutline(fieldBeingAdjusted, outlinePixels);
 			fieldBeingAdjusted = NULL;
@@ -1161,6 +1164,32 @@ void updateDebugInfo()
 	freeMem->SetValue(getFreeMemory());
 }
 
+void SelfTest()
+{
+	// Measure the 3.3V supply against the internal reference
+	
+	// Do internal and external loopback tests on the serial port
+
+	// Initialize fields with the widest expected values so that we can make sure they fit
+	bedCurrentTemp->SetValue(129.0);
+	t1CurrentTemp->SetValue(299.0);
+	t2CurrentTemp->SetValue(299.0);
+	bedActiveTemp->SetValue(120);
+	t1ActiveTemp->SetValue(280);
+	t2ActiveTemp->SetValue(280);
+	t1StandbyTemp->SetValue(280);
+	t2StandbyTemp->SetValue(280);
+	xPos->SetValue(220.9);
+	yPos->SetValue(220.9);
+	zPos->SetValue(199.99);
+//	extrPos->SetValue(999.9);
+	zProbe->SetValue("1023 (1023)");
+//	fanRPM->SetValue(9999);
+	spd->SetValue(169);
+	e1Percent->SetValue(169);
+	e2Percent->SetValue(169);
+}
+
 /**
  * \brief Application entry point.
  *
@@ -1185,6 +1214,10 @@ int main(void)
 	
 	SysTick_Config(SystemCoreClock / 1000);
 
+	// On prototype boards we need to turn the backlight on
+	BacklightPort.setMode(OneBitPort::Output);
+	BacklightPort.setHigh();
+
 	// Read parameters from flash memory (currently, just the touch calibration)
 	flash_init(FLASH_ACCESS_MODE_128, 6);	
 	nvData.magic = 0;
@@ -1193,12 +1226,14 @@ int main(void)
 	{
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
 	}
-	
-	BacklightPort.setMode(OneBitPort::Output);
-	BacklightPort.setHigh();				// turn the backlight on (no PWM for now, it only works with the 3.2" display anyway, and only on prototype boards)
+	else
+	{
+		CalibrateTouch();
+	}
 	
 	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
 	lastResponseTime = GetTickCount();		// pretend we just received a response
+	changeTab(tabControl);
 	
 #if 0 //test
 	uint32_t cc = 0;

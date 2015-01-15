@@ -16,27 +16,27 @@
 extern int  _end ;
 extern int	__ram_end__;
 
-static unsigned char *heap = NULL ;
+static unsigned char *heap = NULL;
 
 void* operator new(size_t objsize)
 {
-	if ( heap == NULL )
+	if (heap == NULL)
 	{
-		heap = (unsigned char *)&_end ;
+		heap = (unsigned char *)&_end;
 	}
 	
 	void *prev_heap = heap;
-	heap += objsize ;
-	return prev_heap ;
+	heap += objsize;
+	return prev_heap;
 }
 
 void operator delete(void* obj) { }
 	
 unsigned int getFreeMemory()
 {
-	if ( heap == NULL )
+	if (heap == NULL)
 	{
-		heap = (unsigned char *)&_end ;
+		heap = (unsigned char *)&_end;
 	}
 	return (unsigned char *)&__ram_end__ - heap;	
 }
