@@ -64,6 +64,11 @@ namespace Buzzer
 			}
 		}
 	}
+	
+	bool Noisy()
+	{
+		return beepTicksToGo != 0;
+	}
 }
 
 // End

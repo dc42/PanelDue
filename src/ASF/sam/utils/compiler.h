@@ -226,7 +226,7 @@
 #elif defined ( __ICCARM__ ) /* IAR Ewarm 5.41+ */
 #   define RAMFUNC __ramfunc
 #elif defined (  __GNUC__  ) /* GCC CS3 2009q3-68 */
-#   define RAMFUNC __attribute__ ((section(".ramfunc")))
+#   define RAMFUNC __attribute__ ((noinline, long_call, section(".ramfunc")))
 #endif
 
 /* Define OPTIMIZE_HIGH attribute */

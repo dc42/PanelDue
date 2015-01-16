@@ -16,6 +16,8 @@ namespace Buzzer
 	void Beep(uint32_t frequency, uint32_t ms);
 
 	void Tick();
+	
+	bool Noisy();	
 }
 
 #endif /* BUZZER_H_ */

@@ -13,8 +13,7 @@
 //	return malloc(objsize);
 //}
 
-extern int  _end ;
-extern int	__ram_end__;
+extern int  _end, __ram_end__;
 
 static unsigned char *heap = NULL;
 

@@ -40,6 +40,7 @@ public:
 	bool	read(uint16_t &x, uint16_t &y);
 	void	calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh);
 	void	adjustOrientation(DisplayOrientation a) { orientAdjust = (DisplayOrientation) (orientAdjust ^ a); }
+	DisplayOrientation getOrientation() const { return orientAdjust; }
     
 private:
 	OneBitPort portCLK, portCS, portDIN, portDOUT, portIRQ;

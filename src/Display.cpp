@@ -351,7 +351,7 @@ PopupField::PopupField(PixelNumber ph, PixelNumber pw, Color pb)
 {
 }
 
-void PopupField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override
+void PopupField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full)
 	{

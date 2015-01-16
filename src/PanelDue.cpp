@@ -19,18 +19,7 @@
 #include "Vector.hpp"
 #include "FlashStorage.hpp"
 #include "PanelDue.hpp"
-
-#define DISPLAY_TYPE_ITDB02_32WD		(0)					// Itead 3.2 inch widescreen display (400x240)
-#define DISPLAY_TYPE_ITDB02_43			(1)					// Itead 4.3 inch display (480 x 272) or alternative 4.3 inch display
-#define DISPLAY_TYPE_INVERTED_43		(2)					// 4.3 inch display inverted, e.g. SainSmart with the controller board on the left
-#define DISPLAY_TYPE_ITDB02_50			(3)					// Itead 5.0 inch display (800 x 480)
-
-// Define DISPLAY_TYPE to be one of the above 3 types of display
-
-//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_32WD
-#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
-//#define DISPLAY_TYPE	DISPLAY_TYPE_INVERTED_43
-//#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_50
+#include "Configuration.hpp"
 
 // From the display type, we determine the display controller type and touch screen orientation adjustment
 #if DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_32WD
@@ -190,7 +179,11 @@ struct FlashData
 	int16_t xmax;
 	int16_t ymin;
 	int16_t ymax;
+	DisplayOrientation touchOrientation;
 };
+
+// When we can switch to C++11, uncomment this line
+//static_assert(sizeof(FlashData) <= FLASH_DATA_LENGTH);
 
 FlashData nvData;
 const uint32_t magicVal = 0x3AB629D1;
@@ -240,7 +233,7 @@ static IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY, *
 static ProgressBar *printProgressBar;
 static StaticTextField *nameField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
 static StaticTextField *filenameFields[numDisplayedFiles];
-static StaticTextField *homeFields[3], *homeAllField;
+static StaticTextField *homeFields[3], *homeAllField, *fwVersionField;
 static DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
 static DisplayField * null fieldBeingAdjusted = NULL;
@@ -466,6 +459,9 @@ void InitLcd()
 	mgr.AddField(freeMem = new IntegerField(rowCustom1, margin, 195, "Free RAM: "));
 	mgr.AddField(touchX = new IntegerField(rowCustom1, 200, 130, "Touch: ", ","));
 	mgr.AddField(touchY = new IntegerField(rowCustom1, 330, 50, ""));
+	// The firmware version field doubles up as an area for displaying debug messages, so make it the full width of the display
+	mgr.AddField(fwVersionField = new StaticTextField(rowCustom2, margin, DisplayX, Left,"Firmware version " VERSION_TEXT));
+
 	DisplayField::SetDefaultColours(white, selectableBackColor);
 	DisplayField *touchCal = new StaticTextField(rowCustom3, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
 	touchCal->SetEvent(evCalTouch, 0);
@@ -476,7 +472,7 @@ void InitLcd()
 	
 	mgr.SetRoot(commonRoot);
 	
-	touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "Touch the spot");
+	touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "");		// the text is filled in within CalibrateTouch
 
 	// Create the popup window used to adjust temperatures
 	setTempPopup = new PopupField(130, 80, popupBackColour);
@@ -599,7 +595,7 @@ void TouchBeep()
 	Buzzer::Beep(touchBeepFrequency, touchBeepLength);	
 }
 
-// Draw a spot and wait util the user touches it, returning the touch coordinates in tx and ty.
+// Draw a spot and wait until the user touches it, returning the touch coordinates in tx and ty.
 // The alternative X and Y locations are so that the caller can allow for the touch panel being possibly inverted.
 void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber altY, uint16_t& tx, uint16_t& ty)
 {
@@ -632,10 +628,12 @@ void CalibrateTouch()
 	const PixelNumber touchCalibMargin = 25;
 
 	DisplayField *oldRoot = mgr.GetRoot();
+	touchCalibInstruction->SetValue("Touch the spot");				// in case the user didn't need to press the reset button last time
 	mgr.SetRoot(touchCalibInstruction);
 	mgr.ClearAll();
 	mgr.RefreshAll(true);
-	touch.calibrate(0, lcd.getDisplayXSize() - 1, 0, lcd.getDisplayYSize() - 1);		// clear the current calibration
+
+	touch.init(DisplayX, DisplayY, TouchOrientAdjust);				// initialize the driver and clear any existing calibration
 
 	// Draw spots on the edges of the screen, one at a time, and ask the user to touch them.
 	// For the first two, we allow for the touch panel being the wrong way round.
@@ -660,10 +658,19 @@ void CalibrateTouch()
 	nvData.xmax = (int)xHigh + (int)touchCalibMargin;
 	nvData.ymin = (int)yLow - (int)touchCalibMargin;
 	nvData.ymax = (int)yHigh + (int)touchCalibMargin;
+	nvData.touchOrientation = touch.getOrientation();
 	touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
 	nvData.magic = magicVal;
+	
+	// Writing flash storage - or even re-locking it - sometimes crashes deep in the ASF, although the memory gets written anyway.
+	// So wait for the beep to finish, instruct the user to press the reset button, and then write the flash
+	while (Buzzer::Noisy()) { }
+	touchCalibInstruction->SetValue("Press reset button, or disconnect/reconnect power");
+	mgr.RefreshAll();
+	
 	FlashStorage::write(0, &nvData, sizeof(nvData));
 	
+	// If ASF doesn't crash, keep going
 	mgr.SetRoot(oldRoot);
 	mgr.ClearAll();
 	mgr.RefreshAll(true);
@@ -1209,7 +1216,6 @@ int main(void)
 	SerialIo::Init();
 	Buzzer::Init();
 	InitLcd();
-	touch.init(lcd.getDisplayXSize(), lcd.getDisplayYSize(), TouchOrientAdjust);
 	lastTouchTime = GetTickCount();
 	
 	SysTick_Config(SystemCoreClock / 1000);
@@ -1219,30 +1225,24 @@ int main(void)
 	BacklightPort.setHigh();
 
 	// Read parameters from flash memory (currently, just the touch calibration)
-	flash_init(FLASH_ACCESS_MODE_128, 6);	
 	nvData.magic = 0;
 	FlashStorage::read(0, &nvData, sizeof(nvData));
 	if (nvData.magic == magicVal)
 	{
+		// The touch panel has already been calibrated
+		touch.init(DisplayX, DisplayY, nvData.touchOrientation);
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
 	}
 	else
 	{
-		CalibrateTouch();
+		// The touch panel has not been calibrated, and we do not know which way up it is
+		CalibrateTouch();					// this includes the touch driver initialization, and it writes the flash data
 	}
 	
 	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
 	lastResponseTime = GetTickCount();		// pretend we just received a response
 	changeTab(tabControl);
 	
-#if 0 //test
-	uint32_t cc = 0;
-	for (;;)
-	{
-		pio_sync_output_write(PIOA, cc);
-		++cc;
-	}
-#else	
 	for (;;)
 	{
 		// 1. Check for input from the serial port and process it.
@@ -1309,7 +1309,11 @@ int main(void)
 			SerialIo::SendString((gotMachineName) ? "M105 S2\n" : "M105 S3\n");
 		}
 	}
-#endif
+}
+
+void PrintDebugText(const char *x)
+{
+	fwVersionField->SetValue(x);
 }
 
 // End

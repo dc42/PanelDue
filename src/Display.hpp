@@ -90,9 +90,9 @@ private:
 	
 public:
 	PopupField(PixelNumber ph, PixelNumber pw, Color pb);
-	PixelNumber GetHeight() override const { return height; }
-	PixelNumber GetWidth() override const { return width; }
-	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override;
+	PixelNumber GetHeight() const { return height; }
+	PixelNumber GetWidth() const { return width; }
+	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset);
 	void AddField(DisplayField *p);
 	DisplayField * null FindEvent(int x, int y);
 };
@@ -238,7 +238,7 @@ public:
 	
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override;
 	
-	virtual PixelNumber GetHeight() override const { return height; }
+	virtual PixelNumber GetHeight() const override { return height; }
 
 	void SetPercent(uint8_t pc)
 	{
