@@ -32,6 +32,8 @@ public:
 	void clear() { filled = 0; }
 		
 	const T* array c_ptr() { return storage; }
+		
+	void sort(bool (*sortfunc)(T, T));
 
 protected:
 	T storage[N];
@@ -44,6 +46,26 @@ template<class T, size_t N> void Vector<T, N>::add(const T* array p, size_t n)
 	{
 		storage[filled++] = *p++;
 		--n;
+	}
+}
+
+template<class T, size_t N> void Vector<T, N>::sort(bool (*sortfunc)(T, T))
+{
+	for (size_t i = 1; i < filled; ++i)
+	{
+		for (size_t j = 0; j < i; ++j)
+		{
+			if ((*sortfunc)(storage[j], storage[i]))
+			{
+				T temp = storage[i];
+				// Insert element i just before element j
+				for (size_t k = i; k > j; --k)
+				{
+					storage[k] = storage[k - 1];
+				}
+				storage[j] = temp;
+			}
+		}
 	}
 }
 

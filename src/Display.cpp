@@ -39,7 +39,7 @@ void DisplayField::Show(bool v)
 // Find the best match to a touch event in a list of fields
 DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
 {	
-	const int maxXerror = 10, maxYerror = 10;		// set these to how close we need to be
+	const int maxXerror = 8, maxYerror = 8;		// set these to how close we need to be
 	int bestError = maxXerror + maxYerror;
 	DisplayField * null best = NULL;
 	while (p != NULL)
@@ -152,7 +152,7 @@ void DisplayManager::SetPopup(PopupField * null p, PixelNumber px, PixelNumber p
 			// Re-display the background fields
 			for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
 			{
-				if (!Visible(pp))
+				if (!Visible(pp) && pp->IsVisible())
 				{
 					pp->Refresh(true, 0, 0);
 				}

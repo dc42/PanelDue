@@ -114,7 +114,7 @@ const PixelNumber rowCommon2 = rowCommon1 + rowHeight;
 const PixelNumber rowCommon3 = rowCommon2 + rowHeight;
 const PixelNumber rowCommon4 = rowCommon3 + rowHeight;
 const PixelNumber rowCommon5 = rowCommon4 + rowHeight;
-const PixelNumber rowCustom1 = rowCommon5 + rowHeight;
+const PixelNumber rowCustom1 = rowCommon5 + rowHeight + 4;
 const PixelNumber rowCustom2 = rowCustom1 + rowHeight;
 const PixelNumber rowCustom3 = rowCustom2 + rowHeight;
 const PixelNumber rowCustom4 = rowCustom3 + rowHeight;
@@ -128,10 +128,11 @@ const PixelNumber columnTab4 = columnTab3 + columnTabWidth + fieldSpacing;
 const PixelNumber columnTab5 = columnTab4 + columnTabWidth + fieldSpacing;
 
 const PixelNumber xyPopupX = 3, xyPopupY = 195;
+const PixelNumber tempPopupX = 35, tempPopupY = 195;
 const PixelNumber filePopupWidth = DisplayX - 40, filePopupHeight = 8 * rowHeight + 20;
 
 const uint32_t numFileColumns = 2;
-const uint32_t numFileRows = (DisplayY - margin)/rowHeight - 2;
+const uint32_t numFileRows = (DisplayY - margin)/rowHeight - 3;
 const uint32_t numDisplayedFiles = numFileColumns * numFileRows;
 
 // Declare which fonts we will be using
@@ -150,14 +151,16 @@ const uint32_t printerPollTimeout = 5000;			// poll timeout in milliseconds
 const uint32_t touchBeepLength = 20;				// beep length in ms
 const uint32_t touchBeepFrequency = 4500;			// beep frequency in Hz. Resonant frequency of the piezo sounder is 4.5kHz.
 const uint32_t longTouchDelay = 200;				// how long we ignore new touches for after pressing Set
-const uint32_t shortTouchDelay = 50;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
+const uint32_t shortTouchDelay = 80;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
 
 static uint32_t lastTouchTime;
 static uint32_t ignoreTouchTime;
 static uint32_t lastResponseTime;
-static uint32_t fileScrollOffset;
+static uint32_t fileScrollOffset = 0;
 static bool fileListChanged = true;
 static bool gotMachineName = false;
+static bool isDelta = false;
+static bool gotGeometry = false;
 static bool axisHomed[3] = {false, false, false};
 static bool allAxesHomed = false;
 static int beepFrequency = 0, beepLength = 0;
@@ -187,13 +190,15 @@ struct FlashData
 
 FlashData nvData;
 const uint32_t magicVal = 0x3AB629D1;
+const uint32_t muggleVal = 0xFFFFFFFF;
 
 enum PrinterStatus
 {
 	psUnknown = 0,
 	psIdle = 1,
 	psPrinting = 2,
-	psStopped = 3
+	psStopped = 3,
+	psConfiguring = 4
 };
 
 static PrinterStatus status = psUnknown;
@@ -215,9 +220,9 @@ const Event evTabControl = 1,
 			evTabFiles = 3,
 			evTabMsg = 4,
 			evTabInfo = 5,
-			evSetVal = 6,
+			evAdjustTemp = 6,
 			evAdjustInt = 7,
-			evAdjustFloat = 8,
+			evAdjustPosition = 8,
 			evSetInt = 9,
 			evCalTouch = 10,
 			evSelectHead = 11,
@@ -225,14 +230,17 @@ const Event evTabControl = 1,
 			evZPos = 13,
 			evFile = 14,
 			evPrint = 15, evCancelPrint = 16,
-			evSendCommand = 17;
+			evSendCommand = 17,
+			evCalClear = 18,
+			evAdjustPercent = 19,
+			evScrollFiles = 20;
 
 static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos, *fpHeightField, *fpLayerHeightField;
 static IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
 static IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField;
 static ProgressBar *printProgressBar;
 static StaticTextField *nameField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
-static StaticTextField *filenameFields[numDisplayedFiles];
+static StaticTextField *filenameFields[numDisplayedFiles], *scrollFilesLeftField, *scrollFilesRightField;
 static StaticTextField *homeFields[3], *homeAllField, *fwVersionField;
 static DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
@@ -246,22 +254,41 @@ static TextField *zProbe, *fpNameField, *fpGeneratedByField, *printingField;
 const size_t numHeaters = 3;
 int heaterStatus[numHeaters];
 
+bool StringGreaterThan(const char* a, const char* b)
+{
+	return stricmp(a, b) > 0;
+}
+
 void RefreshFileList()
 {
+	// 1. Sort the file list
+	fileIndex.sort(StringGreaterThan);
+	
+	// 2. Make sure the scroll position is still sensible
+	if (fileScrollOffset >= fileIndex.size())
+	{
+		fileScrollOffset = (fileIndex.size()/numFileRows) * numFileRows;
+	}
+	
+	// 3. Display the scroll buttons if needed
+	mgr.Show(scrollFilesLeftField, fileScrollOffset != 0);
+	mgr.Show(scrollFilesRightField, fileScrollOffset + numFileRows < fileIndex.size());
+	
+	// 4. Display the file list
 	for (size_t i = 0; i < numDisplayedFiles; ++i)
 	{
 		StaticTextField *f = filenameFields[i];
-		if (i < fileIndex.size())
+		if (i + fileScrollOffset < fileIndex.size())
 		{
-			f->SetValue(fileIndex[i]);
+			f->SetValue(fileIndex[i + fileScrollOffset]);
 			f->SetColours(white, selectableBackColor);
-			f->SetEvent(evFile, i);
+			f->SetEvent(evFile, i + fileScrollOffset);
 		}
 		else
 		{
 			f->SetValue("");
 			f->SetColours(white, defaultBackColor);
-			f->SetEvent(nullEvent, i);
+			f->SetEvent(nullEvent, 0);
 		}
 	}
 }
@@ -287,7 +314,6 @@ void changeTab(DisplayField *newTab)
 		case evTabFiles:
 			SerialIo::SendString("M20 S2\n");		// ask for the list of files
 			mgr.SetRoot(filesRoot);
-			fileScrollOffset = 0;					// scroll to top of file list
 			break;
 		case evTabMsg:
 			mgr.SetRoot(messageRoot);
@@ -348,11 +374,11 @@ void InitLcd()
 	mgr.AddField(t2ActiveTemp = new IntegerField(rowCommon4, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
 	mgr.AddField(t2StandbyTemp = new IntegerField(rowCommon4, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
 	mgr.AddField(bedActiveTemp = new IntegerField(rowCommon5, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
-	t1ActiveTemp->SetEvent(evSetVal, "G10 P1 S");
-	t1StandbyTemp->SetEvent(evSetVal, "G10 P1 R");
-	t2ActiveTemp->SetEvent(evSetVal, "G10 P2 S");
-	t2StandbyTemp->SetEvent(evSetVal, "G10 P2 R");
-	bedActiveTemp->SetEvent(evSetVal, "M140 S");
+	t1ActiveTemp->SetEvent(evAdjustTemp, "G10 P1 S");
+	t1StandbyTemp->SetEvent(evAdjustTemp, "G10 P1 R");
+	t2ActiveTemp->SetEvent(evAdjustTemp, "G10 P2 S");
+	t2StandbyTemp->SetEvent(evAdjustTemp, "G10 P2 R");
+	bedActiveTemp->SetEvent(evAdjustTemp, "M140 S");
 
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	mgr.AddField(t1CurrentTemp = new FloatField(rowCommon3, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
@@ -382,70 +408,75 @@ void InitLcd()
 	
 	// Create the fields for the Control tab
 	DisplayField::SetDefaultColours(white, notHomedBackColour);
-	homeFields[0] = new StaticTextField(rowCustom1, column1, 90, Centre, "Home X");
-	homeFields[0]->SetEvent(evSendCommand, "G28 X0");
-	mgr.AddField(homeFields[0]);
-	homeFields[1] = new StaticTextField(rowCustom1, column1+100, 90, Centre, "Home Y");
-	homeFields[1]->SetEvent(evSendCommand, "G28 Y0");
-	mgr.AddField(homeFields[1]);
-	homeFields[2] = new StaticTextField(rowCustom1, column1+200, 90, Centre, "Home Z");
-	homeFields[2]->SetEvent(evSendCommand, "G28 Z0");
-	mgr.AddField(homeFields[2]);
-	homeAllField = new StaticTextField(rowCustom1, column1+300, 90, Centre, "Home all");
+	homeAllField = new StaticTextField(rowCustom1, column1, 90, Centre, "Home all");
 	homeAllField->SetEvent(evSendCommand, "G28");
 	mgr.AddField(homeAllField);
+	homeFields[0] = new StaticTextField(rowCustom1, column1+100, 90, Centre, "Home X");
+	homeFields[0]->SetEvent(evSendCommand, "G28 X0");
+	mgr.AddField(homeFields[0]);
+	homeFields[1] = new StaticTextField(rowCustom1, column1+200, 90, Centre, "Home Y");
+	homeFields[1]->SetEvent(evSendCommand, "G28 Y0");
+	mgr.AddField(homeFields[1]);
+	homeFields[2] = new StaticTextField(rowCustom1, column1+300, 90, Centre, "Home Z");
+	homeFields[2]->SetEvent(evSendCommand, "G28 Z0");
+	mgr.AddField(homeFields[2]);
 	
 	controlRoot = mgr.GetRoot();
 
 	// Create the fields for the Printing tab
 	mgr.SetRoot(commonRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
+	mgr.AddField(new StaticTextField(rowCustom1, 0, 70, Left, "Speed"));
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	mgr.AddField(spd = new IntegerField(rowCustom1, 70, 60, "", "%"));
+	spd->SetValue(100);
+	spd->SetEvent(evAdjustPercent, "M220 S");
+	DisplayField::SetDefaultColours(white, defaultBackColor);
+	mgr.AddField(new StaticTextField(rowCustom1, 140, 30, Left, "E1"));
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	mgr.AddField(e1Percent = new IntegerField(rowCustom1, 170, 60, "", "%"));
+	e1Percent->SetValue(100);
+	e1Percent->SetEvent(evAdjustPercent, "M221 D0 S");
+	DisplayField::SetDefaultColours(white, defaultBackColor);
+	mgr.AddField(new StaticTextField(rowCustom1, 250, 30, Left, "E2"));
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	mgr.AddField(e2Percent = new IntegerField(rowCustom1, 280, 60, "", "%"));
+	e2Percent->SetValue(100);
+	e2Percent->SetEvent(evAdjustPercent, "M221 D1 S");
+	
+	DisplayField::SetDefaultColours(white, defaultBackColor);
 	printingFile.copyFrom("(unknown)");
-	mgr.AddField(printingField = new TextField(rowCustom1, 0, DisplayX, "Printing ", printingFile.c_str()));
+	mgr.AddField(printingField = new TextField(rowCustom2, 0, DisplayX, "Printing ", printingFile.c_str()));
 	
 	DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-	mgr.AddField(printProgressBar = new ProgressBar(rowCustom2, margin, 8, DisplayX - 2*margin));
+	mgr.AddField(printProgressBar = new ProgressBar(rowCustom3, margin, 8, DisplayX - 2*margin));
 	mgr.Show(printProgressBar, false);
 
-	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(new StaticTextField(rowCustom3, 0, 70, Left, "Speed"));
-	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(spd = new IntegerField(rowCustom3, 70, 60, "", "%"));
-	spd->SetValue(100);
-	spd->SetEvent(evSetVal, "M220 S");
-	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(new StaticTextField(rowCustom3, 140, 30, Left, "E1"));
-	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(e1Percent = new IntegerField(rowCustom3, 170, 60, "", "%"));
-	e1Percent->SetValue(100);
-	e1Percent->SetEvent(evSetVal, "M221 D0 S");
-	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(new StaticTextField(rowCustom3, 250, 30, Left, "E2"));
-	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(e2Percent = new IntegerField(rowCustom3, 280, 60, "", "%"));
-	e2Percent->SetValue(100);
-	e2Percent->SetEvent(evSetVal, "M221 D1 S");
-	
 	printRoot = mgr.GetRoot();
 
 	// Create the fields for the Files tab
 	mgr.SetRoot(baseRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(new StaticTextField(rowCommon1, margin, DisplayX - 2*margin, Centre, "Files on SD card"));
+	mgr.AddField(new StaticTextField(rowCommon1, 135, DisplayX - 2*135, Centre, "Files on SD card"));
 	{
 		PixelNumber fileFieldWidth = (DisplayX + fieldSpacing - 2*margin)/numFileColumns;
 		unsigned int fileNum = 0;
-		for (unsigned int r = 0; r < numFileRows; ++r)
+		for (unsigned int c = 0; c < numFileColumns; ++c)
 		{
-			for (unsigned int c = 0; c < numFileColumns; ++c)
+			for (unsigned int r = 0; r < numFileRows; ++r)
 			{
-				StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 1, (fileFieldWidth * c) + margin, fileFieldWidth - fieldSpacing, Left, "");
+				StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 8, (fileFieldWidth * c) + margin, fileFieldWidth - fieldSpacing, Left, "");
 				mgr.AddField(t);
 				filenameFields[fileNum] = t;
 				++fileNum;
 			}
 		}
 	}
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	mgr.AddField(scrollFilesLeftField = new StaticTextField(rowCommon1, 80, 50, Centre, "<"));
+	scrollFilesLeftField->SetEvent(evScrollFiles, -numFileRows);
+	mgr.AddField(scrollFilesRightField = new StaticTextField(rowCommon1, DisplayX - (80 + 50), 50, Centre, ">"));
+	scrollFilesRightField->SetEvent(evScrollFiles, numFileRows);
 	filesRoot = mgr.GetRoot();
 
 	// Create the fields for the Message tab
@@ -467,6 +498,9 @@ void InitLcd()
 	touchCal->SetEvent(evCalTouch, 0);
 	mgr.AddField(touchCal);
 
+	DisplayField *clearCal = new StaticTextField(rowCustom4, DisplayX/2 - 75, 150, Centre, "Factory reset");
+	clearCal->SetEvent(evCalClear, 0);
+	mgr.AddField(clearCal);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	infoRoot = mgr.GetRoot();
 	
@@ -475,17 +509,22 @@ void InitLcd()
 	touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "");		// the text is filled in within CalibrateTouch
 
 	// Create the popup window used to adjust temperatures
-	setTempPopup = new PopupField(130, 80, popupBackColour);
+	setTempPopup = new PopupField(40, 330, popupBackColour);
 	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
-
-	DisplayField *tp = new StaticTextField(10, 10, 60, Centre, "+");
-	tp->SetEvent(evAdjustInt, 1);
+	DisplayField *tp = new StaticTextField(10, 5, 60, Centre, "-10");
+	tp->SetEvent(evAdjustInt, -10);
 	setTempPopup->AddField(tp);
-	tp = new StaticTextField(55, 10, 60, Centre, "Set");
+	tp = new StaticTextField(10, 70, 60, Centre, "-1");
+	tp->SetEvent(evAdjustInt, -1);
+	setTempPopup->AddField(tp);
+	tp = new StaticTextField(10, 135, 60, Centre, "Set");
 	tp->SetEvent(evSetInt, 0);
 	setTempPopup->AddField(tp);
-	tp = new StaticTextField(100, 10, 60, Centre, "-");
-	tp->SetEvent(evAdjustInt, -1);
+	tp = new StaticTextField(10, 200, 60, Centre, "+1");
+	tp->SetEvent(evAdjustInt, 1);
+	setTempPopup->AddField(tp);
+	tp = new StaticTextField(10, 265, 60, Centre, "+10");
+	tp->SetEvent(evAdjustInt, 10);
 	setTempPopup->AddField(tp);
 
 	// Create the popup window used to adjust XY position
@@ -493,22 +532,22 @@ void InitLcd()
 	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
 	
 	tp = new StaticTextField(10, 5, 60, Centre, "-50");
-	tp->SetEvent(evAdjustFloat, "-50");
+	tp->SetEvent(evAdjustPosition, "-50");
 	setXYPopup->AddField(tp);
 	tp = new StaticTextField(10, 70, 60, Centre, "-5");
-	tp->SetEvent(evAdjustFloat, "-5");
+	tp->SetEvent(evAdjustPosition, "-5");
 	setXYPopup->AddField(tp);
 	tp = new StaticTextField(10, 135, 60, Centre, "-0.5");
-	tp->SetEvent(evAdjustFloat, "-0.5");
+	tp->SetEvent(evAdjustPosition, "-0.5");
 	setXYPopup->AddField(tp);
 	tp = new StaticTextField(10, 200, 60, Centre, "+0.5");
-	tp->SetEvent(evAdjustFloat, "0.5");
+	tp->SetEvent(evAdjustPosition, "0.5");
 	setXYPopup->AddField(tp);
 	tp = new StaticTextField(10, 265, 60, Centre, "+5");
-	tp->SetEvent(evAdjustFloat, "5");
+	tp->SetEvent(evAdjustPosition, "5");
 	setXYPopup->AddField(tp);
 	tp = new StaticTextField(10, 330, 60, Centre, "+50");
-	tp->SetEvent(evAdjustFloat, "50");
+	tp->SetEvent(evAdjustPosition, "50");
 	setXYPopup->AddField(tp);
 
 	// Create the popup window used to adjust Z position
@@ -516,22 +555,22 @@ void InitLcd()
 	DisplayField::SetDefaultColours(white, selectablePopupBackColour);
 	
 	tp = new StaticTextField(10, 5, 60, Centre, "-5");
-	tp->SetEvent(evAdjustFloat, "-5");
+	tp->SetEvent(evAdjustPosition, "-5");
 	setZPopup->AddField(tp);
 	tp = new StaticTextField(10, 70, 60, Centre, "-0.5");
-	tp->SetEvent(evAdjustFloat, "-0.5");
+	tp->SetEvent(evAdjustPosition, "-0.5");
 	setZPopup->AddField(tp);
 	tp = new StaticTextField(10, 135, 60, Centre, "-0.05");
-	tp->SetEvent(evAdjustFloat, "-0.05");
+	tp->SetEvent(evAdjustPosition, "-0.05");
 	setZPopup->AddField(tp);
 	tp = new StaticTextField(10, 200, 60, Centre, "+0.05");
-	tp->SetEvent(evAdjustFloat, "0.05");
+	tp->SetEvent(evAdjustPosition, "0.05");
 	setZPopup->AddField(tp);
 	tp = new StaticTextField(10, 265, 60, Centre, "+0.5");
-	tp->SetEvent(evAdjustFloat, "0.5");
+	tp->SetEvent(evAdjustPosition, "0.5");
 	setZPopup->AddField(tp);
 	tp = new StaticTextField(10, 330, 60, Centre, "+5");
-	tp->SetEvent(evAdjustFloat, "5");
+	tp->SetEvent(evAdjustPosition, "5");
 	setZPopup->AddField(tp);
 	
 	// Create the popup window used to display the file dialog
@@ -625,7 +664,7 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 
 void CalibrateTouch()
 {
-	const PixelNumber touchCalibMargin = 25;
+	const PixelNumber touchCalibMargin = 15;
 
 	DisplayField *oldRoot = mgr.GetRoot();
 	touchCalibInstruction->SetValue("Touch the spot");				// in case the user didn't need to press the reset button last time
@@ -676,6 +715,15 @@ void CalibrateTouch()
 	mgr.RefreshAll(true);
 }
 
+// Clear the touch calibration
+void ClearCalibration()
+{
+	while (Buzzer::Noisy()) { }
+	nvData.magic = muggleVal;
+	FlashStorage::write(0, &nvData, sizeof(nvData));
+	Buzzer::Beep(touchBeepFrequency, 400);			// long beep to acknowledge it
+}
+
 // Process a touch event
 void ProcessTouch(DisplayField *f)
 {
@@ -689,9 +737,15 @@ void ProcessTouch(DisplayField *f)
 		changeTab(f);
 		break;
 
-	case evSetVal:
+	case evAdjustTemp:
+		if (static_cast<IntegerField*>(f)->GetValue() < 0)
+		{
+			static_cast<IntegerField*>(f)->SetValue(0);
+		}
+		// no break
+	case evAdjustPercent:
 		mgr.Outline(f, outlineColor, outlinePixels);
-		mgr.AttachPopup(setTempPopup, f);
+		mgr.SetPopup(setTempPopup, tempPopupX, tempPopupY);
 		fieldBeingAdjusted = f;
 		delayTouch(longTouchDelay);
 		break;
@@ -721,7 +775,7 @@ void ProcessTouch(DisplayField *f)
 		}
 		break;
 
-	case evAdjustFloat:
+	case evAdjustPosition:
 		if (fieldBeingAdjusted != NULL)
 		{
 			SerialIo::SendString("G91\n");
@@ -734,6 +788,10 @@ void ProcessTouch(DisplayField *f)
 
 	case evCalTouch:
 		CalibrateTouch();
+		break;
+
+	case evCalClear:
+		ClearCalibration();
 		break;
 
 	case evSelectHead:
@@ -815,6 +873,12 @@ void ProcessTouch(DisplayField *f)
 		delayTouch(longTouchDelay);
 		break;
 
+	case evScrollFiles:
+		fileScrollOffset += f->GetIParam();
+		fileListChanged = true;
+		delayTouch(shortTouchDelay);
+		break;
+
 	default:
 		break;
 	}
@@ -825,7 +889,7 @@ void ProcessTouchOutsidePopup()
 {
 	switch(fieldBeingAdjusted->GetEvent())
 	{
-	case evSetVal:
+	case evAdjustTemp:
 	case evXYPos:
 	case evZPos:
 		mgr.RemoveOutline(fieldBeingAdjusted, outlinePixels);
@@ -1082,9 +1146,12 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 	}
 	else if (strcmp(id, "myName") == 0)
 	{
-		machineName.copyFrom(data);
-		nameField->SetChanged();
-		gotMachineName = true;
+		if (status != psConfiguring && status != psUnknown)
+		{
+			machineName.copyFrom(data);
+			nameField->SetChanged();
+			gotMachineName = true;		
+		}
 	}
 	else if (strcmp(id, "fileName") == 0)
 	{
@@ -1135,6 +1202,11 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 	{
 		switch(data[0])
 		{
+		case 'C':
+			status = psConfiguring;
+			mgr.Show(printProgressBar, false);
+			mgr.Show(printingField, false);
+			break;
 		case 'P':
 			status = psPrinting;
 			mgr.Show(printProgressBar, true);
@@ -1162,6 +1234,18 @@ extern void processReceivedValue(const char id[], const char data[], int index)
 	else if (strcmp(id, "beep_length") == 0)
 	{
 		getInteger(data, beepLength);
+	}
+	else if (strcmp(id, "geometry") == 0)
+	{
+		if (status != psConfiguring && status != psUnknown)
+		{
+			isDelta = (strcmp(data, "delta") == 0);
+			gotGeometry = true;
+			for (size_t i = 0; i < 3; ++i)
+			{
+				mgr.Show(homeFields[i], !isDelta);
+			}
+		}
 	}
 }
 
