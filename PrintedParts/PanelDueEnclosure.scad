@@ -19,21 +19,22 @@ Itead50=true;
 Other43=false;
 
 Encoder=false;					// true if hole wanted for rotary encoder
-Lid=false;						// set to false if lid not required
+Lid=false;						// true if lid required
 screw=true;						// set if screw lid
+Mount=false;
 RelieveOverhang=0;				// see note 1 above
 
 // Set up the main enclosure parameters
 MWall=2;							// Main box MWall thickness
 MBase=2;							// Main box MBase (front panel) thickness
 MRad=MWall;						// MMRadius of box edges
-Mclearance=2;						// clearance between board edge and inside of box
+Mclearance= (Lid) ? 5 : 2;		// clearance between board edge and inside of box
 MBez=1;							// This is the thickness covering the non-visible
 									// part of the LCD display (MBase thickness - recess)
 
 USBclear=2;						// Clearance to leave all around USB connector
 ResetHoleSide=2;					// Side of the square reset hole
-BuzzerHoleSide=1;				// Side of the square buzzer holes
+BuzzerHoleSide=1.5;				// Side of the square buzzer holes
 
 MountHeight=32;					// Height at which to put appjaws1's mount
 
@@ -93,7 +94,7 @@ LCDbossDia=5;						// Diameter of boss under each mounting hole
 LCDbossD2=LCDbossDia*2;			// MBase diameter of boss supports
 LCDbossFR=(LCDbossDia-LCDmnthole)/2; // Bottom fillet MMRadius of bosses
 LCDsupW=1;						// Width of boss supports
-LCDpin1=(Itead43) ? [28.2,-5.0] : (Itead50) ? [35.8,-5.0] : [108.5,10.0];
+LCDpin1=(Itead43) ? [28.2,-5.0] : (Itead50) ? [35.8,-5.0] : [110.8,10.0];
 
 // Controller PCB module parameters
 // The origin for these coordinates is pin 1 of the 40-pin connector, which is assumed to be 
@@ -125,7 +126,7 @@ MLen= (Left) ? LCDpin1[0] - LCDpcb[0] + PCB[1] - PCBpin1[0] + 2*Mclearance
 				: LCDpcb[1] - LCDpcb[0] + 2*Mclearance;		// Cavity length
 MWid= (Bottom) ? LCDpcb[3] - LCDpin1[1] + PCB[1] - PCBpin1[0] + 2*Mclearance
 				: LCDpcb[3] - LCDpcb[2] + 2*Mclearance;		// Cavity width
-MHt=PCBheight+4.5;				// Cavity height
+MHt=PCBheight+LCDheight+MBez+4.5;								// Cavity height
 
 // Set the positions & orientation of LCD and PCB within the enclosure
 // NOTE - these are offsets from center of enclosure to origin of LCD
@@ -282,7 +283,7 @@ module PCBshape()
 // This creates the USB cutout
 module USBcutout()
 {
-	translate([PCBUSB[0]+Mclearance+(MWall/2),PCBUSB[1],PCBheight-PCBUSB[2]])
+	translate([PCBUSB[0]+Mclearance+(MWall/2),PCBUSB[1],PCBheight+LCDheight+MBez-PCBUSB[2]])
 		cube([MWall+2*overlap,USBsize[0]+2*USBclear,USBsize[1]+2*USBclear], center=true);
 }
 
@@ -302,12 +303,11 @@ module ResetCutout()
 module BuzzerHoles()
 {
 	translate([PCBbuzzer[0],PCBbuzzer[1],0]) {
-		union () {
-			cube([BuzzerHoleSide,BuzzerHoleSide,2*(MBase+overlap)], center=true);
-			for(n=[0:5]) {
-				translate([2.5*cos(60*n),2.5*sin(60*n),0])
+		for(n=[0:3]) {
+			rotate([0,0,90*n])
+				translate([2.5,0,0])
 					cube([BuzzerHoleSide,BuzzerHoleSide,2*(MBase+overlap)], center=true);
-			}
+
 		}
 	}
 }
@@ -447,6 +447,7 @@ module Box(){
 }
 
 Box();
+if (Mount) {
 	if(Right){ 
 		translate([0,-MountHeight-MWid/2,(MHt/2)+Tol*2])
 			rotate([90,90,0])
@@ -456,4 +457,5 @@ Box();
 		translate([0,MountHeight+MWid/2,(MHt/2)+Tol*2])
 			rotate([90,90,180])
 				import("appjaws-LCD-box-mount.stl");
+	}
 }
