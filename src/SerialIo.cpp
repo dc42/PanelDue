@@ -13,26 +13,73 @@
 
 namespace SerialIo
 {
-	// Initialize the serial I/O subsystem
-	void Init()
+	// Initialize the serial I/O subsystem, or re-initialize it with a new baud rate
+	void Init(uint32_t baudRate)
 	{
+		uart_disable_interrupt(UART1, 0xFFFFFFFF);
 		pio_configure(PIOB, PIO_PERIPH_A, PIO_PB2 | PIO_PB3, 0);	// enable UART 1 pins
 	
 		sam_uart_opt uartOptions;
 		uartOptions.ul_mck = sysclk_get_main_hz()/2;	// master clock is PLL clock divided by 2
-		uartOptions.ul_baudrate = 115200;
+		uartOptions.ul_baudrate = baudRate;
 		uartOptions.ul_mode = US_MR_PAR_NO;				// mode = normal, no parity
 		uart_init(UART1, &uartOptions);
 		irq_register_handler(UART1_IRQn, 5);
 		uart_enable_interrupt(UART1, UART_IER_RXRDY | UART_IER_OVRE | UART_IER_FRAME);
 	}
 	
+	uint16_t numChars = 0;
+	uint8_t checksum = 0;
+	
 	// Send a character to the 3D printer.
 	// A typical command string is only about 12 characters long, which at 115200 baud takes just over 1ms to send.
 	// So there is no particular reason to use interrupts, and by so doing so we avoid having to handle buffer full situations.
-	void SendChar(char c)
+	void RawSendChar(char c)
 	{
 		while(uart_write(UART1, c) != 0) { }
+	}
+	
+	void SendCharAndChecksum(char c)
+	{
+		checksum ^= c;
+		RawSendChar(c);
+		++numChars;	
+	}
+
+	void SendChar(char c)
+	{
+		if (c == '\n')
+		{
+			if (numChars != 0)
+			{
+				// Send the checksum
+				RawSendChar('*');
+				char digit0 = checksum % 10 + '0';
+				checksum /= 10;
+				char digit1 = checksum % 10 + '0';
+				checksum /= 10;
+				if (checksum != 0)
+				{
+					RawSendChar(checksum + '0');
+				}
+				RawSendChar(digit1);
+				RawSendChar(digit0);
+			}
+			RawSendChar(c);
+			numChars = 0;
+		}
+		else
+		{
+			if (numChars == 0)
+			{
+				checksum = 0;
+				// Send a dummy line number
+				SendCharAndChecksum('N');
+				SendCharAndChecksum('0');
+				SendCharAndChecksum(' ');
+			}
+			SendCharAndChecksum(c);
+		}
 	}
 	
 	void SendString(const char* array s)

@@ -25,32 +25,32 @@
 #if DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_32WD
 
 # define DISPLAY_CONTROLLER		HX8352A
-const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
-const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(ReverseY);
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
+const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(ReverseY);
 # define DISPLAY_X				(400)
 # define DISPLAY_Y				(240)
 
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_43
 
 # define DISPLAY_CONTROLLER		SSD1963_480
-const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
-const DisplayOrientation TouchOrientAdjust = SwapXY;
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
+const DisplayOrientation DefaultTouchOrientAdjust = SwapXY;
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
 
 #elif DISPLAY_TYPE == DISPLAY_TYPE_INVERTED_43
 
 # define DISPLAY_CONTROLLER		SSD1963_480
-const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
-const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY);
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
+const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY);
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
 
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_50
 
 # define DISPLAY_CONTROLLER		SSD1963_800
-const DisplayOrientation DisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
-const DisplayOrientation TouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
+const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
 # define DISPLAY_X				(800)
 # define DISPLAY_Y				(480)
 
@@ -178,10 +178,12 @@ static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backli
 struct FlashData
 {
 	uint32_t magic;
+	uint32_t baudRate;
 	int16_t xmin;
 	int16_t xmax;
 	int16_t ymin;
 	int16_t ymax;
+	DisplayOrientation lcdOrientation;
 	DisplayOrientation touchOrientation;
 };
 
@@ -233,7 +235,10 @@ const Event evTabControl = 1,
 			evSendCommand = 17,
 			evCalClear = 18,
 			evAdjustPercent = 19,
-			evScrollFiles = 20;
+			evScrollFiles = 20,
+			evSetBaudRate = 21,
+			evInvertDisplay = 22,
+			evAdjustBaudRate = 23;
 
 static FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos, *fpHeightField, *fpLayerHeightField;
 static IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
@@ -245,7 +250,7 @@ static StaticTextField *homeFields[3], *homeAllField, *fwVersionField;
 static DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 static DisplayField * null currentTab = NULL;
 static DisplayField * null fieldBeingAdjusted = NULL;
-static PopupField *setTempPopup, *setXYPopup, *setZPopup, *filePopup;
+static PopupField *setTempPopup, *setXYPopup, *setZPopup, *filePopup, *baudPopup;
 //static TextField *commandField;
 static TextField *zProbe, *fpNameField, *fpGeneratedByField, *printingField;
 
@@ -330,25 +335,31 @@ void changeTab(DisplayField *newTab)
 	mgr.RefreshAll(true);
 }
 
-void InitLcd()
+// Add a command cell
+StaticTextField *AddCommandCell(PixelNumber row, unsigned int col, unsigned int numCols, const char* text, Event evt, const char* param)
+{
+	PixelNumber width = (DisplayX - 2 * margin + fieldSpacing)/numCols - fieldSpacing;
+	PixelNumber xpos = col * (width + fieldSpacing) + margin;
+	StaticTextField *f = new StaticTextField(row, xpos, width, Centre, text);
+	f->SetEvent(evt, param);
+	mgr.AddField(f);
+	return f;
+}
+
+void InitLcd(DisplayOrientation dor)
 {
 	// Setup the LCD
-	lcd.InitLCD(DisplayOrientAdjust);
+	lcd.InitLCD(dor);
 	mgr.Init(defaultBackColor);
 	DisplayField::SetDefaultFont(glcd19x20);
 	
 	// Create the fields that are always displayed
 	DisplayField::SetDefaultColours(white, selectableBackColor);
-	mgr.AddField(tabControl = new StaticTextField(rowTabs, columnTab1, columnTabWidth, Centre, "Control"));
-	tabControl->SetEvent(evTabControl, 0);
-	mgr.AddField(tabPrint = new StaticTextField(rowTabs, columnTab2, columnTabWidth, Centre, "Print"));
-	tabPrint->SetEvent(evTabPrint, 0);
-	mgr.AddField(tabFiles = new StaticTextField(rowTabs, columnTab3, columnTabWidth, Centre, "Files"));
-	tabFiles->SetEvent(evTabFiles, 0);
-	mgr.AddField(tabMsg = new StaticTextField(rowTabs, columnTab4, columnTabWidth, Centre, "Msg"));
-	tabMsg->SetEvent(evTabMsg, 0);
-	mgr.AddField(tabInfo = new StaticTextField(rowTabs, columnTab5, columnTabWidth, Centre, "Setup"));
-	tabInfo->SetEvent(evTabInfo, 0);
+	tabControl = AddCommandCell(rowTabs, 0, 5, "Control", evTabControl, nullptr);
+	tabPrint = AddCommandCell(rowTabs, 1, 5, "Print", evTabPrint, nullptr);
+	tabFiles = AddCommandCell(rowTabs, 2, 5, "Files", evTabFiles, nullptr);
+	tabMsg = AddCommandCell(rowTabs, 3, 5, "Msg", evTabMsg, nullptr);
+	tabInfo = AddCommandCell(rowTabs, 4, 5, "Setup", evTabInfo, nullptr);
 	
 	baseRoot = mgr.GetRoot();		// save the root of fields that we usually display
 	
@@ -408,18 +419,16 @@ void InitLcd()
 	
 	// Create the fields for the Control tab
 	DisplayField::SetDefaultColours(white, notHomedBackColour);
-	homeAllField = new StaticTextField(rowCustom1, column1, 90, Centre, "Home all");
-	homeAllField->SetEvent(evSendCommand, "G28");
-	mgr.AddField(homeAllField);
-	homeFields[0] = new StaticTextField(rowCustom1, column1+100, 90, Centre, "Home X");
-	homeFields[0]->SetEvent(evSendCommand, "G28 X0");
-	mgr.AddField(homeFields[0]);
-	homeFields[1] = new StaticTextField(rowCustom1, column1+200, 90, Centre, "Home Y");
-	homeFields[1]->SetEvent(evSendCommand, "G28 Y0");
-	mgr.AddField(homeFields[1]);
-	homeFields[2] = new StaticTextField(rowCustom1, column1+300, 90, Centre, "Home Z");
-	homeFields[2]->SetEvent(evSendCommand, "G28 Z0");
-	mgr.AddField(homeFields[2]);
+	homeAllField = AddCommandCell(rowCustom1, 0, 5, "Home all", evSendCommand, "G28");
+	homeFields[0] = AddCommandCell(rowCustom1, 1, 5, "Home X", evSendCommand, "G28 X0");
+	homeFields[1] = AddCommandCell(rowCustom1, 2, 5, "Home Y", evSendCommand, "G28 Y0");
+	homeFields[2] = AddCommandCell(rowCustom1, 3, 5, "Home Z", evSendCommand, "G28 Z0");
+	
+	DisplayField::SetDefaultColours(white, selectableBackColor);
+	AddCommandCell(rowCustom4, 0, 5, "G92 Z0", evSendCommand, "G92 Z0");
+	AddCommandCell(rowCustom4, 1, 5, "G1 X0 X0", evSendCommand, "G1 X0 Y0 F5000");
+	AddCommandCell(rowCustom4, 2, 5, "G1 Z1", evSendCommand, "G1 Z1 F5000");
+	AddCommandCell(rowCustom4, 3, 5, "G32", evSendCommand, "G32");
 	
 	controlRoot = mgr.GetRoot();
 
@@ -484,23 +493,24 @@ void InitLcd()
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	messageRoot = mgr.GetRoot();
 
-	// Create the fields for the Info tab
-	mgr.SetRoot(commonRoot);
+	// Create the fields for the Setup tab
+	mgr.SetRoot(baseRoot);
 	DisplayField::SetDefaultColours(white, defaultBackColor);
-	mgr.AddField(freeMem = new IntegerField(rowCustom1, margin, 195, "Free RAM: "));
-	mgr.AddField(touchX = new IntegerField(rowCustom1, 200, 130, "Touch: ", ","));
-	mgr.AddField(touchY = new IntegerField(rowCustom1, 330, 50, ""));
 	// The firmware version field doubles up as an area for displaying debug messages, so make it the full width of the display
-	mgr.AddField(fwVersionField = new StaticTextField(rowCustom2, margin, DisplayX, Left,"Firmware version " VERSION_TEXT));
+	mgr.AddField(fwVersionField = new StaticTextField(rowCommon1, margin, DisplayX, Left,"Panel Due firmware version " VERSION_TEXT));
+	mgr.AddField(freeMem = new IntegerField(rowCommon2, margin, 195, "Free RAM: "));
+	mgr.AddField(touchX = new IntegerField(rowCommon2, 200, 130, "Touch: ", ","));
+	mgr.AddField(touchY = new IntegerField(rowCommon2, 330, 50, ""));
 
 	DisplayField::SetDefaultColours(white, selectableBackColor);
-	DisplayField *touchCal = new StaticTextField(rowCustom3, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
+	DisplayField *touchCal = new StaticTextField(rowCustom1, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
 	touchCal->SetEvent(evCalTouch, 0);
 	mgr.AddField(touchCal);
 
-	DisplayField *clearCal = new StaticTextField(rowCustom4, DisplayX/2 - 75, 150, Centre, "Factory reset");
-	clearCal->SetEvent(evCalClear, 0);
-	mgr.AddField(clearCal);
+	AddCommandCell(rowCustom3, 0, 3, "Baud rate", evSetBaudRate, nullptr);
+	AddCommandCell(rowCustom3, 1, 3, "Factory reset", evCalClear, nullptr);
+	AddCommandCell(rowCustom3, 2, 3, "Invert display", evInvertDisplay, nullptr);
+	
 	DisplayField::SetDefaultColours(white, defaultBackColor);
 	infoRoot = mgr.GetRoot();
 	
@@ -598,6 +608,25 @@ void InitLcd()
 	tp->SetEvent(evCancelPrint, 0);
 	filePopup->AddField(tp);
 
+	// Create the baud rate adjustment popup
+	baudPopup = new PopupField(40, 395, popupBackColour);
+	DisplayField::SetDefaultColours(black, popupBackColour);
+	tp = new StaticTextField(10, 5, 70, Centre, "9600");
+	tp->SetEvent(evAdjustBaudRate, 9600);
+	baudPopup->AddField(tp);
+	tp = new StaticTextField(10, 80, 70, Centre, "19200");
+	tp->SetEvent(evAdjustBaudRate, 19200);
+	baudPopup->AddField(tp);
+	tp = new StaticTextField(10, 155, 70, Centre, "38400");
+	tp->SetEvent(evAdjustBaudRate, 38400);
+	baudPopup->AddField(tp);
+	tp = new StaticTextField(10, 230, 70, Centre, "57600");
+	tp->SetEvent(evAdjustBaudRate, 57600);
+	baudPopup->AddField(tp);
+	tp = new StaticTextField(10, 305, 70, Centre, "115200");
+	tp->SetEvent(evAdjustBaudRate, 115200);
+	baudPopup->AddField(tp);
+	
 	// Redraw everything
 	mgr.RefreshAll(true);
 
@@ -662,6 +691,23 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 	lcd.fillCircle(x, y, touchCircleRadius);
 }
 
+void ClearNvData()
+{
+	nvData.baudRate = DEFAULT_BAUD_RATE;
+	nvData.xmin = 0;
+	nvData.xmax = DisplayX - 1;
+	nvData.ymin = 0;
+	nvData.ymax = DisplayY - 1;
+	nvData.lcdOrientation = DefaultDisplayOrientAdjust;
+	nvData.touchOrientation = DefaultTouchOrientAdjust;
+	nvData.magic = magicVal;
+}
+
+void WriteNvData()
+{
+	FlashStorage::write(0, &nvData, sizeof(nvData));	
+}
+
 void CalibrateTouch()
 {
 	const PixelNumber touchCalibMargin = 15;
@@ -672,7 +718,7 @@ void CalibrateTouch()
 	mgr.ClearAll();
 	mgr.RefreshAll(true);
 
-	touch.init(DisplayX, DisplayY, TouchOrientAdjust);				// initialize the driver and clear any existing calibration
+	touch.init(DisplayX, DisplayY, DefaultTouchOrientAdjust);				// initialize the driver and clear any existing calibration
 
 	// Draw spots on the edges of the screen, one at a time, and ask the user to touch them.
 	// For the first two, we allow for the touch panel being the wrong way round.
@@ -699,17 +745,15 @@ void CalibrateTouch()
 	nvData.ymax = (int)yHigh + (int)touchCalibMargin;
 	nvData.touchOrientation = touch.getOrientation();
 	touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
-	nvData.magic = magicVal;
 	
 	// Writing flash storage - or even re-locking it - sometimes crashes deep in the ASF, although the memory gets written anyway.
 	// So wait for the beep to finish, instruct the user to press the reset button, and then write the flash
 	while (Buzzer::Noisy()) { }
 	touchCalibInstruction->SetValue("Press reset button, or disconnect/reconnect power");
 	mgr.RefreshAll();
+
+	WriteNvData();
 	
-	FlashStorage::write(0, &nvData, sizeof(nvData));
-	
-	// If ASF doesn't crash, keep going
 	mgr.SetRoot(oldRoot);
 	mgr.ClearAll();
 	mgr.RefreshAll(true);
@@ -879,6 +923,30 @@ void ProcessTouch(DisplayField *f)
 		delayTouch(shortTouchDelay);
 		break;
 
+	case evInvertDisplay:
+		delayTouch(longTouchDelay);
+		nvData.lcdOrientation = static_cast<DisplayOrientation>(nvData.lcdOrientation ^ (ReverseX | ReverseY | InvertText | InvertBitmap));
+		lcd.InitLCD(nvData.lcdOrientation);
+		CalibrateTouch();
+		break;
+
+	case evSetBaudRate:
+		mgr.Outline(f, outlineColor, outlinePixels);
+		mgr.SetPopup(baudPopup, xyPopupX, xyPopupY);
+		fieldBeingAdjusted = f;
+		delayTouch(longTouchDelay);
+		break;
+
+	case evAdjustBaudRate:
+		nvData.baudRate = f->GetIParam();
+		SerialIo::Init(nvData.baudRate);
+		WriteNvData();
+		mgr.RemoveOutline(fieldBeingAdjusted, outlinePixels);
+		mgr.SetPopup(NULL);
+		fieldBeingAdjusted = NULL;
+		delayTouch(longTouchDelay);
+		break;
+
 	default:
 		break;
 	}
@@ -892,6 +960,7 @@ void ProcessTouchOutsidePopup()
 	case evAdjustTemp:
 	case evXYPos:
 	case evZPos:
+	case evSetBaudRate:
 		mgr.RemoveOutline(fieldBeingAdjusted, outlinePixels);
 		mgr.SetPopup(NULL);
 		fieldBeingAdjusted = NULL;
@@ -1297,9 +1366,7 @@ int main(void)
 	pmc_enable_periph_clk(ID_PWM);		// enable the PWM clock
 	pmc_enable_periph_clk(ID_UART1);	// enable UART1 clock
 	
-	SerialIo::Init();
 	Buzzer::Init();
-	InitLcd();
 	lastTouchTime = GetTickCount();
 	
 	SysTick_Config(SystemCoreClock / 1000);
@@ -1314,15 +1381,20 @@ int main(void)
 	if (nvData.magic == magicVal)
 	{
 		// The touch panel has already been calibrated
+		InitLcd(nvData.lcdOrientation);
 		touch.init(DisplayX, DisplayY, nvData.touchOrientation);
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
 	}
 	else
 	{
 		// The touch panel has not been calibrated, and we do not know which way up it is
+		ClearNvData();
+		InitLcd(nvData.lcdOrientation);
 		CalibrateTouch();					// this includes the touch driver initialization, and it writes the flash data
 	}
 	
+	SerialIo::Init(nvData.baudRate);
+
 	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
 	lastResponseTime = GetTickCount();		// pretend we just received a response
 	changeTab(tabControl);

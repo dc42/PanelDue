@@ -9,7 +9,7 @@
 #ifndef CONFIGURATION_H_
 #define CONFIGURATION_H_
 
-#define VERSION_TEXT		"1.01"
+#define VERSION_TEXT		"1.02"
 
 #define DISPLAY_TYPE_ITDB02_32WD		(0)		// Itead 3.2 inch widescreen display (400x240)
 #define DISPLAY_TYPE_ITDB02_43			(1)		// Itead 4.3 inch display (480 x 272) or alternative 4.3 inch display with board on the right
@@ -22,5 +22,7 @@
 #define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_43
 //#define DISPLAY_TYPE	DISPLAY_TYPE_INVERTED_43
 //#define DISPLAY_TYPE	DISPLAY_TYPE_ITDB02_50
+
+#define DEFAULT_BAUD_RATE	(57600)
 
 #endif /* CONFIGURATION_H_ */
