@@ -426,7 +426,7 @@ void InitLcd(DisplayOrientation dor)
 	
 	DisplayField::SetDefaultColours(white, selectableBackColor);
 	AddCommandCell(rowCustom4, 0, 5, "G92 Z0", evSendCommand, "G92 Z0");
-	AddCommandCell(rowCustom4, 1, 5, "G1 X0 X0", evSendCommand, "G1 X0 Y0 F5000");
+	AddCommandCell(rowCustom4, 1, 5, "G1 X0 Y0", evSendCommand, "G1 X0 Y0 F5000");
 	AddCommandCell(rowCustom4, 2, 5, "G1 Z1", evSendCommand, "G1 Z1 F5000");
 	AddCommandCell(rowCustom4, 3, 5, "G32", evSendCommand, "G32");
 	
