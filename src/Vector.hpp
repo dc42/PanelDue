@@ -9,6 +9,9 @@
 #ifndef VECTOR_H_
 #define VECTOR_H_
 
+#include "ecv.h"
+#include <cstddef>		// for size_t
+
 // Bounded vector class
 template<class T, size_t N> class Vector
 {

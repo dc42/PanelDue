@@ -14,6 +14,11 @@
 
 typedef const uint8_t * array LcdFont;
 
+// Codes for special characters in our font
+#define DECIMAL_POINT	"\x80"
+#define DEGREE_SYMBOL	"\x81"
+#define THIN_SPACE		"\x82"
+
 const Color red = UTFT::fromRGB(255,0,0);
 const Color yellow = UTFT::fromRGB(128,128,0);
 const Color green = UTFT::fromRGB(0,255,0);

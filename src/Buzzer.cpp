@@ -37,19 +37,37 @@ namespace Buzzer
 		inBuzzer = false;
 	}
 
-	void Beep(uint32_t frequency, uint32_t ms)
+	static uint32_t volumeTable[MaxVolume] = { 3, 9, 20, 40, 80 };
+		
+	// Generate a beep of the given length and frequency. The volume goes from 0 to MaxVolume.
+	void Beep(uint32_t frequency, uint32_t ms, uint32_t volume)
 	{
-		inBuzzer = true;		// tell the tick interrupt to leave us alone
-		if (beepTicksToGo == 0)
+		if (volume != 0)
 		{
-			uint32_t period = pwmClockFrequency/frequency;
-			pwm_channel_instance.ul_period = period;
-			pwm_channel_instance.ul_duty = period/2;
-			pwm_channel_init(PWM, &pwm_channel_instance);
-			pwm_channel_enable(PWM, PWM_CHANNEL_0);
-			beepTicksToGo = ms;
+			if (volume > MaxVolume)
+			{
+				volume = MaxVolume;
+			}
+			
+			inBuzzer = true;		// tell the tick interrupt to leave us alone
+			if (beepTicksToGo == 0)
+			{
+				uint32_t period = pwmClockFrequency/frequency;
+				// To get the maximum fundamental component, we want the dead time to be 1/6 of the period.
+				// Larger dead times reduce the volume, at the expense of generating more high harmonics.
+				uint32_t onTime = (period * volumeTable[volume - 1])/200;
+				uint16_t deadTime = period/2 - onTime;
+				pwm_channel_instance.ul_period = period;
+				pwm_channel_instance.ul_duty = period/2;
+				pwm_channel_init(PWM, &pwm_channel_instance);
+				PWM->PWM_CH_NUM[PWM_CHANNEL_0].PWM_CMR |= PWM_CMR_DTE;
+				PWM->PWM_CH_NUM[PWM_CHANNEL_0].PWM_DT = (deadTime << 16) | deadTime;
+				PWM->PWM_CH_NUM[PWM_CHANNEL_0].PWM_DTUPD = (deadTime << 16) | deadTime;
+				pwm_channel_enable(PWM, PWM_CHANNEL_0);
+				beepTicksToGo = ms;
+			}
+			inBuzzer = false;
 		}
-		inBuzzer = false;
 	}
 
 	// This is called from the tick ISR

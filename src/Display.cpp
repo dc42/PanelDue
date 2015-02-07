@@ -257,7 +257,7 @@ void FloatField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 	if (full || changed)
 	{
 		DoLabel(full, xOffset, yOffset);
-		lcd.setTranslation(".", "\x80");
+		lcd.setTranslation(".", DECIMAL_POINT);		// translate full stop to decimal point while printing numbers
 		lcd.print(val, numDecimals);
 		lcd.setTranslation(NULL, NULL);
 		if (units != NULL)

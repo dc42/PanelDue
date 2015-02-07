@@ -90,6 +90,9 @@
 // From module: Part identification macros
 #include <parts.h>
 
+// From module: RSTC - Reset Controller
+#include <rstc.h>
+
 // From module: SAM3S startup code
 #include <exceptions.h>
 
