@@ -1162,7 +1162,11 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 						}
 
 						int t = timesLeft[i];
-						if (t < 60)
+						if (t <= 0.0)
+						{
+							timesLeftText.catFrom("n/a");
+						}
+						else if (t < 60)
 						{
 							timesLeftText.scatf("%ds", t);
 						}
