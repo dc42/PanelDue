@@ -12,7 +12,9 @@
 #include "Display.hpp"
 
 // Global functions in PanelDue.cpp that are called from elsewhere
-extern void processReceivedValue(const char id[], const char val[], int index);
+extern void ProcessReceivedValue(const char id[], const char val[], int index);
+extern void StartReceivedMessage();
+extern void EndReceivedMessage();
 
 // Global data in PanelDue.cpp that is used elsewhere
 extern UTFT lcd;

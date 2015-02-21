@@ -57,55 +57,50 @@ const PixelNumber DisplayY = DISPLAY_Y;
 const PixelNumber margin = 1;
 const PixelNumber outlinePixels = 1;
 const PixelNumber fieldSpacing = 4;
+const PixelNumber statusFieldWidth = 150;
 
 const PixelNumber column1 = margin;
-const PixelNumber column2 = 72;
-const PixelNumber column3 = 146;
-const PixelNumber column4 = 208;
+const PixelNumber column2 = 72;			// current temp
+const PixelNumber column3 = 146;		// active temp
+const PixelNumber column4 = 208;		// standby temp
 const PixelNumber column5 = 270;
 
 const PixelNumber columnX = 275;
 const PixelNumber columnY = 333;
 
-const PixelNumber columnEnd = DisplayX;
-
-const PixelNumber rowCommon1 = margin;
 const PixelNumber rowHeight = 22;
-
-const PixelNumber rowTabs = DisplayY - 22 - margin;	// place at bottom of screen with a 1-pixel margin
 
 #elif DISPLAY_X >= 480
 
 const PixelNumber margin = 2;
 const PixelNumber outlinePixels = 2;
 const PixelNumber fieldSpacing = 5;
+const PixelNumber statusFieldWidth = 200;
 
 const PixelNumber column1 = margin;
-const PixelNumber column2 = 83;
-const PixelNumber column3 = 167;
-const PixelNumber column4 = 230;
-const PixelNumber column5 = 311;
+const PixelNumber column2 = 83;			// current temp
+const PixelNumber column3 = 167;		// active temp
+const PixelNumber column4 = 232;		// standby temp
+const PixelNumber column5 = 297;
 
-const PixelNumber columnX = 326;
-const PixelNumber columnY = 400;
+const PixelNumber columnX = 306;
+const PixelNumber columnY = 397;
 
-const PixelNumber columnEnd = DisplayX;
-
-const PixelNumber rowCommon1 = margin;
 const PixelNumber rowHeight = 24;
 
-const PixelNumber rowTabs = DisplayY - 22 - margin;	// place at bottom of screen with a 2-pixel margin
 
 #endif
 
-const PixelNumber rowCommon2 = rowCommon1 + rowHeight;
-const PixelNumber rowCommon3 = rowCommon2 + rowHeight;
-const PixelNumber rowCommon4 = rowCommon3 + rowHeight;
-const PixelNumber rowCommon5 = rowCommon4 + rowHeight;
-const PixelNumber rowCustom1 = rowCommon5 + rowHeight + 4;
-const PixelNumber rowCustom2 = rowCustom1 + rowHeight;
-const PixelNumber rowCustom3 = rowCustom2 + rowHeight;
-const PixelNumber rowCustom4 = rowCustom3 + rowHeight;
+const PixelNumber row1 = margin;
+const PixelNumber row2 = row1 + rowHeight;
+const PixelNumber row3 = row2 + rowHeight;
+const PixelNumber row4 = row3 + rowHeight;
+const PixelNumber row5 = row4 + rowHeight;
+const PixelNumber row6 = row5 + rowHeight + 10;				// leave a gap between the two panels
+const PixelNumber row7 = row6 + rowHeight;
+const PixelNumber row8 = row7 + rowHeight;
+const PixelNumber row9 = row8 + rowHeight;
+const PixelNumber rowTabs = DisplayY - rowHeight - margin;	// place at bottom of screen with a margin
 
 const PixelNumber xyPopupX = 3, xyPopupY = 195;
 const PixelNumber tempPopupX = 35, tempPopupY = 195;
@@ -120,6 +115,11 @@ const uint32_t numFileColumns = 2;
 const uint32_t numFileRows = (DisplayY - margin)/rowHeight - 3;
 const uint32_t numDisplayedFiles = numFileColumns * numFileRows;
 
+const uint32_t numMessageRows = (DisplayY - margin)/rowHeight - 3;
+const PixelNumber messageTimeWidth = 60;
+const PixelNumber messageTextX = margin + messageTimeWidth + 2;
+const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
+
 // Declare which fonts we will be using
 extern uint8_t glcd19x20[];
 
@@ -132,15 +132,21 @@ const Color outlineColor = green;
 const Color popupBackColour = green;
 const Color selectablePopupBackColour = UTFT::fromRGB(0, 128, 0);		// dark green
 const Color homedBackColour = UTFT::fromRGB(0, 0, 100);					// dark blue
-const Color notHomedBackColour = UTFT::fromRGB(128, 64, 9);				// orange
+const Color notHomedBackColour = UTFT::fromRGB(255, 128, 0);			// orange
+const Color pauseButtonBackColor = UTFT::fromRGB(255, 128, 0);			// orange
+const Color resumeButtonBackColor = UTFT::fromRGB(0, 200, 0);			// green but not too bright
+const Color resetButtonBackColor = red;
 
 namespace Fields
 {
 	extern void CreateFields();
 	extern void SettingsAreSaved(bool areSaved);
+	extern void ShowPauseButton();
+	extern void ShowResumeAndCancelButtons();
+	extern void HidePauseResumeCancelButtons();
 }
 
-const size_t machineNameLength = 15;
+const size_t machineNameLength = 30;
 const size_t printingFileLength = 40;
 const size_t zprobeBufLength = 12;
 const size_t generatedByTextLength = 30;
@@ -151,12 +157,12 @@ extern String<zprobeBufLength> zprobeBuf;
 extern String<generatedByTextLength> generatedByText;
 
 extern FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos, *fpHeightField, *fpLayerHeightField;
-extern IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
-extern IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
+extern IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent, *fanSpeed, *fanRpm;
+extern IntegerField *bedStandbyTemp, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
 extern ProgressBar *printProgressBar;
-extern StaticTextField *nameField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
-extern StaticTextField *filenameFields[numDisplayedFiles], *scrollFilesLeftField, *scrollFilesRightField;
-extern StaticTextField *homeFields[3], *homeAllField, *fwVersionField, *areYouSureTextField;
+extern StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
+extern StaticTextField *filenameFields[numDisplayedFiles], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
+extern StaticTextField *homeFields[3], *homeAllField, *fwVersionField, *areYouSureTextField, *timeLeftField;
 extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 extern DisplayField * null currentTab;
 extern DisplayField * null fieldBeingAdjusted;
@@ -194,6 +200,9 @@ const Event
 	evAdjustVolume = 26,
 	evYes = 27,
 	evCancel = 28,
-	evDeleteFile = 29;
+	evDeleteFile = 29,
+	evPausePrint = 30,
+	evResumePrint = 31,
+	evReset = 32;
 
 #endif /* FIELDS_H_ */

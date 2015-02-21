@@ -28,11 +28,12 @@ UTouch touch(23, 24, 22, 21, 20);
 DisplayManager mgr;
 
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
-const uint32_t printerPollTimeout = 5000;			// poll timeout in milliseconds
+const uint32_t printerPollTimeout = 8000;			// poll timeout in milliseconds
 const uint32_t touchBeepLength = 20;				// beep length in ms
 const uint32_t touchBeepFrequency = 4500;			// beep frequency in Hz. Resonant frequency of the piezo sounder is 4.5kHz.
 const uint32_t longTouchDelay = 250;				// how long we ignore new touches for after pressing Set
 const uint32_t shortTouchDelay = 100;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
+const unsigned int maxMessageChars = 100;
 
 static uint32_t lastTouchTime;
 static uint32_t ignoreTouchTime;
@@ -46,12 +47,29 @@ static bool axisHomed[3] = {false, false, false};
 static bool allAxesHomed = false;
 static int beepFrequency = 0, beepLength = 0;
 static unsigned int numHeads = 1;
+static unsigned int messageSeq = 0;
+static unsigned int newMessageSeq = 0;
 
 Vector<char, 2048> fileList;						// we use a Vector instead of a String because we store multiple null-terminated strings in it
 Vector<const char* array, 100> fileIndex;			// pointers into the individual filenames in the list
 static const char* array null currentFile = NULL;	// file whose info is displayed in the popup menu
 
 static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
+
+struct Message
+{
+	static const size_t rttLen = 5;					// number of chars we print for the message age
+	uint32_t receivedTime;
+	char receivedTimeText[rttLen];					// 5 characters plus null terminator
+	char msg[maxMessageChars];
+};
+
+static Message messages[numMessageRows + 1];		// one extra slor for receiving bew messages into
+static unsigned int messageStartRow = 0;			// the row number at the top
+static unsigned int newMessageStartRow = 0;			// the row number that we put a new message in
+
+static int timesLeft[3];
+static String<50> timesLeftText;
 
 struct FlashData
 {
@@ -84,14 +102,68 @@ FlashData nvData, savedNvData;
 
 enum PrinterStatus
 {
-	psUnknown = 0,
+	psJustBooted = 0,
 	psIdle = 1,
 	psPrinting = 2,
 	psStopped = 3,
-	psConfiguring = 4
+	psConfiguring = 4,
+	psPaused = 5,
+	psBusy = 6,
+	psPausing = 7,
+	psResuming = 8
 };
 
-static PrinterStatus status = psUnknown;
+// Map of the above status codes to text. The space at the end improves the appearance.
+const char *statusText[] =
+{
+	"",
+	"Idle ",
+	"Printing ",
+	"Halted (needs reset)",
+	"Starting up ",
+	"Paused ",
+	"Busy ",
+	"Pausing ",
+	"Resuming "
+};
+
+static PrinterStatus status = psJustBooted;
+
+enum ReceivedDataEvent
+{
+	rcvUnknown = 0,
+	rcvActive,
+	rcvEfactor,
+	rcvFilament,
+	rcvFiles,
+	rcvHeaters,
+	rcvHomed,
+	rcvHstat,
+	rcvPos,
+	rcvStandby,
+	rcvBeepFreq,
+	rcvBeepLength,
+	rcvFilename,
+	rcvFraction,
+	rcvGeneratedBy,
+	rcvGeometry,
+	rcvHeight,
+	rcvLayerHeight,
+	rcvMyName,
+	rcvProbe,
+	rcvResponse,
+	rcvSeq,
+	rcvSfactor,
+	rcvSize,
+	rcvStatus,
+	rcvTimesLeft
+};
+
+struct ReceiveDataTableEntry
+{
+	ReceivedDataEvent rde;
+	const char* varName;
+};
 
 static Event eventToConfirm = nullEvent;
 
@@ -126,21 +198,25 @@ void FlashData::SetDefaults()
 	magic = magicVal;
 }
 
+// Load parameters from flash memory
 void FlashData::Load()
 {
 	FlashStorage::read(0, &nvData, sizeof(nvData));
 }
 
+// Save parameters to flash memory
 void FlashData::Save() const
 {
 	FlashStorage::write(0, this, sizeof(*this));
 }
 
+// Return true if the second string is alphabetically greater then the first, case insensitive
 bool StringGreaterThan(const char* a, const char* b)
 {
 	return stricmp(a, b) > 0;
 }
 
+// Refresh the list of files on the Files tab
 void RefreshFileList()
 {
 	// 1. Sort the file list
@@ -173,6 +249,30 @@ void RefreshFileList()
 			f->SetEvent(nullEvent, 0);
 		}
 	}
+}
+
+// Search a table for a matching string
+ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numElems, const char* key)
+{
+	size_t low = 0u, high = numElems;
+	while (high > low)
+	{
+		const size_t mid = (high - low)/2 + low;
+		const int t = stricmp(key, table[mid].varName);
+		if (t == 0)
+		{
+			return table[mid].rde;
+		}
+		if (t > 0)
+		{
+			low = mid + 1u;
+		}
+		else
+		{
+			high = mid;
+		}
+	}
+	return (stricmp(key, table[low].varName) == 0) ? table[low].rde : rcvUnknown;
 }
 
 void ChangeTab(DisplayField *newTab)
@@ -474,7 +574,7 @@ void ProcessTouch(DisplayField *f)
 			SerialIo::SendString("M23 ");
 			SerialIo::SendString(currentFile);
 			SerialIo::SendString("\nM24\n");
-			printingFile.copyFrom(currentFile);
+			printingFile.CopyFrom(currentFile);
 			currentFile = NULL;							// allow the file list to be updated
 			ChangeTab(tabPrint);
 		}
@@ -490,6 +590,9 @@ void ProcessTouch(DisplayField *f)
 		break;
 
 	case evSendCommand:
+	case evPausePrint:
+	case evResumePrint:
+	case evReset:
 		SerialIo::SendString(f->GetSParam());
 		SerialIo::SendChar('\n');
 		break;
@@ -581,6 +684,7 @@ void ProcessTouchOutsidePopup()
 	case evZPos:
 	case evSetBaudRate:
 	case evSetVolume:
+	case evAdjustPercent:
 		mgr.RemoveOutline(fieldBeingAdjusted, outlinePixels);
 		mgr.SetPopup(NULL);
 		fieldBeingAdjusted = NULL;
@@ -600,8 +704,171 @@ void UpdateField(IntegerField *f, int val)
 	}
 }
 
-// Try to get an integer value from a string. if it is actually a floating point value, round it.
-bool getInteger(const char s[], int &rslt)
+// Update the messages on the message tab. If 'all' is true we do the times and the text, else we just do the times.
+void UpdateMessages(bool all)
+{
+	size_t index = messageStartRow;
+	for (size_t i = 0; i < numMessageRows; ++i)
+	{
+		Message *m = &messages[index];
+		uint32_t tim = m->receivedTime;
+		char* p = m->receivedTimeText;
+		if (tim == 0)
+		{
+			p[0] = 0;
+		}
+		else
+		{
+			uint32_t age = (GetTickCount() - tim)/1000;	// age of message in seconds
+			if (age < 10 * 60)
+			{
+				snprintf(p, Message::rttLen, "%lum%02lu", age/60, age%60);
+			}
+			else
+			{
+				age /= 60;		// convert to minutes
+				if (age < 60)
+				{
+					snprintf(p, Message::rttLen, "%lum", age);
+				}
+				else if (age < 10 * 60)
+				{
+					snprintf(p, Message::rttLen, "%luh%02lu", age/60, age%60);
+				}
+				else
+				{
+					age /= 60;	// convert to hours
+					if (age < 10)
+					{
+						snprintf(p, Message::rttLen, "%luh", age);
+					}
+					else if (age < 24 + 10)
+					{
+						snprintf(p, Message::rttLen, "%lud%02lu", age/24, age%24);
+					}
+					else
+					{
+						snprintf(p, Message::rttLen, "%lud", age/24);
+					}
+				}
+			}
+			messageTimeFields[i]->SetValue(p);			
+		}
+		if (all)
+		{
+			messageTextFields[i]->SetValue(m->msg);		
+		}
+		index = (index == numMessageRows) ? 0 : index + 1;
+	}
+}
+
+void AppendMessage(const char* data)
+{
+	newMessageStartRow = (messageStartRow == 0) ? numMessageRows : messageStartRow - 1;
+	safeStrncpy(messages[newMessageStartRow].msg, data, maxMessageChars);
+	messages[newMessageStartRow].receivedTime = GetTickCount();
+}
+
+void DisplayNewMessage()
+{
+	if (newMessageStartRow != messageStartRow)
+	{
+		messageStartRow = newMessageStartRow;
+		UpdateMessages(true);
+	}
+}
+
+void UpdatePrintingFields()
+{
+	if (status == psPrinting)
+	{
+		Fields::ShowPauseButton();
+	}
+	else if (status == psPaused)
+	{
+		Fields::ShowResumeAndCancelButtons();
+	}
+	else
+	{
+		Fields::HidePauseResumeCancelButtons();
+	}
+	
+	bool showPrintProgress = (status == psPrinting || status == psPaused || status == psPausing || status == psResuming);
+	mgr.Show(printProgressBar, showPrintProgress);
+	mgr.Show(printingField, showPrintProgress);
+
+	// Don't enable the time left field when we start printing, instead this will get enabled when we receive a suitable message
+	if (!showPrintProgress)
+	{
+		mgr.Show(timeLeftField, false);	
+	}
+	
+	statusField->SetValue(statusText[status]);
+}
+
+void SetStatus(char c)
+{
+	PrinterStatus newStatus;
+	switch(c)
+	{
+	case 'A':
+		newStatus = psPaused;
+		break;
+	case 'B':
+		newStatus = psBusy;
+		break;
+	case 'C':
+		newStatus = psConfiguring;
+		break;
+	case 'D':
+		newStatus = psPausing;
+		break;
+	case 'I':
+		newStatus = psIdle;
+		break;
+	case 'P':
+		newStatus = psPrinting;
+		break;
+	case 'R':
+		newStatus = psResuming;
+		break;
+	case 'S':
+		newStatus = psStopped;
+		break;
+	default:
+		newStatus = status;		// leave the status alone if we don't recognise it
+		break;
+	}
+	
+	if (newStatus != status)
+	{
+		switch (newStatus)
+		{
+		case psPrinting:
+			if (status != psPaused && status != psResuming)
+			{
+				// Starting a new print, so clear the times
+				timesLeft[0] = timesLeft[1] = timesLeft[2] = 0;			
+			}
+			break;
+			
+		default:
+			break;
+		}
+		
+		if (status == psConfiguring || (status == psJustBooted && newStatus != psConfiguring))
+		{
+			AppendMessage("Connected");
+			DisplayNewMessage();
+		}
+	
+		status = newStatus;
+		UpdatePrintingFields();
+	}
+}
+
+// Try to get an integer value from a string. If it is actually a floating point value, round it.
+bool GetInteger(const char s[], int &rslt)
 {
 	if (s[0] == 0) return false;			// empty string
 	char* endptr;
@@ -616,8 +883,17 @@ bool getInteger(const char s[], int &rslt)
 	return false;
 }
 
+// Try to get an unsigned integer value from a string
+bool GetUnsignedInteger(const char s[], unsigned int &rslt)
+{
+	if (s[0] == 0) return false;			// empty string
+	char* endptr;
+	rslt = (int) strtoul(s, &endptr, 10);
+	return (*endptr == 0);
+}
+
 // Try to get a floating point value from a string. if it is actually a floating point value, round it.
-bool getFloat(const char s[], float &rslt)
+bool GetFloat(const char s[], float &rslt)
 {
 	if (s[0] == 0) return false;			// empty string
 	char* endptr;
@@ -625,327 +901,413 @@ bool getFloat(const char s[], float &rslt)
 	return *endptr == 0;					// we parsed an integer
 }
 
+// These tables must be kept in alphabetical order
+const ReceiveDataTableEntry arrayDataTable[] =
+{
+	rcvActive,		"active",
+	rcvEfactor,		"efactor",
+	rcvFilament,	"filament",
+	rcvFiles,		"files",
+	rcvHeaters,		"heaters",
+	rcvHomed,		"homed",
+	rcvHstat,		"hstat",
+	rcvPos,			"pos",
+	rcvStandby,		"standby",
+	rcvTimesLeft,	"timesLeft"
+};
+
+const ReceiveDataTableEntry nonArrayDataTable[] =
+{
+	rcvBeepFreq,	"beep_freq",
+	rcvBeepLength,	"beep_length",
+	rcvFilename,	"filename",
+	rcvFraction,	"fraction_printed",
+	rcvGeneratedBy,	"generatedBy",
+	rcvGeometry,	"geometry",
+	rcvHeight,		"height",
+	rcvLayerHeight,	"layerHeight",
+	rcvMyName,		"myName",
+	rcvProbe,		"probe",
+	rcvResponse,	"resp",
+	rcvSeq,			"seq",
+	rcvSfactor,		"sfactor",
+	rcvSize,		"size",
+	rcvStatus,		"status"
+};
+
+void StartReceivedMessage()
+{
+	newMessageSeq = messageSeq;
+	newMessageStartRow = messageStartRow;
+}
+
+void EndReceivedMessage()
+{
+	if (newMessageSeq != messageSeq && newMessageStartRow != messageStartRow)
+	{
+		messageSeq = newMessageSeq;
+		DisplayNewMessage();
+	}
+}
+
 // Public functions called by the SerialIo module
-extern void processReceivedValue(const char id[], const char data[], int index)
+void ProcessReceivedValue(const char id[], const char data[], int index)
 {
 	if (index >= 0)			// if this is an element of an array
 	{
-		if (strcmp(id, "active") == 0)
+		switch(bsearch(arrayDataTable, sizeof(arrayDataTable)/sizeof(arrayDataTable[0]), id))
 		{
-			int ival;
-			if (getInteger(data, ival))
+		case rcvActive:
 			{
-				switch(index)
+				int ival;
+				if (GetInteger(data, ival))
 				{
-				case 0:
-					UpdateField(bedActiveTemp, ival);
-					break;
-				case 1:
-					UpdateField(t1ActiveTemp, ival);
-					break;
-				case 2:
-					UpdateField(t2ActiveTemp, ival);
-					break;
-				default:
-					break;
-				}
-			}
-		}
-		else if (strcmp(id, "standby") == 0)
-		{
-			int ival;
-			if (getInteger(data, ival))
-			{
-				switch(index)
-				{
-				case 0:
-					UpdateField(bedStandbyTemp, ival);
-					break;
-				case 1:
-					UpdateField(t1StandbyTemp, ival);
-					break;
-				case 2:
-					UpdateField(t2StandbyTemp, ival);
-					break;
-				default:
-					break;
-				}
-			}
-		}
-		else if (strcmp(id, "heaters") == 0)
-		{
-			float fval;
-			if (getFloat(data, fval))
-			{
-				switch(index)
-				{
-				case 0:
-					bedCurrentTemp->SetValue(fval);
-					break;
-				case 1:
-					t1CurrentTemp->SetValue(fval);
-					break;
-				case 2:
-					t2CurrentTemp->SetValue(fval);
-					if (numHeads == 1)
+					switch(index)
 					{
-						mgr.Show(t2CurrentTemp, true);
-						mgr.Show(t2ActiveTemp, true);
-						mgr.Show(t2StandbyTemp, true);
-						++numHeads;
+					case 0:
+						UpdateField(bedActiveTemp, ival);
+						break;
+					case 1:
+						UpdateField(t1ActiveTemp, ival);
+						break;
+					case 2:
+						UpdateField(t2ActiveTemp, ival);
+						break;
+					default:
+						break;
 					}
-					break;
-				default:
-					break;
 				}
 			}
-		}
-		else if (strcmp(id, "hstat") == 0)
-		{
-			int ival;
-			if (getInteger(data, ival) && index >= 0 && index < (int)numHeaters)
+			break;
+
+		case rcvHeaters:
 			{
-				heaterStatus[index] = ival;
-				Color c = (ival == 1) ? standbyBackColor : (ival == 2) ? activeBackColor : (ival == 3) ? errorBackColour : defaultBackColor;
-				switch(index)
+				float fval;
+				if (GetFloat(data, fval))
 				{
-				case 0:
-					bedCurrentTemp->SetColours(white, c);
-					break;
-				case 1:
-					t1CurrentTemp->SetColours(white, c);
-					break;
-				case 2:
-					t2CurrentTemp->SetColours(white, c);
-					break;
-				default:
-					break;
+					switch(index)
+					{
+					case 0:
+						bedCurrentTemp->SetValue(fval);
+						break;
+					case 1:
+						t1CurrentTemp->SetValue(fval);
+						break;
+					case 2:
+						t2CurrentTemp->SetValue(fval);
+						if (numHeads == 1)
+						{
+							mgr.Show(t2CurrentTemp, true);
+							mgr.Show(t2ActiveTemp, true);
+							mgr.Show(t2StandbyTemp, true);
+							++numHeads;
+						}
+						break;
+					default:
+						break;
+					}
 				}
 			}
-		}
-		else if (strcmp(id, "pos") == 0)
-		{
-			float fval;
-			if (getFloat(data, fval))
+			break;
+
+		case rcvHstat:
 			{
-				switch(index)
+				int ival;
+				if (GetInteger(data, ival) && index >= 0 && index < (int)numHeaters)
 				{
-				case 0:
-					xPos->SetValue(fval);
-					break;
-				case 1:
-					yPos->SetValue(fval);
-					break;
-				case 2:
-					zPos->SetValue(fval);
-					break;
-				default:
-					break;
+					heaterStatus[index] = ival;
+					Color c = (ival == 1) ? standbyBackColor : (ival == 2) ? activeBackColor : (ival == 3) ? errorBackColour : defaultBackColor;
+					switch(index)
+					{
+						case 0:
+						bedCurrentTemp->SetColours(white, c);
+						break;
+						case 1:
+						t1CurrentTemp->SetColours(white, c);
+						break;
+						case 2:
+						t2CurrentTemp->SetColours(white, c);
+						break;
+						default:
+						break;
+					}
 				}
 			}
-		}
-		else if (strcmp(id, "efactor") == 0)
-		{
-			int ival;
-			if (getInteger(data, ival))
+			break;
+			
+		case rcvPos:
 			{
-				switch(index)
+				float fval;
+				if (GetFloat(data, fval))
 				{
-				case 0:
-					UpdateField(e1Percent, ival);
-					break;
-				case 1:
-					UpdateField(e2Percent, ival);
-					break;
-				default:
-					break;	
+					switch(index)
+					{
+						case 0:
+						xPos->SetValue(fval);
+						break;
+						case 1:
+						yPos->SetValue(fval);
+						break;
+						case 2:
+						zPos->SetValue(fval);
+						break;
+						default:
+						break;
+					}
 				}
 			}
-		}
-		else if (strcmp(id, "files") == 0)
-		{
-			static bool fileListLocked = false;
-			if (index == 0)
+			break;
+		
+		case rcvEfactor:
 			{
-				if (currentFile == NULL)
+				int ival;
+				if (GetInteger(data, ival))
 				{
-					fileList.clear();
-					fileIndex.clear();
+					switch(index)
+					{
+						case 0:
+						UpdateField(e1Percent, ival);
+						break;
+						case 1:
+						UpdateField(e2Percent, ival);
+						break;
+						default:
+						break;
+					}
+				}
+			}
+			break;
+		
+		case rcvFiles:
+			{
+				static bool fileListLocked = false;
+				if (index == 0)
+				{
+					if (currentFile == NULL)
+					{
+						fileList.clear();
+						fileIndex.clear();
+						fileListChanged = true;
+						fileListLocked = false;
+					}
+					else				// don't destroy the file list if we are using a pointer into it
+					{
+						fileListLocked = true;
+					}
+				}
+				if (!fileListLocked)
+				{
+					size_t len = strlen(data) + 1;		// we are going to copy the null terminator as well
+					if (len + fileList.size() <= fileList.capacity() && fileIndex.size() < fileIndex.capacity())
+					{
+						fileIndex.add(fileList.c_ptr() + fileList.size());
+						fileList.add(data, len);
+					}
 					fileListChanged = true;
-					fileListLocked = false;
-				}
-				else				// don't destroy the file list if we are using a pointer into it
-				{
-					fileListLocked = true;
 				}
 			}
-			if (!fileListLocked)
+			break;
+		
+		case rcvFilament:
 			{
-				size_t len = strlen(data) + 1;		// we are going to copy the null terminator as well
-				if (len + fileList.size() <= fileList.capacity() && fileIndex.size() < fileIndex.capacity())
+				static float totalFilament = 0.0;
+				if (index == 0)
 				{
-					fileIndex.add(fileList.c_ptr() + fileList.size());
-					fileList.add(data, len);
+					totalFilament = 0.0;
 				}
-				fileListChanged = true;
-			}
-		}
-		else if (strcmp(id, "filament") == 0)
-		{
-			static float totalFilament = 0.0;
-			if (index == 0)
-			{
-				totalFilament = 0.0;
-			}
-			float f;
-			if (getFloat(data, f))
-			{
-				totalFilament += f;
-				fpFilamentField->SetValue((int)totalFilament);
-			}
-		}
-		else if (strcmp(id, "homed") == 0)
-		{
-			int ival;
-			if (index < 3 && getInteger(data, ival) && ival >= 0 && ival < 2) 
-			{
-				bool isHomed = (ival == 1);
-				if (isHomed != axisHomed[index])
+				float f;
+				if (GetFloat(data, f))
 				{
-					axisHomed[index] = isHomed;
-					homeFields[index]->SetColours(white, (isHomed) ? homedBackColour : notHomedBackColour);
-					bool allHomed = axisHomed[0] && axisHomed[1] && axisHomed[2];
-					if (allHomed != allAxesHomed)
+					totalFilament += f;
+					fpFilamentField->SetValue((int)totalFilament);
+				}
+			}
+			break;
+		
+		case rcvHomed:
+			{
+				int ival;
+				if (index < 3 && GetInteger(data, ival) && ival >= 0 && ival < 2)
+				{
+					bool isHomed = (ival == 1);
+					if (isHomed != axisHomed[index])
 					{
-						allAxesHomed = allHomed;
-						homeAllField->SetColours(white, (allAxesHomed) ? homedBackColour : notHomedBackColour);
+						axisHomed[index] = isHomed;
+						homeFields[index]->SetColours(white, (isHomed) ? homedBackColour : notHomedBackColour);
+						bool allHomed = axisHomed[0] && axisHomed[1] && axisHomed[2];
+						if (allHomed != allAxesHomed)
+						{
+							allAxesHomed = allHomed;
+							homeAllField->SetColours(white, (allAxesHomed) ? homedBackColour : notHomedBackColour);
+						}
 					}
 				}
 			}
-		}
-	}
-	
-	// Non-array values follow
-	else if (strcmp(id, "sfactor") == 0)
-	{
-		int ival;
-		if (getInteger(data, ival))
-		{
-			UpdateField(spd, ival);
-		}
-	}
-	else if (strcmp(id, "probe") == 0)
-	{
-		zprobeBuf.copyFrom(data);
-		zProbe->SetChanged();
-	}
-	else if (strcmp(id, "myName") == 0)
-	{
-		if (status != psConfiguring && status != psUnknown)
-		{
-			machineName.copyFrom(data);
-			nameField->SetChanged();
-			gotMachineName = true;		
-		}
-	}
-	else if (strcmp(id, "fileName") == 0)
-	{
-		printingFile.copyFrom(data);
-		printingField->SetChanged();
-	}
-	else if (strcmp(id, "size") == 0)
-	{
-		int sz;
-		if (getInteger(data, sz))
-		{
-			fpSizeField->SetValue(sz);
-		}
-	}
-	else if (strcmp(id, "height") == 0)
-	{
-		float f;
-		if (getFloat(data, f))
-		{
-			fpHeightField->SetValue(f);
-		}		
-	}
-	else if (strcmp(id, "layerHeight") == 0)
-	{
-		float f;
-		if (getFloat(data, f))
-		{
-			fpLayerHeightField->SetValue(f);
-		}	
-	}
-	else if (strcmp(id, "generatedBy") == 0)
-	{
-		generatedByText.copyFrom(data);
-		fpGeneratedByField->SetChanged();
-	}
-	else if (strcmp(id, "fraction_printed") == 0)
-	{
-		float f;
-		if (getFloat(data, f))
-		{
-			if (f >= 0.0 && f <= 1.0)
+			break;
+		
+		case rcvTimesLeft:
+			if (index < 3)
 			{
-				printProgressBar->SetPercent((uint8_t)((100.0 * f) + 0.5));
+				int i;
+				bool b = GetInteger(data, i);
+				if (b && i >= 0 && i < 200 * 60 && (status == psPrinting || status == psPaused))
+				{
+					timesLeft[index] = i;
+					timesLeftText.CopyFrom("Est. time left ");
+					for (size_t i = 0; i < 3; ++i)
+					{
+						if (i != 0)
+						{
+							timesLeftText.catFrom(", ");
+						}
+
+						int t = timesLeft[i];
+						if (t < 60)
+						{
+							timesLeftText.scatf("%ds", t);
+						}
+						else if (t < 60 * 60)
+						{
+							timesLeftText.scatf("%dm %02ds", t/60, t%60);
+						}
+						else
+						{
+							t /= 60;
+							timesLeftText.scatf("%dh %02dm", t/60, t%60); 
+						}					
+					}
+
+					timeLeftField->SetValue(timesLeftText.c_str());
+					mgr.Show(timeLeftField, true);
+				}
 			}
-		}
-	}
-	else if (strcmp(id, "status") == 0)
-	{
-		switch(data[0])
-		{
-		case 'C':
-			status = psConfiguring;
-			mgr.Show(printProgressBar, false);
-			mgr.Show(printingField, false);
 			break;
-		case 'P':
-			status = psPrinting;
-			mgr.Show(printProgressBar, true);
-			mgr.Show(printingField, true);
-			break;
-		case 'I':
-			status = psIdle;
-			mgr.Show(printProgressBar, false);
-			mgr.Show(printingField, false);
-			break;
-		case 'S':
-			status = psStopped;
-			mgr.Show(printProgressBar, false);
-			mgr.Show(printingField, false);
-			break;
+
 		default:
-			status = psUnknown;
 			break;
 		}
 	}
-	else if (strcmp(id, "beep_freq") == 0)
+	else
 	{
-		getInteger(data, beepFrequency);
-	}
-	else if (strcmp(id, "beep_length") == 0)
-	{
-		getInteger(data, beepLength);
-	}
-	else if (strcmp(id, "geometry") == 0)
-	{
-		if (status != psConfiguring && status != psUnknown)
+		// Non-array values follow
+		switch(bsearch(nonArrayDataTable, sizeof(nonArrayDataTable)/sizeof(nonArrayDataTable[0]), id))
 		{
-			isDelta = (strcmp(data, "delta") == 0);
-			gotGeometry = true;
-			for (size_t i = 0; i < 3; ++i)
+		case rcvSfactor:
 			{
-				mgr.Show(homeFields[i], !isDelta);
+				int ival;
+				if (GetInteger(data, ival))
+				{
+					UpdateField(spd, ival);
+				}
 			}
+			break;
+		case rcvProbe:
+			zprobeBuf.CopyFrom(data);
+			zProbe->SetChanged();
+			break;
+		
+		case rcvMyName:
+			if (status != psConfiguring && status != psJustBooted)
+			{
+				machineName.CopyFrom(data);
+				nameField->SetChanged();
+				gotMachineName = true;
+			}
+			break;
+		
+		case rcvFilename:
+			printingFile.CopyFrom(data);
+			printingField->SetChanged();
+			break;
+		
+		case rcvSize:
+			{
+				int sz;
+				if (GetInteger(data, sz))
+				{
+					fpSizeField->SetValue(sz);
+				}
+			}
+			break;
+		
+		case rcvHeight:
+			{
+				float f;
+				if (GetFloat(data, f))
+				{
+					fpHeightField->SetValue(f);
+				}
+			}
+			break;
+		
+		case rcvLayerHeight:
+			{
+				float f;
+				if (GetFloat(data, f))
+				{
+					fpLayerHeightField->SetValue(f);
+				}
+			}
+			break;
+		
+		case rcvGeneratedBy:
+			generatedByText.CopyFrom(data);
+			fpGeneratedByField->SetChanged();
+			break;
+		
+		case rcvFraction:
+			{
+				float f;
+				if (GetFloat(data, f))
+				{
+					if (f >= 0.0 && f <= 1.0)
+					{
+						printProgressBar->SetPercent((uint8_t)((100.0 * f) + 0.5));
+					}
+				}
+			}
+			break;
+		
+		case rcvStatus:
+			SetStatus(data[0]);
+			break;
+		
+		case rcvBeepFreq:
+			GetInteger(data, beepFrequency);
+			break;
+		
+		case rcvBeepLength:
+			GetInteger(data, beepLength);
+			break;
+		
+		case rcvGeometry:
+			if (status != psConfiguring && status != psJustBooted)
+			{
+				isDelta = (strcmp(data, "delta") == 0);
+				gotGeometry = true;
+				for (size_t i = 0; i < 3; ++i)
+				{
+					mgr.Show(homeFields[i], !isDelta);
+				}
+			}
+			break;
+		
+		case rcvSeq:
+			GetUnsignedInteger(data, newMessageSeq);
+			break;
+		
+		case rcvResponse:
+			AppendMessage(data);
+			break;
+		
+		default:
+			break;
 		}
 	}
 }
 
 // Update those fields that display debug information
-void updateDebugInfo()
+void UpdateDebugInfo()
 {
 	freeMem->SetValue(getFreeMemory());
 }
@@ -1000,7 +1362,7 @@ int main(void)
 	// On prototype boards we need to turn the backlight on
 	BacklightPort.setMode(OneBitPort::Output);
 	BacklightPort.setHigh();
-
+	
 	// Read parameters from flash memory
 	nvData.Load();
 	if (nvData.Valid())
@@ -1021,8 +1383,18 @@ int main(void)
 		CheckSettingsAreSaved();
 	}
 	
+	// Set up the baud rate
 	SerialIo::Init(nvData.baudRate);
 	baudRateField->SetValue(nvData.baudRate);
+
+	// Clear the message log
+	for (size_t i = 0; i <= numMessageRows; ++i)	// note we have numMessageRows+1 message slots
+	{
+		messages[i].receivedTime = 0;
+		messages[i].msg[0] = 0;
+	}
+	UpdateMessages(true);
+	UpdatePrintingFields();
 
 	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
 	
@@ -1047,6 +1419,12 @@ int main(void)
 		{
 			RefreshFileList();
 			fileListChanged = false;
+		}
+		
+		// 2a. if displaying the message log, update the times
+		if (currentTab == tabMsg)
+		{
+			UpdateMessages(false);
 		}
 		
 		// 3. Check for a touch on the touch panel.
@@ -1081,7 +1459,7 @@ int main(void)
 		}
 		
 		// 4. Refresh the display
-		updateDebugInfo();
+		UpdateDebugInfo();
 		mgr.RefreshAll(false);
 		
 		// 5. Generate a beep if asked to
@@ -1105,7 +1483,9 @@ int main(void)
 		   )
 		{
 			lastPollTime += printerPollInterval;
-			SerialIo::SendString((gotMachineName) ? "M105 S2\n" : "M105 S3\n");
+			SerialIo::SendString((gotMachineName) ? "M105 S2 R" : "M105 S3 R");
+			SerialIo::SendInt(messageSeq);
+			SerialIo::SendChar('\n');
 		}
 	}
 }

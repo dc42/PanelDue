@@ -13,12 +13,13 @@
 #include "Fields.hpp"
 
 FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos, *fpHeightField, *fpLayerHeightField;
-IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent;
-IntegerField *bedStandbyTemp, /* *fanRPM,*/ *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
+IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent, *fanSpeed, *fanRpm;
+IntegerField *bedStandbyTemp, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
 ProgressBar *printProgressBar;
-StaticTextField *nameField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
-StaticTextField *filenameFields[numDisplayedFiles], *scrollFilesLeftField, *scrollFilesRightField;
+StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
+StaticTextField *filenameFields[numDisplayedFiles], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
 StaticTextField *homeFields[3], *homeAllField, *fwVersionField, *settingsNotSavedField, *areYouSureTextField;
+StaticTextField *pauseButtonField, *resumeButtonField, *resetButtonField, *timeLeftField;
 DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 DisplayField * null currentTab = NULL;
 DisplayField * null fieldBeingAdjusted = NULL;
@@ -80,7 +81,7 @@ namespace Fields
 		mgr.Init(defaultBackColor);
 		DisplayField::SetDefaultFont(glcd19x20);
 	
-		// Create the fields that are always displayed
+		// Create the fields that are displayed on more than one page
 		DisplayField::SetDefaultColours(white, selectableBackColor);
 		tabControl = AddCommandCell(rowTabs, 0, 5, "Control", evTabControl, nullptr);
 		tabPrint = AddCommandCell(rowTabs, 1, 5, "Print", evTabPrint, nullptr);
@@ -92,26 +93,27 @@ namespace Fields
 	
 		DisplayField::SetDefaultColours(white, red);
 	
-		mgr.AddField(nameField = new StaticTextField(rowCommon1, 0, lcd.getDisplayXSize(), Centre, machineName.c_str()));
+		mgr.AddField(nameField = new StaticTextField(row1, 0, DisplayX - statusFieldWidth, Centre, machineName.c_str()));
+		mgr.AddField(statusField = new StaticTextField(row1, DisplayX - statusFieldWidth, statusFieldWidth, Right, ""));
 		DisplayField::SetDefaultColours(white, defaultBackColor);
 	
-		mgr.AddField(new StaticTextField(rowCommon2, column2, column3 - column2 - fieldSpacing, Left, "Current"));
-		mgr.AddField(new StaticTextField(rowCommon2, column3, column4 - column3 - fieldSpacing, Left, "Active"));
-		mgr.AddField(new StaticTextField(rowCommon2, column4, column5 - column4 - fieldSpacing, Left, "Standby"));
+		mgr.AddField(new StaticTextField(row2, column2, column3 - column2 - fieldSpacing, Left, "Current"));
+		mgr.AddField(new StaticTextField(row2, column3, column4 - column3 - fieldSpacing, Left, "Active"));
+		mgr.AddField(new StaticTextField(row2, column4, column5 - column4 - fieldSpacing, Left, "Idle"));
 
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(head1State = new StaticTextField(rowCommon3, column1, column2 - column1 - fieldSpacing, Left, THIN_SPACE "Head 1"));
-		mgr.AddField(head2State = new StaticTextField(rowCommon4, column1, column2 - column1 - fieldSpacing, Left, THIN_SPACE "Head 2"));
-		mgr.AddField(bedState = new StaticTextField(rowCommon5, column1, column2 - column1 - fieldSpacing, Left, THIN_SPACE "Bed"));
+		mgr.AddField(head1State = new StaticTextField(row3, column1, column2 - column1 - fieldSpacing, Left, THIN_SPACE "Head 1"));
+		mgr.AddField(head2State = new StaticTextField(row4, column1, column2 - column1 - fieldSpacing, Left, THIN_SPACE "Head 2"));
+		mgr.AddField(bedState = new StaticTextField(row5, column1, column2 - column1 - fieldSpacing, Left, THIN_SPACE "Bed"));
 		head1State->SetEvent(evSelectHead, 1);
 		head2State->SetEvent(evSelectHead, 2);
 		bedState->SetEvent(evSelectHead, 0);
 
-		mgr.AddField(t1ActiveTemp = new IntegerField(rowCommon3, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
-		mgr.AddField(t1StandbyTemp = new IntegerField(rowCommon3, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
-		mgr.AddField(t2ActiveTemp = new IntegerField(rowCommon4, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
-		mgr.AddField(t2StandbyTemp = new IntegerField(rowCommon4, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
-		mgr.AddField(bedActiveTemp = new IntegerField(rowCommon5, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
+		mgr.AddField(t1ActiveTemp = new IntegerField(row3, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
+		mgr.AddField(t1StandbyTemp = new IntegerField(row3, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
+		mgr.AddField(t2ActiveTemp = new IntegerField(row4, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
+		mgr.AddField(t2StandbyTemp = new IntegerField(row4, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
+		mgr.AddField(bedActiveTemp = new IntegerField(row5, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
 		t1ActiveTemp->SetEvent(evAdjustTemp, "G10 P1 S");
 		t1StandbyTemp->SetEvent(evAdjustTemp, "G10 P1 R");
 		t2ActiveTemp->SetEvent(evAdjustTemp, "G10 P2 S");
@@ -119,83 +121,111 @@ namespace Fields
 		bedActiveTemp->SetEvent(evAdjustTemp, "M140 S");
 
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(t1CurrentTemp = new FloatField(rowCommon3, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
-		mgr.AddField(t2CurrentTemp = new FloatField(rowCommon4, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
+		mgr.AddField(t1CurrentTemp = new FloatField(row3, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
+		mgr.AddField(t2CurrentTemp = new FloatField(row4, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
 
-		mgr.AddField(bedCurrentTemp = new FloatField(rowCommon5, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
-		mgr.AddField(bedStandbyTemp = new IntegerField(rowCommon5, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
+		mgr.AddField(bedCurrentTemp = new FloatField(row5, column2, column3 - column2 - fieldSpacing, NULL, 1, DEGREE_SYMBOL "C"));
+		mgr.AddField(bedStandbyTemp = new IntegerField(row5, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
 
-		mgr.AddField(new StaticTextField(rowCommon2, columnX, columnY - columnX - fieldSpacing, Left, "X"));
-		mgr.AddField(new StaticTextField(rowCommon2, columnY, columnEnd - columnY - fieldSpacing, Left, "Y"));
-		mgr.AddField(new StaticTextField(rowCommon4, columnX, columnY - columnX - fieldSpacing, Left, "Z"));
-		mgr.AddField(new StaticTextField(rowCommon4, columnY, columnEnd - columnY - fieldSpacing, Left, "Probe"));
+		commonRoot = mgr.GetRoot();		// save the root of fields that we display on more than one page
+		
+		// Create the extra fields for the Control tab
+		mgr.AddField(new StaticTextField(row2, columnX, columnY - columnX - fieldSpacing, Left, "X"));
+		mgr.AddField(new StaticTextField(row2, columnY, DisplayX - columnY - margin, Left, "Y"));
+		mgr.AddField(new StaticTextField(row4, columnX, columnY - columnX - fieldSpacing, Left, "Z"));
+		mgr.AddField(new StaticTextField(row4, columnY, DisplayX - columnY - margin, Left, "Probe"));
 
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(xPos = new FloatField(rowCommon3, columnX, columnY - columnX - fieldSpacing, NULL, 1));
-		mgr.AddField(yPos = new FloatField(rowCommon3, columnY, columnEnd - columnY - fieldSpacing, NULL, 1));
-		mgr.AddField(zPos = new FloatField(rowCommon5, columnX, columnY - columnX - fieldSpacing, NULL, 2));
+		mgr.AddField(xPos = new FloatField(row3, columnX, columnY - columnX - fieldSpacing, NULL, 1));
+		mgr.AddField(yPos = new FloatField(row3, columnY, DisplayX - columnY - margin, NULL, 1));
+		mgr.AddField(zPos = new FloatField(row5, columnX, columnY - columnX - fieldSpacing, NULL, 2));
 		xPos->SetEvent(evXYPos, "G1 X");
 		yPos->SetEvent(evXYPos, "G1 Y");
 		zPos->SetEvent(evZPos, "G1 Z");
 
 		zprobeBuf[0] = 0;
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(zProbe = new TextField(rowCommon5, columnY, columnEnd - columnY - fieldSpacing, NULL, zprobeBuf.c_str()));
+		mgr.AddField(zProbe = new TextField(row5, columnY, DisplayX - columnY - margin, NULL, zprobeBuf.c_str()));
 	
-		commonRoot = mgr.GetRoot();		// save the root of fields that we usually display
-	
-		// Create the fields for the Control tab
 		DisplayField::SetDefaultColours(white, notHomedBackColour);
-		homeAllField = AddCommandCell(rowCustom1, 0, 5, "Home all", evSendCommand, "G28");
-		homeFields[0] = AddCommandCell(rowCustom1, 1, 5, "Home X", evSendCommand, "G28 X0");
-		homeFields[1] = AddCommandCell(rowCustom1, 2, 5, "Home Y", evSendCommand, "G28 Y0");
-		homeFields[2] = AddCommandCell(rowCustom1, 3, 5, "Home Z", evSendCommand, "G28 Z0");
+		homeAllField = AddCommandCell(row6, 0, 5, "Home all", evSendCommand, "G28");
+		homeFields[0] = AddCommandCell(row6, 1, 5, "Home X", evSendCommand, "G28 X0");
+		homeFields[1] = AddCommandCell(row6, 2, 5, "Home Y", evSendCommand, "G28 Y0");
+		homeFields[2] = AddCommandCell(row6, 3, 5, "Home Z", evSendCommand, "G28 Z0");
 	
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		AddCommandCell(rowCustom4, 0, 5, "G92 Z0", evSendCommand, "G92 Z0");
-		AddCommandCell(rowCustom4, 1, 5, "G1 X0 Y0", evSendCommand, "G1 X0 Y0 F5000");
-		AddCommandCell(rowCustom4, 2, 5, "G1 Z1", evSendCommand, "G1 Z1 F5000");
-		AddCommandCell(rowCustom4, 3, 5, "G32", evSendCommand, "G32");
+		AddCommandCell(row9, 0, 5, "G92 Z0", evSendCommand, "G92 Z0");
+		AddCommandCell(row9, 1, 5, "G1 X0 Y0", evSendCommand, "G1 X0 Y0 F5000");
+		AddCommandCell(row9, 2, 5, "G1 Z1", evSendCommand, "G1 Z1 F5000");
+		AddCommandCell(row9, 3, 5, "G32", evSendCommand, "G32");
 	
 		controlRoot = mgr.GetRoot();
 
 		// Create the fields for the Printing tab
 		mgr.SetRoot(commonRoot);
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(rowCustom1, 0, 70, Left, "Speed"));
+		mgr.AddField(new StaticTextField(row2, columnX, columnY - columnX - fieldSpacing, Left, "Fan"));
+		mgr.AddField(new StaticTextField(row2, columnY, DisplayX - columnY - margin, Left, "RPM"));
+
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(spd = new IntegerField(rowCustom1, 70, 60, "", "%"));
+		mgr.AddField(fanSpeed = new IntegerField(row3, columnX, columnY - columnX - fieldSpacing, NULL));
+		fanSpeed->SetEvent(evAdjustPercent, "M106 S");
+		DisplayField::SetDefaultColours(white, defaultBackColor);
+		mgr.AddField(fanRpm = new IntegerField(row3, columnY, DisplayX - columnY - margin, NULL));
+
+		DisplayField::SetDefaultColours(white, pauseButtonBackColor);
+		pauseButtonField = new StaticTextField(row5, columnX, DisplayX - columnX - margin, Centre, "Pause print");
+		pauseButtonField->SetEvent(evPausePrint, "M25");
+		mgr.AddField(pauseButtonField);
+
+		DisplayField::SetDefaultColours(white, resumeButtonBackColor);
+		resumeButtonField = new StaticTextField(row5, columnX, columnY - columnX - fieldSpacing, Centre, "Resume");
+		resumeButtonField->SetEvent(evResumePrint, "M24");
+		mgr.AddField(resumeButtonField);
+
+		DisplayField::SetDefaultColours(white, resetButtonBackColor);
+		resetButtonField = new StaticTextField(row5, columnY, DisplayX - columnY - margin, Centre, "Cancel");
+		resetButtonField->SetEvent(evReset, "M0");
+		mgr.AddField(resetButtonField);
+
+		DisplayField::SetDefaultColours(white, defaultBackColor);
+		mgr.AddField(new StaticTextField(row6, 0, 70, Left, "Speed"));
+		DisplayField::SetDefaultColours(white, selectableBackColor);
+		mgr.AddField(spd = new IntegerField(row6, 70, 60, "", "%"));
 		spd->SetValue(100);
 		spd->SetEvent(evAdjustPercent, "M220 S");
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(rowCustom1, 140, 30, Left, "E1"));
+		mgr.AddField(new StaticTextField(row6, 140, 30, Left, "E1"));
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(e1Percent = new IntegerField(rowCustom1, 170, 60, "", "%"));
+		mgr.AddField(e1Percent = new IntegerField(row6, 170, 60, "", "%"));
 		e1Percent->SetValue(100);
 		e1Percent->SetEvent(evAdjustPercent, "M221 D0 S");
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(rowCustom1, 250, 30, Left, "E2"));
+		mgr.AddField(new StaticTextField(row6, 250, 30, Left, "E2"));
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(e2Percent = new IntegerField(rowCustom1, 280, 60, "", "%"));
+		mgr.AddField(e2Percent = new IntegerField(row6, 280, 60, "", "%"));
 		e2Percent->SetValue(100);
 		e2Percent->SetEvent(evAdjustPercent, "M221 D1 S");
 	
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		printingFile.copyFrom("(unknown)");
-		mgr.AddField(printingField = new TextField(rowCustom2, 0, DisplayX, "Printing ", printingFile.c_str()));
+		printingFile.CopyFrom("(unknown)");
+		mgr.AddField(printingField = new TextField(row7, 0, DisplayX, "Printing ", printingFile.c_str()));
 	
 		DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
-		mgr.AddField(printProgressBar = new ProgressBar(rowCustom3, margin, 8, DisplayX - 2*margin));
+		mgr.AddField(printProgressBar = new ProgressBar(row8, margin, 8, DisplayX - 2*margin));
 		mgr.Show(printProgressBar, false);
+		
+		DisplayField::SetDefaultColours(white, defaultBackColor);
+		mgr.AddField(timeLeftField = new StaticTextField(row9, margin, DisplayX - 2 * margin, Left, ""));
 
 		printRoot = mgr.GetRoot();
 
 		// Create the fields for the Files tab
 		mgr.SetRoot(baseRoot);
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(rowCommon1, 135, DisplayX - 2*135, Centre, "Files on SD card"));
+		mgr.AddField(new StaticTextField(row1, 135, DisplayX - 2*135, Centre, "Files on SD card"));
 		{
-			PixelNumber fileFieldWidth = (DisplayX + fieldSpacing - 2*margin)/numFileColumns;
+			const PixelNumber fileFieldWidth = (DisplayX + fieldSpacing - 2*margin)/numFileColumns;
 			unsigned int fileNum = 0;
 			for (unsigned int c = 0; c < numFileColumns; ++c)
 			{
@@ -209,38 +239,50 @@ namespace Fields
 			}
 		}
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(scrollFilesLeftField = new StaticTextField(rowCommon1, 80, 50, Centre, "<"));
+		mgr.AddField(scrollFilesLeftField = new StaticTextField(row1, 80, 50, Centre, "<"));
 		scrollFilesLeftField->SetEvent(evScrollFiles, -numFileRows);
-		mgr.AddField(scrollFilesRightField = new StaticTextField(rowCommon1, DisplayX - (80 + 50), 50, Centre, ">"));
+		mgr.AddField(scrollFilesRightField = new StaticTextField(row1, DisplayX - (80 + 50), 50, Centre, ">"));
 		scrollFilesRightField->SetEvent(evScrollFiles, numFileRows);
 		filesRoot = mgr.GetRoot();
 
 		// Create the fields for the Message tab
-		mgr.SetRoot(commonRoot);
+		mgr.SetRoot(baseRoot);
 		DisplayField::SetDefaultColours(white, defaultBackColor);
+		mgr.AddField(new StaticTextField(row1, 135, DisplayX - 2*135, Centre, "Messages"));
+		{
+			for (unsigned int r = 0; r < numMessageRows; ++r)
+			{
+				StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 8, margin, messageTimeWidth, Left, "");
+				mgr.AddField(t);
+				messageTimeFields[r] = t;
+				t = new StaticTextField(((r + 1) * rowHeight) + 8, messageTextX, messageTextWidth, Left, "");
+				mgr.AddField(t);
+				messageTextFields[r] = t;
+			}
+		}
 		messageRoot = mgr.GetRoot();
 
 		// Create the fields for the Setup tab
 		mgr.SetRoot(baseRoot);
 		DisplayField::SetDefaultColours(white, defaultBackColor);
 		// The firmware version field doubles up as an area for displaying debug messages, so make it the full width of the display
-		mgr.AddField(fwVersionField = new StaticTextField(rowCommon1, margin, DisplayX, Left, "Panel Due firmware version " VERSION_TEXT));
-		mgr.AddField(freeMem = new IntegerField(rowCommon2, margin, 195, "Free RAM: "));
-		mgr.AddField(touchX = new IntegerField(rowCommon2, 200, 130, "Touch: ", ","));
-		mgr.AddField(touchY = new IntegerField(rowCommon2, 330, 50, ""));
-		mgr.AddField(baudRateField = new IntegerField(rowCommon3, margin, 195, "Baud rate: "));
-		mgr.AddField(settingsNotSavedField = new StaticTextField(rowCommon4, margin, 300, Left, ""));
+		mgr.AddField(fwVersionField = new StaticTextField(row1, margin, DisplayX, Left, "Panel Due firmware version " VERSION_TEXT));
+		mgr.AddField(freeMem = new IntegerField(row2, margin, 195, "Free RAM: "));
+		mgr.AddField(touchX = new IntegerField(row2, 200, 130, "Touch: ", ","));
+		mgr.AddField(touchY = new IntegerField(row2, 330, 50, ""));
+		mgr.AddField(baudRateField = new IntegerField(row3, margin, 195, "Baud rate: "));
+		mgr.AddField(settingsNotSavedField = new StaticTextField(row4, margin, 300, Left, ""));
 
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		DisplayField *touchCal = new StaticTextField(rowCustom1, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
+		DisplayField *touchCal = new StaticTextField(row6, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
 		touchCal->SetEvent(evCalTouch, 0);
 		mgr.AddField(touchCal);
 
-		AddCommandCell(rowCustom3, 0, 3, "Baud rate", evSetBaudRate, nullptr);
-		AddCommandCell(rowCustom3, 1, 3, "Beep volume", evSetVolume, nullptr);
-		AddCommandCell(rowCustom3, 2, 3, "Invert display", evInvertDisplay, nullptr);
-		AddCommandCell(rowCustom4, 0, 3, "Save settings", evSaveSettings, nullptr);
-		AddCommandCell(rowCustom4, 2, 3, "Factory reset", evFactoryReset, nullptr);
+		AddCommandCell(row8, 0, 3, "Baud rate", evSetBaudRate, nullptr);
+		AddCommandCell(row8, 1, 3, "Beep volume", evSetVolume, nullptr);
+		AddCommandCell(row8, 2, 3, "Invert display", evInvertDisplay, nullptr);
+		AddCommandCell(row9, 0, 3, "Save settings", evSaveSettings, nullptr);
+		AddCommandCell(row9, 2, 3, "Factory reset", evFactoryReset, nullptr);
 		//	AddCommandCell(rowCustom4, 2, 3, "Invert display", evInvertDisplay, nullptr);
 	
 		DisplayField::SetDefaultColours(white, defaultBackColor);
@@ -250,7 +292,7 @@ namespace Fields
 	
 		touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "");		// the text is filled in within CalibrateTouch
 
-		// Create the popup window used to adjust temperatures
+		// Create the popup window used to adjust temperatures and fan speed
 		setTempPopup = new PopupField(40, 330, popupBackColour);
 		DisplayField::SetDefaultColours(white, selectablePopupBackColour);
 		DisplayField *tp = new StaticTextField(10, 5, 60, Centre, "-10");
@@ -350,10 +392,32 @@ namespace Fields
 		e2Percent->SetValue(100);
 	}
 	
+	// Update the field that warns about unsaved settings
 	void SettingsAreSaved(bool areSaved)
 	{
 		settingsNotSavedField->SetValue((areSaved) ? "" : "Some settings are not saved!");
 		settingsNotSavedField->SetColours(white, (areSaved) ? defaultBackColor : errorBackColour);
+	}
+	
+	void ShowPauseButton()
+	{
+		mgr.Show(resumeButtonField, false);
+		mgr.Show(resetButtonField, false);
+		mgr.Show(pauseButtonField, true);
+	}
+	
+	void ShowResumeAndCancelButtons()
+	{
+		mgr.Show(pauseButtonField, false);
+		mgr.Show(resumeButtonField, true);
+		mgr.Show(resetButtonField, true);
+	}
+	
+	void HidePauseResumeCancelButtons()
+	{
+		mgr.Show(pauseButtonField, false);
+		mgr.Show(resumeButtonField, false);
+		mgr.Show(resetButtonField, false);
 	}
 }
 

@@ -134,12 +134,12 @@ namespace SerialIo
 	JsonState state = jsBegin;
 	
 	String<20> fieldId;
-	String<60> fieldVal;
+	String<100> fieldVal;
 	int arrayElems = -1;
 	
-	static void processField()
+	static void ProcessField()
 	{
-		processReceivedValue(fieldId.c_str(), fieldVal.c_str(), arrayElems);
+		ProcessReceivedValue(fieldId.c_str(), fieldVal.c_str(), arrayElems);
 		fieldVal.clear();
 	}
 	
@@ -160,6 +160,7 @@ namespace SerialIo
 				case jsBegin:			// initial state, expecting '{'
 					if (c == '{')
 					{
+						StartReceivedMessage();
 						state = jsExpectId;
 						fieldVal.clear();
 					}
@@ -175,6 +176,7 @@ namespace SerialIo
 						state = jsId;
 						break;
 					case '}':
+						EndReceivedMessage();
 						state = jsBegin;
 						break;
 					default:
@@ -253,63 +255,50 @@ namespace SerialIo
 					}
 					break;
 					
-				case jsStringVal:		// had '"' and expecting or in a string value
+				case jsStringVal:		// just had '"' and expecting a string value
 					switch (c)
 					{
 					case '"':
-						processField();
+						ProcessField();
 						state = jsEndVal;
 						break;
 					case '\\':
-						if (!fieldVal.full())
-						{
-							state = jsStringEscape;
-						}
-						else
-						{
-							state = jsError;
-						}
+						state = jsStringEscape;
 						break;
 					default:
-						if (c >= ' ' && !fieldVal.full())
-						{
-							fieldVal.add(c);
-						}
-						else
+						if (c < ' ')
 						{
 							state = jsError;
+						}
+						else if (!fieldVal.full())
+						{
+							fieldVal.add(c);
 						}
 						break;
 					}
 					break;
 
 				case jsStringEscape:	// just had backslash in a string
-					switch (c)
+					if (!fieldVal.full())
 					{
-					case '"':
-					case '\\':
-						fieldVal.add(c);
-						break;
-					case 'b':
-						fieldVal.add('\b');
-						break;
-					case 'f':
-						fieldVal.add('\f');
-						break;
-					case 'n':
-						fieldVal.add('\n');
-						break;
-					case 'r':
-						fieldVal.add('\r');
-						break;
-					case 't':
-						fieldVal.add('\t');
-						break;
-					// we don't handle '\uxxxx'
-					default:
-						state = jsError;
-						break;
+						switch (c)
+						{
+						case '"':
+						case '\\':
+							fieldVal.add(c);
+							break;
+						case 'n':
+						case 't':
+							fieldVal.add(' ');		// replace newline and tab by space
+							break;
+						case 'b':
+						case 'f':
+						case 'r':
+						default:
+							break;
+						}
 					}
+					state = jsStringVal;
 					break;
 
 				case jsNegIntVal:		// had '-' so expecting a integer value
@@ -332,7 +321,7 @@ namespace SerialIo
 						state = jsFracVal;
 						break;
 					case ',':
-						processField();
+						ProcessField();
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
@@ -346,7 +335,7 @@ namespace SerialIo
 					case ']':
 						if (arrayElems >= 0)
 						{
-							processField();
+							ProcessField();
 							arrayElems = -1;
 							state = jsEndVal;
 						}
@@ -358,7 +347,8 @@ namespace SerialIo
 					case '}':
 						if (arrayElems == -1)
 						{
-							processField();
+							ProcessField();
+							EndReceivedMessage();
 							state = jsBegin;
 						}
 						else
@@ -383,7 +373,7 @@ namespace SerialIo
 					switch(c)
 					{
 					case ',':
-						processField();
+						ProcessField();
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
@@ -397,7 +387,7 @@ namespace SerialIo
 					case ']':
 						if (arrayElems >= 0)
 						{
-							processField();
+							ProcessField();
 							arrayElems = -1;
 							state = jsEndVal;
 						}
@@ -409,7 +399,8 @@ namespace SerialIo
 					case '}':
 						if (arrayElems == -1)
 						{
-							processField();
+							ProcessField();
+							EndReceivedMessage();
 							state = jsBegin;
 						}
 						else
@@ -458,6 +449,7 @@ namespace SerialIo
 					case '}':
 						if (arrayElems == -1)
 						{
+							EndReceivedMessage();
 							state = jsBegin;
 						}
 						else

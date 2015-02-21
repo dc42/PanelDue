@@ -11,6 +11,12 @@
 
 #include "ecv.h"
 #include <cstddef>		// for size_t
+#include <cstdarg>
+#undef printf
+#undef scanf
+void printf();			// to keep gcc happy when we include cstdio
+void scanf();			// to keep gcc happy when we include cstdio
+#include <cstdio>
 
 // Bounded vector class
 template<class T, size_t N> class Vector
@@ -124,11 +130,60 @@ public:
 		this->storage[this->filled] = '\0';
 	}
 	
-	void copyFrom(const char* s)
+	void CopyFrom(const char* s)
 	{
 		this->clear();
 		this->catFrom(s);
 	}
+	
+	int sprintf(const char *fmt, ...);
+	
+	int scatf(const char *fmt, ...);
 };
+
+template<size_t N> int String<N>::sprintf(const char *fmt, ...)
+{
+	va_list vargs;
+	va_start(vargs, fmt);
+	int ret = vsnprintf(this->storage, N + 1, fmt, vargs);
+	va_end(vargs);
+
+	if (ret < 0)
+	{
+		this->filled = 0;
+		this->storage[0] = 0;
+	}
+	else if (ret < N)
+	{
+		this->filled = ret;
+	}
+	else
+	{
+		this->filled = N;
+	}
+	return ret;
+}
+
+template<size_t N> int String<N>::scatf(const char *fmt, ...)
+{
+	va_list vargs;
+	va_start(vargs, fmt);
+	int ret = vsnprintf(this->storage + this->filled, N + 1 - this->filled, fmt, vargs);
+	va_end(vargs);
+	
+	if (ret < 0)
+	{
+		this->storage[this->filled] = 0;		// in case snprintf messed it up
+	}
+	else if (this->filled + ret < N)
+	{
+		this->filled += ret;
+	}
+	else
+	{
+		this->filled = N;
+	}
+	return ret;
+}
 
 #endif /* VECTOR_H_ */
