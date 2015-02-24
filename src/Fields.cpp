@@ -208,7 +208,6 @@ namespace Fields
 		e2Percent->SetEvent(evAdjustPercent, "M221 D1 S");
 	
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		printingFile.CopyFrom("(unknown)");
 		mgr.AddField(printingField = new TextField(row7, 0, DisplayX, "Printing ", printingFile.c_str()));
 	
 		DisplayField::SetDefaultColours(white, UTFT::fromRGB(0, 160, 0));
@@ -274,16 +273,12 @@ namespace Fields
 		mgr.AddField(settingsNotSavedField = new StaticTextField(row4, margin, 300, Left, ""));
 
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		DisplayField *touchCal = new StaticTextField(row6, DisplayX/2 - 75, 150, Centre, "Calibrate touch");
-		touchCal->SetEvent(evCalTouch, 0);
-		mgr.AddField(touchCal);
-
-		AddCommandCell(row8, 0, 3, "Baud rate", evSetBaudRate, nullptr);
-		AddCommandCell(row8, 1, 3, "Beep volume", evSetVolume, nullptr);
-		AddCommandCell(row8, 2, 3, "Invert display", evInvertDisplay, nullptr);
-		AddCommandCell(row9, 0, 3, "Save settings", evSaveSettings, nullptr);
-		AddCommandCell(row9, 2, 3, "Factory reset", evFactoryReset, nullptr);
-		//	AddCommandCell(rowCustom4, 2, 3, "Invert display", evInvertDisplay, nullptr);
+		AddCommandCell(row6, 0, 3, "Baud rate", evSetBaudRate, nullptr);
+		AddCommandCell(row6, 1, 3, "Beep volume", evSetVolume, nullptr);
+		AddCommandCell(row6, 2, 3, "Calibrate touch", evCalTouch, nullptr);
+		AddCommandCell(row7, 0, 3, "Invert display", evInvertDisplay, nullptr);
+		AddCommandCell(row7, 1, 3, "Save settings", evSaveSettings, nullptr);
+		AddCommandCell(row7, 2, 3, "Factory reset", evFactoryReset, nullptr);
 	
 		DisplayField::SetDefaultColours(white, defaultBackColor);
 		infoRoot = mgr.GetRoot();

@@ -22,18 +22,19 @@
 #include "Configuration.hpp"
 #include "Fields.hpp"
 
-UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
-
-UTouch touch(23, 24, 22, 21, 20);
-DisplayManager mgr;
-
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t printerPollTimeout = 8000;			// poll timeout in milliseconds
+const uint32_t FileInfoRequestTimeout = 8000;		// file info request timeout in milliseconds
 const uint32_t touchBeepLength = 20;				// beep length in ms
 const uint32_t touchBeepFrequency = 4500;			// beep frequency in Hz. Resonant frequency of the piezo sounder is 4.5kHz.
 const uint32_t longTouchDelay = 250;				// how long we ignore new touches for after pressing Set
 const uint32_t shortTouchDelay = 100;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
 const unsigned int maxMessageChars = 100;
+
+UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
+
+UTouch touch(23, 24, 22, 21, 20);
+DisplayManager mgr;
 
 static uint32_t lastTouchTime;
 static uint32_t ignoreTouchTime;
@@ -64,12 +65,15 @@ struct Message
 	char msg[maxMessageChars];
 };
 
-static Message messages[numMessageRows + 1];		// one extra slor for receiving bew messages into
+static Message messages[numMessageRows + 1];		// one extra slot for receiving new messages into
 static unsigned int messageStartRow = 0;			// the row number at the top
 static unsigned int newMessageStartRow = 0;			// the row number that we put a new message in
 
 static int timesLeft[3];
 static String<50> timesLeftText;
+
+static uint32_t fileInfoRequestTime;
+static bool fileInfoRequested = false;
 
 struct FlashData
 {
@@ -571,10 +575,10 @@ void ProcessTouch(DisplayField *f)
 		mgr.SetPopup(NULL);
 		if (currentFile != NULL)
 		{
-			SerialIo::SendString("M23 ");
+			SerialIo::SendString("M32 ");
 			SerialIo::SendString(currentFile);
-			SerialIo::SendString("\nM24\n");
-			printingFile.CopyFrom(currentFile);
+			SerialIo::SendChar('\n');
+			printingFile.copyFrom(currentFile);
 			currentFile = NULL;							// allow the file list to be updated
 			ChangeTab(tabPrint);
 		}
@@ -806,6 +810,16 @@ void UpdatePrintingFields()
 	statusField->SetValue(statusText[status]);
 }
 
+void UpdatePrintingFileName()
+{
+	if (printingFile.isEmpty() && currentTab == tabPrint && (!fileInfoRequested || GetTickCount() - fileInfoRequestTime > FileInfoRequestTimeout))
+	{
+		SerialIo::SendString("M36\n");
+		fileInfoRequestTime = GetTickCount();
+		fileInfoRequested = true;
+	}
+}
+
 void SetStatus(char c)
 {
 	PrinterStatus newStatus;
@@ -813,6 +827,7 @@ void SetStatus(char c)
 	{
 	case 'A':
 		newStatus = psPaused;
+		UpdatePrintingFileName();
 		break;
 	case 'B':
 		newStatus = psBusy;
@@ -825,9 +840,11 @@ void SetStatus(char c)
 		break;
 	case 'I':
 		newStatus = psIdle;
+		printingFile.clear();
 		break;
 	case 'P':
 		newStatus = psPrinting;
+		UpdatePrintingFileName();
 		break;
 	case 'R':
 		newStatus = psResuming;
@@ -836,7 +853,7 @@ void SetStatus(char c)
 		newStatus = psStopped;
 		break;
 	default:
-		newStatus = status;		// leave the status alone if we don't recognise it
+		newStatus = status;		// leave the status alone if we don't recognize it
 		break;
 	}
 	
@@ -864,6 +881,28 @@ void SetStatus(char c)
 	
 		status = newStatus;
 		UpdatePrintingFields();
+	}
+}
+
+// Append an amount of time to timesLeftText
+void AppendTimeLeft(int t)
+{
+	if (t <= 0)
+	{
+		timesLeftText.catFrom("n/a");
+	}
+	else if (t < 60)
+	{
+		timesLeftText.scatf("%ds", t);
+	}
+	else if (t < 60 * 60)
+	{
+		timesLeftText.scatf("%dm %02ds", t/60, t%60);
+	}
+	else
+	{
+		t /= 60;
+		timesLeftText.scatf("%dh %02dm", t/60, t%60);
 	}
 }
 
@@ -920,7 +959,7 @@ const ReceiveDataTableEntry nonArrayDataTable[] =
 {
 	rcvBeepFreq,	"beep_freq",
 	rcvBeepLength,	"beep_length",
-	rcvFilename,	"filename",
+	rcvFilename,	"fileName",
 	rcvFraction,	"fraction_printed",
 	rcvGeneratedBy,	"generatedBy",
 	rcvGeometry,	"geometry",
@@ -1146,41 +1185,17 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvTimesLeft:
-			if (index < 3)
+			if (index < 2)			// we ignore the layer-based time because it is often wildly inaccurate
 			{
 				int i;
 				bool b = GetInteger(data, i);
-				if (b && i >= 0 && i < 200 * 60 && (status == psPrinting || status == psPaused))
+				if (b && i >= 0 && i < 10 * 24 * 60 * 60 && (status == psPrinting || status == psPaused))
 				{
 					timesLeft[index] = i;
-					timesLeftText.CopyFrom("Est. time left ");
-					for (size_t i = 0; i < 3; ++i)
-					{
-						if (i != 0)
-						{
-							timesLeftText.catFrom(", ");
-						}
-
-						int t = timesLeft[i];
-						if (t <= 0.0)
-						{
-							timesLeftText.catFrom("n/a");
-						}
-						else if (t < 60)
-						{
-							timesLeftText.scatf("%ds", t);
-						}
-						else if (t < 60 * 60)
-						{
-							timesLeftText.scatf("%dm %02ds", t/60, t%60);
-						}
-						else
-						{
-							t /= 60;
-							timesLeftText.scatf("%dh %02dm", t/60, t%60); 
-						}					
-					}
-
+					timesLeftText.copyFrom("Estimated time left: filament ");
+					AppendTimeLeft(timesLeft[1]);
+					timesLeftText.catFrom(", file ");
+					AppendTimeLeft(timesLeft[0]);
 					timeLeftField->SetValue(timesLeftText.c_str());
 					mgr.Show(timeLeftField, true);
 				}
@@ -1205,23 +1220,25 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				}
 			}
 			break;
+
 		case rcvProbe:
-			zprobeBuf.CopyFrom(data);
+			zprobeBuf.copyFrom(data);
 			zProbe->SetChanged();
 			break;
 		
 		case rcvMyName:
 			if (status != psConfiguring && status != psJustBooted)
 			{
-				machineName.CopyFrom(data);
+				machineName.copyFrom(data);
 				nameField->SetChanged();
 				gotMachineName = true;
 			}
 			break;
 		
 		case rcvFilename:
-			printingFile.CopyFrom(data);
+			printingFile.copyFrom(data);
 			printingField->SetChanged();
+			fileInfoRequested = false;
 			break;
 		
 		case rcvSize:
@@ -1255,7 +1272,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvGeneratedBy:
-			generatedByText.CopyFrom(data);
+			generatedByText.copyFrom(data);
 			fpGeneratedByField->SetChanged();
 			break;
 		
@@ -1308,6 +1325,12 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		}
 	}
+}
+
+// Public function called when the serial I/O module finishes receiving an array of values
+void ProcessArrayLength(const char id[], int length)
+{
+	// Nothing to do here at present
 }
 
 // Update those fields that display debug information

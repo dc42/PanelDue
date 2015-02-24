@@ -143,6 +143,12 @@ namespace SerialIo
 		fieldVal.clear();
 	}
 	
+	static void EndArray()
+	{
+		ProcessArrayLength(fieldId.c_str(), arrayElems);
+		arrayElems = -1;
+	}
+	
 	void CheckInput()
 	{
 		while (nextIn != nextOut)
@@ -231,6 +237,17 @@ namespace SerialIo
 						if (arrayElems == -1)
 						{
 							arrayElems = 0;
+						}
+						else
+						{
+							state = jsError;
+						}
+						break;
+					case ']':
+						if (arrayElems == 0)
+						{
+							EndArray();
+							state = jsEndVal;
 						}
 						else
 						{
@@ -336,7 +353,8 @@ namespace SerialIo
 						if (arrayElems >= 0)
 						{
 							ProcessField();
-							arrayElems = -1;
+							++arrayElems;
+							EndArray();
 							state = jsEndVal;
 						}
 						else
@@ -388,7 +406,8 @@ namespace SerialIo
 						if (arrayElems >= 0)
 						{
 							ProcessField();
-							arrayElems = -1;
+							++arrayElems;
+							EndArray();
 							state = jsEndVal;
 						}
 						else
@@ -438,7 +457,8 @@ namespace SerialIo
 					case ']':
 						if (arrayElems >= 0)
 						{
-							arrayElems = -1;
+							++arrayElems;
+							EndArray();
 							state = jsEndVal;
 						}
 						else

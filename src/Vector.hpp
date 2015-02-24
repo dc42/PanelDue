@@ -25,23 +25,25 @@ public:
 	Vector() : filled(0) { }
 		
 	bool full() const { return filled == N; }
-		
+
 	size_t capacity() const { return N; }
-		
+
 	size_t size() const { return filled; }
-		
+
+	bool isEmpty() const { return filled == 0; }
+
 	const T& operator[](size_t index) const pre(index < N) { return storage[index]; }
 
 	T& operator[](size_t index) pre(index < N) { return storage[index]; }
-		
+
 	void add(const T& x) pre(filled < N) { storage[filled++] = x; }
-		
+
 	void add(const T* array p, size_t n) pre(filled + n <= N);
-		
+
 	void clear() { filled = 0; }
-		
+
 	const T* array c_ptr() { return storage; }
-		
+
 	void sort(bool (*sortfunc)(T, T));
 
 protected:
@@ -130,7 +132,7 @@ public:
 		this->storage[this->filled] = '\0';
 	}
 	
-	void CopyFrom(const char* s)
+	void copyFrom(const char* s)
 	{
 		this->clear();
 		this->catFrom(s);

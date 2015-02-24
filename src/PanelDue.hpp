@@ -13,6 +13,7 @@
 
 // Global functions in PanelDue.cpp that are called from elsewhere
 extern void ProcessReceivedValue(const char id[], const char val[], int index);
+extern void ProcessArrayLength(const char id[], int length);
 extern void StartReceivedMessage();
 extern void EndReceivedMessage();
 
