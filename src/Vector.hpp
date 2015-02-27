@@ -12,6 +12,7 @@
 #include "ecv.h"
 #include <cstddef>		// for size_t
 #include <cstdarg>
+#include <cstring>
 #undef printf
 #undef scanf
 void printf();			// to keep gcc happy when we include cstdio
@@ -80,23 +81,6 @@ template<class T, size_t N> void Vector<T, N>::sort(bool (*sortfunc)(T, T))
 	}
 }
 
-#if 0
-// Compare a vector of char with a null-terminated string
-template<size_t N> int compare(Vector<char, N> v, const char * array s)
-{
-	for (size_t i = 0; i < v.size(); ++i)
-	{
-		char c1 = v[i];
-		char c2 = *s++;
-		if (c1 != c2)
-		{
-			return (c1 > c2) ? 1 : -1;
-		}
-	}
-	return (*s == '\0') ? 0 : -1;
-}
-#endif
-
 template<size_t N> class String : public Vector<char, N + 1>
 {
 public:
@@ -141,6 +125,16 @@ public:
 	int sprintf(const char *fmt, ...);
 	
 	int scatf(const char *fmt, ...);
+	
+	bool equals(const char* s) const
+	{
+		return strcmp(s, this->storage) == 0;
+	}
+	
+	bool equalsIgnoreCase(const char* s) const
+	{
+		return stricmp(s, this->storage) == 0;
+	}
 };
 
 template<size_t N> int String<N>::sprintf(const char *fmt, ...)

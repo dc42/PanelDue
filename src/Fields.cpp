@@ -16,8 +16,8 @@ FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos,
 IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent, *fanSpeed, *fanRpm;
 IntegerField *bedStandbyTemp, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
 ProgressBar *printProgressBar;
-StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
-StaticTextField *filenameFields[numDisplayedFiles], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
+StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup, *touchCalibInstruction;
+StaticTextField *filenameFields[numDisplayedFiles], *macroFields[numDisplayedMacros], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
 StaticTextField *homeFields[3], *homeAllField, *fwVersionField, *settingsNotSavedField, *areYouSureTextField;
 StaticTextField *pauseButtonField, *resumeButtonField, *resetButtonField, *timeLeftField;
 DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
@@ -87,7 +87,7 @@ namespace Fields
 		tabPrint = AddCommandCell(rowTabs, 1, 5, "Print", evTabPrint, nullptr);
 		tabFiles = AddCommandCell(rowTabs, 2, 5, "Files", evTabFiles, nullptr);
 		tabMsg = AddCommandCell(rowTabs, 3, 5, "Msg", evTabMsg, nullptr);
-		tabInfo = AddCommandCell(rowTabs, 4, 5, "Setup", evTabInfo, nullptr);
+		tabSetup = AddCommandCell(rowTabs, 4, 5, "Setup", evTabInfo, nullptr);
 	
 		baseRoot = mgr.GetRoot();		// save the root of fields that we usually display
 	
@@ -153,12 +153,29 @@ namespace Fields
 		homeFields[1] = AddCommandCell(row6, 2, 5, "Home Y", evSendCommand, "G28 Y0");
 		homeFields[2] = AddCommandCell(row6, 3, 5, "Home Z", evSendCommand, "G28 Z0");
 	
-		DisplayField::SetDefaultColours(white, selectableBackColor);
+		DisplayField::SetDefaultColours(white, defaultBackColor);
+#if 1
+		// Create the macro fields
+		{
+			const PixelNumber macroFieldWidth = (DisplayX + fieldSpacing - 2*margin)/numMacroColumns;
+			unsigned int macroNum = 0;
+			for (unsigned int c = 0; c < numMacroColumns; ++c)
+			{
+				for (unsigned int r = 0; r < numMacroRows; ++r)
+				{
+					StaticTextField *t = new StaticTextField((r * rowHeight) + firstMacroRow, (macroFieldWidth * c) + margin, macroFieldWidth - fieldSpacing, Centre, "");
+					mgr.AddField(t);
+					macroFields[macroNum] = t;
+					++macroNum;
+				}
+			}
+		}
+#else
 		AddCommandCell(row9, 0, 5, "G92 Z0", evSendCommand, "G92 Z0");
 		AddCommandCell(row9, 1, 5, "G1 X0 Y0", evSendCommand, "G1 X0 Y0 F5000");
 		AddCommandCell(row9, 2, 5, "G1 Z1", evSendCommand, "G1 Z1 F5000");
 		AddCommandCell(row9, 3, 5, "G32", evSendCommand, "G32");
-	
+#endif
 		controlRoot = mgr.GetRoot();
 
 		// Create the fields for the Printing tab
@@ -230,7 +247,7 @@ namespace Fields
 			{
 				for (unsigned int r = 0; r < numFileRows; ++r)
 				{
-					StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 8, (fileFieldWidth * c) + margin, fileFieldWidth - fieldSpacing, Left, "");
+					StaticTextField *t = new StaticTextField((r * rowHeight) + firstFileRow, (fileFieldWidth * c) + margin, fileFieldWidth - fieldSpacing, Left, "");
 					mgr.AddField(t);
 					filenameFields[fileNum] = t;
 					++fileNum;
@@ -283,7 +300,7 @@ namespace Fields
 		DisplayField::SetDefaultColours(white, defaultBackColor);
 		infoRoot = mgr.GetRoot();
 	
-		mgr.SetRoot(commonRoot);
+		mgr.SetRoot(NULL);
 	
 		touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "");		// the text is filled in within CalibrateTouch
 
@@ -371,7 +388,7 @@ namespace Fields
 		// Set initial values
 		bedCurrentTemp->SetValue(0.0);
 		t1CurrentTemp->SetValue(0.0);
-		t2CurrentTemp->SetValue(0.01);
+		t2CurrentTemp->SetValue(0.0);
 		bedActiveTemp->SetValue(0);
 		t1ActiveTemp->SetValue(0);
 		t2ActiveTemp->SetValue(0);
@@ -380,8 +397,8 @@ namespace Fields
 		xPos->SetValue(0.0);
 		yPos->SetValue(0.0);
 		zPos->SetValue(0.0);
-		//  extrPos->SetValue(43.6);
-		//  fanRPM->SetValue(2354);
+		fanSpeed->SetValue(0);
+		fanRpm->SetValue(0);
 		spd->SetValue(100);
 		e1Percent->SetValue(100);
 		e2Percent->SetValue(100);

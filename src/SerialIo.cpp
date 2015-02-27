@@ -107,9 +107,10 @@ namespace SerialIo
 	}
 
 	// Receive data processing
-	const size_t rxBufsize = 1024;
-	static char rxBuffer[rxBufsize];
-	static volatile size_t nextIn = 0, nextOut = 0;
+	const size_t rxBufsize = 2048;
+	static volatile char rxBuffer[rxBufsize];
+	static volatile size_t nextIn = 0;
+	static size_t nextOut = 0;
 	static bool inError = false;
 	
 	// Enumeration to represent the json parsing state.

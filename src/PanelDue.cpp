@@ -23,10 +23,13 @@
 #include "Fields.hpp"
 
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
+const uint32_t printerResponseInterval = 1500;		// shortest time after a response that we send another poll (gives printer time to catch up)
 const uint32_t printerPollTimeout = 8000;			// poll timeout in milliseconds
 const uint32_t FileInfoRequestTimeout = 8000;		// file info request timeout in milliseconds
 const uint32_t touchBeepLength = 20;				// beep length in ms
 const uint32_t touchBeepFrequency = 4500;			// beep frequency in Hz. Resonant frequency of the piezo sounder is 4.5kHz.
+const uint32_t errorBeepLength = 100;
+const uint32_t errorBeepFrequency = 2250;
 const uint32_t longTouchDelay = 250;				// how long we ignore new touches for after pressing Set
 const uint32_t shortTouchDelay = 100;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
 const unsigned int maxMessageChars = 100;
@@ -38,9 +41,10 @@ DisplayManager mgr;
 
 static uint32_t lastTouchTime;
 static uint32_t ignoreTouchTime;
-static uint32_t lastResponseTime;
+static uint32_t lastPollTime;
+static uint32_t lastResponseTime = 0;
 static uint32_t fileScrollOffset = 0;
-static bool fileListChanged = true;
+static bool fileListScrolled = false;
 static bool gotMachineName = false;
 static bool isDelta = false;
 static bool gotGeometry = false;
@@ -51,9 +55,16 @@ static unsigned int numHeads = 1;
 static unsigned int messageSeq = 0;
 static unsigned int newMessageSeq = 0;
 
-Vector<char, 2048> fileList;						// we use a Vector instead of a String because we store multiple null-terminated strings in it
-Vector<const char* array, 100> fileIndex;			// pointers into the individual filenames in the list
+typedef Vector<char, 2048> FileList;				// we use a Vector instead of a String because we store multiple null-terminated strings in it
+typedef Vector<const char* array, 100> FileListIndex;
+
+FileList fileLists[3];								// one for gcode file list, one for macro list, one for receiving new lists into
+FileListIndex fileIndices[3];						// pointers into the individual filenames in the list
+int filesFileList = -1, macrosFileList = -1;		// which file list we use for the files listing and the macros listing
+int newFileList = -1;								// which file list we received a new listing into
 static const char* array null currentFile = NULL;	// file whose info is displayed in the popup menu
+
+String<100> fileDirectoryName;
 
 static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
 
@@ -71,9 +82,6 @@ static unsigned int newMessageStartRow = 0;			// the row number that we put a ne
 
 static int timesLeft[3];
 static String<50> timesLeftText;
-
-static uint32_t fileInfoRequestTime;
-static bool fileInfoRequested = false;
 
 struct FlashData
 {
@@ -106,7 +114,7 @@ FlashData nvData, savedNvData;
 
 enum PrinterStatus
 {
-	psJustBooted = 0,
+	psConnecting = 0,
 	psIdle = 1,
 	psPrinting = 2,
 	psStopped = 3,
@@ -120,7 +128,7 @@ enum PrinterStatus
 // Map of the above status codes to text. The space at the end improves the appearance.
 const char *statusText[] =
 {
-	"",
+	"Connecting",
 	"Idle ",
 	"Printing ",
 	"Halted (needs reset)",
@@ -131,12 +139,13 @@ const char *statusText[] =
 	"Resuming "
 };
 
-static PrinterStatus status = psJustBooted;
+static PrinterStatus status = psConnecting;
 
 enum ReceivedDataEvent
 {
 	rcvUnknown = 0,
 	rcvActive,
+	rcvDir,
 	rcvEfactor,
 	rcvFilament,
 	rcvFiles,
@@ -171,10 +180,57 @@ struct ReceiveDataTableEntry
 
 static Event eventToConfirm = nullEvent;
 
-//char commandBuffer[80];
-
 const size_t numHeaters = 3;
 int heaterStatus[numHeaters];
+
+bool OkToSend();		// forward declaration
+
+class RequestTimer
+{
+	enum { stopped, running, ready } timerState;
+	uint32_t startTime;
+	uint32_t delayTime;
+	const char *command;
+	
+public:
+	RequestTimer(uint32_t del, const char *cmd);
+	void SetPending() { timerState = ready; }
+	void Stop() { timerState = stopped; }
+	bool Process();
+};
+
+RequestTimer macroListTimer(FileInfoRequestTimeout, "M20 S2 P/macros");
+RequestTimer filesListTimer(FileInfoRequestTimeout, "M20 S2 P/gcodes");
+RequestTimer fileInfoTimer(FileInfoRequestTimeout, "M36");
+RequestTimer machineConfigTimer(FileInfoRequestTimeout, "M105 S3");
+
+RequestTimer::RequestTimer(uint32_t del, const char *cmd)
+	: delayTime(del), command(cmd)
+{
+	timerState = stopped;
+}
+
+bool RequestTimer::Process()
+{
+	if (timerState == running)
+	{
+		uint32_t now = GetTickCount();
+		if (now - startTime > delayTime)
+		{
+			timerState = ready;
+		}
+	}
+
+	if (timerState == ready && OkToSend())
+	{
+		SerialIo::SendString(command);
+		SerialIo::SendChar('\n');
+		startTime = GetTickCount();
+		timerState = running;
+		return true;
+	}
+	return false;
+}
 
 bool FlashData::operator==(const FlashData& other)
 {
@@ -223,34 +279,69 @@ bool StringGreaterThan(const char* a, const char* b)
 // Refresh the list of files on the Files tab
 void RefreshFileList()
 {
-	// 1. Sort the file list
-	fileIndex.sort(StringGreaterThan);
-	
-	// 2. Make sure the scroll position is still sensible
-	if (fileScrollOffset >= fileIndex.size())
+	if (filesFileList >= 0)
 	{
-		fileScrollOffset = (fileIndex.size()/numFileRows) * numFileRows;
-	}
+		FileListIndex& fileIndex = fileIndices[filesFileList];
 	
-	// 3. Display the scroll buttons if needed
-	mgr.Show(scrollFilesLeftField, fileScrollOffset != 0);
-	mgr.Show(scrollFilesRightField, fileScrollOffset + (numFileRows * numFileColumns) < fileIndex.size());
+		// 1. Sort the file list
+		fileIndex.sort(StringGreaterThan);
 	
-	// 4. Display the file list
-	for (size_t i = 0; i < numDisplayedFiles; ++i)
-	{
-		StaticTextField *f = filenameFields[i];
-		if (i + fileScrollOffset < fileIndex.size())
+		// 2. Make sure the scroll position is still sensible
+		if (fileScrollOffset >= fileIndex.size())
 		{
-			f->SetValue(fileIndex[i + fileScrollOffset]);
-			f->SetColours(white, selectableBackColor);
-			f->SetEvent(evFile, i + fileScrollOffset);
+			fileScrollOffset = (fileIndex.size()/numFileRows) * numFileRows;
 		}
-		else
+	
+		// 3. Display the scroll buttons if needed
+		mgr.Show(scrollFilesLeftField, fileScrollOffset != 0);
+		mgr.Show(scrollFilesRightField, fileScrollOffset + (numFileRows * numFileColumns) < fileIndex.size());
+	
+		// 4. Display the file list
+		for (size_t i = 0; i < numDisplayedFiles; ++i)
 		{
-			f->SetValue("");
-			f->SetColours(white, defaultBackColor);
-			f->SetEvent(nullEvent, 0);
+			StaticTextField *f = filenameFields[i];
+			if (i + fileScrollOffset < fileIndex.size())
+			{
+				f->SetValue(fileIndex[i + fileScrollOffset]);
+				f->SetColours(white, selectableBackColor);
+				f->SetEvent(evFile, i + fileScrollOffset);
+			}
+			else
+			{
+				f->SetValue("");
+				f->SetColours(white, defaultBackColor);
+				f->SetEvent(nullEvent, 0);
+			}
+		}
+		fileListScrolled = false;
+	}
+}
+
+// Refresh the list of files on the Files tab
+void RefreshMacroList()
+{
+	if (macrosFileList >= 0)
+	{
+		FileListIndex& macroIndex = fileIndices[macrosFileList];
+		// 1. Sort the file list
+		macroIndex.sort(StringGreaterThan);
+	
+		// 2. Display the macro list
+		for (size_t i = 0; i < numDisplayedMacros; ++i)
+		{
+			StaticTextField *f = macroFields[i];
+			if (i < macroIndex.size())
+			{
+				f->SetValue(macroIndex[i]);
+				f->SetColours(white, selectableBackColor);
+				f->SetEvent(evMacro, i);
+			}
+			else
+			{
+				f->SetValue("");
+				f->SetColours(white, defaultBackColor);
+				f->SetEvent(nullEvent, 0);
+			}
 		}
 	}
 }
@@ -276,7 +367,14 @@ ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numE
 			high = mid;
 		}
 	}
-	return (stricmp(key, table[low].varName) == 0) ? table[low].rde : rcvUnknown;
+	return (low < numElems && stricmp(key, table[low].varName) == 0) ? table[low].rde : rcvUnknown;
+}
+
+// Return true if sending a command or file list request to the printer now is a good idea.
+// We don't want to send these when the printer is busy with a previous command, because they will block normal status requests.
+bool OkToSend()
+{
+	return status == psIdle || status == psPrinting || status == psPaused;
 }
 
 void ChangeTab(DisplayField *newTab)
@@ -292,13 +390,14 @@ void ChangeTab(DisplayField *newTab)
 		switch(newTab->GetEvent())
 		{
 		case evTabControl:
+			macroListTimer.SetPending();								// refresh the list of macros
 			mgr.SetRoot(controlRoot);
 			break;
 		case evTabPrint:
 			mgr.SetRoot(printRoot);
 			break;
 		case evTabFiles:
-			SerialIo::SendString("M20 S2\n");		// ask for the list of files
+			filesListTimer.SetPending();								// refresh the list of files
 			mgr.SetRoot(filesRoot);
 			break;
 		case evTabMsg:
@@ -341,6 +440,12 @@ void ShortenTouchDelay()
 void TouchBeep()
 {
 	Buzzer::Beep(touchBeepFrequency, touchBeepLength, nvData.touchVolume);	
+}
+
+void ErrorBeep()
+{
+	while (Buzzer::Noisy()) { }
+	Buzzer::Beep(errorBeepFrequency, errorBeepLength, nvData.touchVolume);
 }
 
 // Draw a spot and wait until the user touches it, returning the touch coordinates in tx and ty.
@@ -556,19 +661,45 @@ void ProcessTouch(DisplayField *f)
 		break;
 
 	case evFile:
-		currentFile = fileIndex[f->GetIParam()];
-		SerialIo::SendString("M36 /gcodes/");			// ask for the file info
-		SerialIo::SendString(currentFile);
-		SerialIo::SendChar('\n');
-		fpNameField->SetValue(currentFile);
-		// Clear out the old field values, they relate to the previous file we looked at until we process the response
-		fpSizeField->SetValue(0);						// would be better to make it blank
-		fpHeightField->SetValue(0.0);					// would be better to make it blank
-		fpLayerHeightField->SetValue(0.0);				// would be better to make it blank
-		fpFilamentField->SetValue(0);					// would be better to make it blank
-		generatedByText.clear();
-		fpGeneratedByField->SetChanged();
-		mgr.SetPopup(filePopup, (DisplayX - filePopupWidth)/2, (DisplayY - filePopupHeight)/2);
+		{
+			int fileNumber = f->GetIParam();
+			if (fileNumber >= 0 && filesFileList >= 0 && (size_t)fileNumber < fileIndices[filesFileList].size())
+			{
+				currentFile = fileIndices[filesFileList][fileNumber];
+				SerialIo::SendString("M36 /gcodes/");			// ask for the file info
+				SerialIo::SendString(currentFile);
+				SerialIo::SendChar('\n');
+				fpNameField->SetValue(currentFile);
+				// Clear out the old field values, they relate to the previous file we looked at until we process the response
+				fpSizeField->SetValue(0);						// would be better to make it blank
+				fpHeightField->SetValue(0.0);					// would be better to make it blank
+				fpLayerHeightField->SetValue(0.0);				// would be better to make it blank
+				fpFilamentField->SetValue(0);					// would be better to make it blank
+				generatedByText.clear();
+				fpGeneratedByField->SetChanged();
+				mgr.SetPopup(filePopup, (DisplayX - filePopupWidth)/2, (DisplayY - filePopupHeight)/2);
+			}
+			else
+			{
+				ErrorBeep();
+			}
+		}
+		break;
+
+	case evMacro:
+		{
+			int macroNumber = f->GetIParam();
+			if (macroNumber >= 0 && macrosFileList >= 0 && (size_t)macroNumber < fileIndices[macrosFileList].size())
+			{
+				SerialIo::SendString("M98 P/macros/");
+				SerialIo::SendString(fileIndices[macrosFileList][macroNumber]);
+				SerialIo::SendChar('\n');
+			}
+			else
+			{
+				ErrorBeep();
+			}
+		}
 		break;
 
 	case evPrint:
@@ -603,7 +734,7 @@ void ProcessTouch(DisplayField *f)
 
 	case evScrollFiles:
 		fileScrollOffset += f->GetIParam();
-		fileListChanged = true;
+		fileListScrolled = true;
 		ShortenTouchDelay();
 		break;
 
@@ -654,7 +785,7 @@ void ProcessTouch(DisplayField *f)
 			{
 				SerialIo::SendString("M30 ");
 				SerialIo::SendString(currentFile);
-				SerialIo::SendString("\nM20 S2\n");
+				filesListTimer.SetPending();
 				currentFile = NULL;
 			}
 			break;
@@ -810,16 +941,7 @@ void UpdatePrintingFields()
 	statusField->SetValue(statusText[status]);
 }
 
-void UpdatePrintingFileName()
-{
-	if (printingFile.isEmpty() && currentTab == tabPrint && (!fileInfoRequested || GetTickCount() - fileInfoRequestTime > FileInfoRequestTimeout))
-	{
-		SerialIo::SendString("M36\n");
-		fileInfoRequestTime = GetTickCount();
-		fileInfoRequested = true;
-	}
-}
-
+// This is called when the status changes
 void SetStatus(char c)
 {
 	PrinterStatus newStatus;
@@ -827,7 +949,7 @@ void SetStatus(char c)
 	{
 	case 'A':
 		newStatus = psPaused;
-		UpdatePrintingFileName();
+		fileInfoTimer.SetPending();
 		break;
 	case 'B':
 		newStatus = psBusy;
@@ -844,7 +966,7 @@ void SetStatus(char c)
 		break;
 	case 'P':
 		newStatus = psPrinting;
-		UpdatePrintingFileName();
+		fileInfoTimer.SetPending();
 		break;
 	case 'R':
 		newStatus = psResuming;
@@ -866,6 +988,14 @@ void SetStatus(char c)
 			{
 				// Starting a new print, so clear the times
 				timesLeft[0] = timesLeft[1] = timesLeft[2] = 0;			
+			}	
+			// no break
+		case psPaused:
+		case psPausing:
+		case psResuming:
+			if (status == psConnecting)
+			{
+				ChangeTab(tabPrint);
 			}
 			break;
 			
@@ -873,7 +1003,7 @@ void SetStatus(char c)
 			break;
 		}
 		
-		if (status == psConfiguring || (status == psJustBooted && newStatus != psConfiguring))
+		if (status == psConfiguring || (status == psConnecting && newStatus != psConfiguring))
 		{
 			AppendMessage("Connected");
 			DisplayNewMessage();
@@ -943,49 +1073,75 @@ bool GetFloat(const char s[], float &rslt)
 // These tables must be kept in alphabetical order
 const ReceiveDataTableEntry arrayDataTable[] =
 {
-	rcvActive,		"active",
-	rcvEfactor,		"efactor",
-	rcvFilament,	"filament",
-	rcvFiles,		"files",
-	rcvHeaters,		"heaters",
-	rcvHomed,		"homed",
-	rcvHstat,		"hstat",
-	rcvPos,			"pos",
-	rcvStandby,		"standby",
-	rcvTimesLeft,	"timesLeft"
+	{ rcvActive,		"active" },
+	{ rcvEfactor,		"efactor" },
+	{ rcvFilament,		"filament" },
+	{ rcvFiles,			"files" },
+	{ rcvHeaters,		"heaters" },
+	{ rcvHomed,			"homed" },
+	{ rcvHstat,			"hstat" },
+	{ rcvPos,			"pos" },
+	{ rcvStandby,		"standby" },
+	{ rcvTimesLeft,		"timesLeft" }
 };
 
 const ReceiveDataTableEntry nonArrayDataTable[] =
 {
-	rcvBeepFreq,	"beep_freq",
-	rcvBeepLength,	"beep_length",
-	rcvFilename,	"fileName",
-	rcvFraction,	"fraction_printed",
-	rcvGeneratedBy,	"generatedBy",
-	rcvGeometry,	"geometry",
-	rcvHeight,		"height",
-	rcvLayerHeight,	"layerHeight",
-	rcvMyName,		"myName",
-	rcvProbe,		"probe",
-	rcvResponse,	"resp",
-	rcvSeq,			"seq",
-	rcvSfactor,		"sfactor",
-	rcvSize,		"size",
-	rcvStatus,		"status"
+	{ rcvBeepFreq,		"beep_freq" },
+	{ rcvBeepLength,	"beep_length" },
+	{ rcvDir,			"dir" },
+	{ rcvFilename,		"fileName" },
+	{ rcvFraction,		"fraction_printed" },
+	{ rcvGeneratedBy,	"generatedBy" },
+	{ rcvGeometry,		"geometry" },
+	{ rcvHeight,		"height" },
+	{ rcvLayerHeight,	"layerHeight" },
+	{ rcvMyName,		"myName" },
+	{ rcvProbe,			"probe" },
+	{ rcvResponse,		"resp" },
+	{ rcvSeq,			"seq" },
+	{ rcvSfactor,		"sfactor" },
+	{ rcvSize,			"size" },
+	{ rcvStatus,		"status" }
 };
 
 void StartReceivedMessage()
 {
 	newMessageSeq = messageSeq;
 	newMessageStartRow = messageStartRow;
+	fileDirectoryName.clear();
+	newFileList = -1;
 }
 
 void EndReceivedMessage()
 {
+	lastResponseTime = GetTickCount();
+
 	if (newMessageSeq != messageSeq && newMessageStartRow != messageStartRow)
 	{
 		messageSeq = newMessageSeq;
 		DisplayNewMessage();
+	}
+	
+	if (newFileList >= 0)
+	{
+		// We received a new file list
+		if (fileDirectoryName.isEmpty() || fileDirectoryName.equalsIgnoreCase("/gcodes") || fileDirectoryName.equalsIgnoreCase("0:/gcodes/"))
+		{
+			if (currentFile == NULL)
+			{
+				filesFileList = newFileList;
+				RefreshFileList();
+				filesListTimer.Stop();
+			}
+		}
+		else if (fileDirectoryName.equalsIgnoreCase("/macros"))
+		{
+			macrosFileList = newFileList;
+			RefreshMacroList();
+			macroListTimer.Stop();
+		}
+		newFileList = -1;
 	}
 }
 
@@ -1119,30 +1275,29 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		
 		case rcvFiles:
 			{
-				static bool fileListLocked = false;
 				if (index == 0)
 				{
-					if (currentFile == NULL)
+					// Find a free file list and index to receive the filenames into
+					newFileList = 0;
+					while (newFileList == filesFileList || newFileList == macrosFileList)
 					{
-						fileList.clear();
-						fileIndex.clear();
-						fileListChanged = true;
-						fileListLocked = false;
+						++newFileList;
 					}
-					else				// don't destroy the file list if we are using a pointer into it
-					{
-						fileListLocked = true;
-					}
+				
+					_ecv_assert(0 <= newFileList && newFileList < 3);
+					fileLists[newFileList].clear();
+					fileIndices[newFileList].clear();
 				}
-				if (!fileListLocked)
+				if (newFileList >= 0)
 				{
+					FileList& fileList = fileLists[newFileList];
+					FileListIndex& fileIndex = fileIndices[newFileList];
 					size_t len = strlen(data) + 1;		// we are going to copy the null terminator as well
-					if (len + fileList.size() <= fileList.capacity() && fileIndex.size() < fileIndex.capacity())
+					if (len + fileList.size() < fileList.capacity() && fileIndex.size() < fileIndex.capacity())
 					{
 						fileIndex.add(fileList.c_ptr() + fileList.size());
 						fileList.add(data, len);
 					}
-					fileListChanged = true;
 				}
 			}
 			break;
@@ -1227,18 +1382,22 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvMyName:
-			if (status != psConfiguring && status != psJustBooted)
+			if (status != psConfiguring && status != psConnecting)
 			{
 				machineName.copyFrom(data);
 				nameField->SetChanged();
 				gotMachineName = true;
+				if (gotGeometry)
+				{
+					machineConfigTimer.Stop();
+				}
 			}
 			break;
 		
 		case rcvFilename:
 			printingFile.copyFrom(data);
 			printingField->SetChanged();
-			fileInfoRequested = false;
+			fileInfoTimer.Stop();
 			break;
 		
 		case rcvSize:
@@ -1302,10 +1461,14 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvGeometry:
-			if (status != psConfiguring && status != psJustBooted)
+			if (status != psConfiguring && status != psConnecting)
 			{
 				isDelta = (strcmp(data, "delta") == 0);
 				gotGeometry = true;
+				if (gotMachineName)
+				{
+					machineConfigTimer.Stop();
+				}
 				for (size_t i = 0; i < 3; ++i)
 				{
 					mgr.Show(homeFields[i], !isDelta);
@@ -1321,6 +1484,10 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			AppendMessage(data);
 			break;
 		
+		case rcvDir:
+			fileDirectoryName.copyFrom(data);
+			break;
+
 		default:
 			break;
 		}
@@ -1363,6 +1530,17 @@ void SelfTest()
 	spd->SetValue(169);
 	e1Percent->SetValue(169);
 	e2Percent->SetValue(169);
+}
+
+void SendRequest(const char *s, bool includeSeq = false)
+{
+	SerialIo::SendString(s);
+	if (includeSeq)
+	{
+		SerialIo::SendInt(messageSeq);
+	}
+	SerialIo::SendChar('\n');
+	lastPollTime = GetTickCount();
 }
 
 /**
@@ -1423,7 +1601,7 @@ int main(void)
 	UpdateMessages(true);
 	UpdatePrintingFields();
 
-	uint32_t lastPollTime = GetTickCount() - printerPollInterval;
+	lastPollTime = GetTickCount() - printerPollInterval;	// allow a poll immediately
 	
 	// Hide the Head 2 parameters until we know we have a second head
 	mgr.Show(t2CurrentTemp, false);
@@ -1436,25 +1614,21 @@ int main(void)
 	ChangeTab(tabControl);
 	lastResponseTime = GetTickCount();		// pretend we just received a response
 	
+	machineConfigTimer.SetPending();		// we need to fetch the machine name and configuration
+	
 	for (;;)
 	{
 		// 1. Check for input from the serial port and process it.
+		// This calls back into functions StartReceivedMessage, ProcessReceivedValue, ProcessArrayLength and EndReceivedMessage.
 		SerialIo::CheckInput();
 		
-		// 2. If the file list has changed, refresh it.
-		if (fileListChanged)
-		{
-			RefreshFileList();
-			fileListChanged = false;
-		}
-		
-		// 2a. if displaying the message log, update the times
+		// 2. if displaying the message log, update the times
 		if (currentTab == tabMsg)
 		{
 			UpdateMessages(false);
 		}
 		
-		// 3. Check for a touch on the touch panel.
+		// 3a. Check for a touch on the touch panel.
 		if (GetTickCount() - lastTouchTime >= ignoreTouchTime)
 		{
 			uint16_t x, y;
@@ -1485,6 +1659,12 @@ int main(void)
 			}
 		}
 		
+		// 3b. If the file list has changed due to scrolling, refresh it.
+		if (fileListScrolled)
+		{
+			RefreshFileList();
+		}
+		
 		// 4. Refresh the display
 		UpdateDebugInfo();
 		mgr.RefreshAll(false);
@@ -1504,15 +1684,36 @@ int main(void)
 		// Under these conditions, we slow down the rate of polling to avoid building up a large queue of them.
 		uint32_t now = GetTickCount();
 		if (   now - lastPollTime >= printerPollInterval			// if we haven't polled the printer too recently...
-			&& (   now - lastPollTime > now - lastResponseTime		// ...and either we've had a response since the last poll...
-				|| now - lastPollTime >= printerPollTimeout			// ...or we're giving up on getting a response to the last poll
-			   )
+			&& now - lastResponseTime >= printerResponseInterval	// and we haven't had a response too recently
 		   )
 		{
-			lastPollTime += printerPollInterval;
-			SerialIo::SendString((gotMachineName) ? "M105 S2 R" : "M105 S3 R");
-			SerialIo::SendInt(messageSeq);
-			SerialIo::SendChar('\n');
+			if (now - lastPollTime > now - lastResponseTime)		// if we've had a response since the last poll
+			{
+				// First check for specific info we need to fetch
+				bool done = machineConfigTimer.Process();
+				if (!done)
+				{
+					done = macroListTimer.Process();
+				}
+				if (!done)
+				{
+					done = filesListTimer.Process();
+				}
+				if (!done)
+				{
+					done = fileInfoTimer.Process();
+				}
+				
+				// Otherwise just send a normal poll command
+				if (!done)
+				{
+					SendRequest("M105 S2 R", true);					// normal poll response
+				}
+			}
+			else if (now - lastPollTime >= printerPollTimeout)		// if we're giving up on getting a response to the last poll
+			{
+				SendRequest("M105 S2");								// just send a normal poll message, don't ask for the last response
+			}
 		}
 	}
 }

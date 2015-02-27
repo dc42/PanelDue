@@ -68,13 +68,14 @@ const PixelNumber column5 = 270;
 const PixelNumber columnX = 275;
 const PixelNumber columnY = 333;
 
+const PixelNumber rowTextHeight = 20;	// height of the font we use
 const PixelNumber rowHeight = 22;
 
 #elif DISPLAY_X >= 480
 
 const PixelNumber margin = 2;
 const PixelNumber outlinePixels = 2;
-const PixelNumber fieldSpacing = 5;
+const PixelNumber fieldSpacing = 6;
 const PixelNumber statusFieldWidth = 200;
 
 const PixelNumber column1 = margin;
@@ -86,21 +87,21 @@ const PixelNumber column5 = 297;
 const PixelNumber columnX = 306;
 const PixelNumber columnY = 397;
 
-const PixelNumber rowHeight = 24;
-
+const PixelNumber rowTextHeight = 20;	// height of the font we use
+const PixelNumber rowHeight = 25;
 
 #endif
 
-const PixelNumber row1 = margin;
+const PixelNumber row1 = 0;										// we don't need a top margin
 const PixelNumber row2 = row1 + rowHeight;
 const PixelNumber row3 = row2 + rowHeight;
 const PixelNumber row4 = row3 + rowHeight;
 const PixelNumber row5 = row4 + rowHeight;
-const PixelNumber row6 = row5 + rowHeight + 10;				// leave a gap between the two panels
+const PixelNumber row6 = row5 + rowHeight + 8;					// leave a gap between the two panels
 const PixelNumber row7 = row6 + rowHeight;
 const PixelNumber row8 = row7 + rowHeight;
 const PixelNumber row9 = row8 + rowHeight;
-const PixelNumber rowTabs = DisplayY - rowHeight - margin;	// place at bottom of screen with a margin
+const PixelNumber rowTabs = DisplayY - rowTextHeight - margin;	// place at bottom of screen with a margin
 
 const PixelNumber xyPopupX = 3, xyPopupY = 195;
 const PixelNumber tempPopupX = 35, tempPopupY = 195;
@@ -112,10 +113,16 @@ const PixelNumber popupBarHeight = 40;
 const PixelNumber popupBarFieldYoffset = 10;
 
 const uint32_t numFileColumns = 2;
-const uint32_t numFileRows = (DisplayY - margin)/rowHeight - 3;
+const uint32_t numFileRows = (DisplayY - margin - (2 * rowTextHeight) - 10)/rowHeight;
 const uint32_t numDisplayedFiles = numFileColumns * numFileRows;
+const PixelNumber firstFileRow = (DisplayY - margin - (2 * rowTextHeight) - (numFileRows * rowHeight))/2 + rowTextHeight;
 
-const uint32_t numMessageRows = (DisplayY - margin)/rowHeight - 3;
+const uint32_t numMacroColumns = 3;
+const uint32_t numMacroRows = 3;
+const uint32_t numDisplayedMacros = numMacroColumns * numMacroRows;
+const PixelNumber firstMacroRow = row7 + 5;
+
+const uint32_t numMessageRows = (DisplayY - margin - rowTextHeight)/rowHeight - 2;
 const PixelNumber messageTimeWidth = 60;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
@@ -160,8 +167,8 @@ extern FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos,
 extern IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent, *fanSpeed, *fanRpm;
 extern IntegerField *bedStandbyTemp, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
 extern ProgressBar *printProgressBar;
-extern StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabInfo, *touchCalibInstruction;
-extern StaticTextField *filenameFields[numDisplayedFiles], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
+extern StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup, *touchCalibInstruction;
+extern StaticTextField *filenameFields[numDisplayedFiles], *macroFields[numDisplayedMacros], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
 extern StaticTextField *homeFields[3], *homeAllField, *fwVersionField, *areYouSureTextField, *timeLeftField;
 extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 extern DisplayField * null currentTab;
@@ -203,6 +210,7 @@ const Event
 	evDeleteFile = 29,
 	evPausePrint = 30,
 	evResumePrint = 31,
-	evReset = 32;
+	evReset = 32,
+	evMacro = 33;
 
 #endif /* FIELDS_H_ */
