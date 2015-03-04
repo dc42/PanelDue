@@ -79,7 +79,7 @@ namespace Fields
 	void CreateFields()
 	{
 		mgr.Init(defaultBackColor);
-		DisplayField::SetDefaultFont(glcd19x20);
+		DisplayField::SetDefaultFont(DEFAULT_FONT);
 	
 		// Create the fields that are displayed on more than one page
 		DisplayField::SetDefaultColours(white, selectableBackColor);

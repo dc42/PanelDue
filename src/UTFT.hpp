@@ -206,6 +206,11 @@ private:
 	uint32_t lastCharColData;		// used for auto kerning
 	const char* translateFrom;
 	const char* translateTo;
+	
+	uint32_t charVal;
+	uint8_t numContinuationBytesLeft;
+
+	size_t writeNative(uint8_t c);
 
 	// Hardware interface
 	void LCD_Write_Bus(uint8_t VH, uint8_t VL);

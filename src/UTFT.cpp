@@ -65,7 +65,8 @@ inline bool UTFT::isParallel() const
 }
 
 UTFT::UTFT(DisplayType model, TransferMode pmode, unsigned int RS, unsigned int WR, unsigned int CS, unsigned int RST, unsigned int SER_LATCH)
-	: portRS(RS), portWR(WR), portCS(CS), portRST(RST), portSDA(RS), portSCL(SER_LATCH)
+	: portRS(RS), portWR(WR), portCS(CS), portRST(RST), portSDA(RS), portSCL(SER_LATCH),
+	  numContinuationBytesLeft(0)
 { 
 	displayModel = model;
 	displayTransferMode = pmode;
@@ -253,6 +254,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 	textXpos = 0;
 	textYpos = 0;
 	lastCharColData = 0UL;
+	numContinuationBytesLeft = 0;
 
 	removeReset();
 	delay_ms(5); 
@@ -1868,9 +1870,75 @@ void UTFT::clearToMargin()
 	}
 }
 
-// Write a character. Only works in landscape mode at present.
+// Write a UTF8 byte.
 // If textYpos is off the end of the display, then don't write anything, just update textXpos and lastCharColData
 size_t UTFT::write(uint8_t c)
+{
+	if (numContinuationBytesLeft == 0)
+	{
+		if (c < 0x80)
+		{
+			return writeNative(c);
+		}
+		else if ((c & 0xE0) == 0xC0)
+		{
+			charVal = (uint32_t)(c & 0x1F);
+			numContinuationBytesLeft = 1;
+			return 0;
+		}
+		else if ((c & 0xF0) == 0xE0)
+		{
+			charVal = (uint32_t)(c & 0x0F);
+			numContinuationBytesLeft = 2;
+			return 0;
+		}
+		else if ((c & 0xF8) == 0xF0)
+		{
+			charVal = (uint32_t)(c & 0x07);
+			numContinuationBytesLeft = 3;
+			return 0;
+		}
+		else if ((c & 0xFC) == 0xF8)
+		{
+			charVal = (uint32_t)(c & 0x03);
+			numContinuationBytesLeft = 4;
+			return 0;
+		}
+		else if ((c & 0xFE) == 0xFC)
+		{
+			charVal = (uint32_t)(c & 0x01);
+			numContinuationBytesLeft = 5;
+			return 0;
+		}
+		else
+		{
+			return writeNative(0x7F);
+		}
+	}
+	else if ((c & 0xC0) == 0x80)
+	{
+		charVal = (charVal << 6) | (c & 0x3F);
+		--numContinuationBytesLeft;
+		if (numContinuationBytesLeft == 0)
+		{
+			return writeNative((charVal < 0x100) ? (uint8_t)charVal : 0x7F);
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		// Bad UTF8 state
+		numContinuationBytesLeft = 0;
+		return writeNative(0x7F);
+	}
+}
+
+// Write a character.
+// If textYpos is off the end of the display, then don't write anything, just update textXpos and lastCharColData
+size_t UTFT::writeNative(uint8_t c)
 {
 	if (translateFrom != 0)
 	{

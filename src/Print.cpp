@@ -183,8 +183,9 @@ size_t Print::printFloat(double number, uint8_t digits)
 	n += print(int_part);
 
 	// Print the decimal point, but only if there are digits beyond
-	if (digits > 0) {
-		n += print(".");
+	if (digits > 0)
+	{
+		n += print("\xC2\xB7");		// Unicode middle dot
 	}
 
 	// Extract digits from the remainder one at a time

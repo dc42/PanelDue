@@ -566,6 +566,12 @@
     <Compile Include="src\FlashStorage.hpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\glcd19x21.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\glcd28x32.cpp">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\Mem.cpp">
       <SubType>compile</SubType>
     </Compile>
@@ -606,15 +612,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\DisplayOrientation.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\glcd10x10.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\glcd16x16.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\glcd19x20.cpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\OneBitPort.cpp">

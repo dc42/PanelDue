@@ -9,7 +9,6 @@
 #include <algorithm>
 
 extern UTFT lcd;
-extern uint8_t glcd19x20[];
 
 extern void WriteCommand(const char* array s);
 extern void WriteCommand(int i);
@@ -17,7 +16,7 @@ extern void WriteCommand(char c);
 
 
 // Static fields of class DisplayField
-LcdFont DisplayField::defaultFont = glcd19x20;
+LcdFont DisplayField::defaultFont = NULL;
 Color DisplayField::defaultFcolour = 0xFFFF;
 Color DisplayField::defaultBcolour = 0;
 
@@ -257,9 +256,9 @@ void FloatField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 	if (full || changed)
 	{
 		DoLabel(full, xOffset, yOffset);
-		lcd.setTranslation(".", DECIMAL_POINT);		// translate full stop to decimal point while printing numbers
+//		lcd.setTranslation(".", DECIMAL_POINT);		// translate full stop to decimal point while printing numbers
 		lcd.print(val, numDecimals);
-		lcd.setTranslation(NULL, NULL);
+//		lcd.setTranslation(NULL, NULL);
 		if (units != NULL)
 		{
 			lcd.print(units);

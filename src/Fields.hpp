@@ -52,26 +52,7 @@ const PixelNumber DisplayY = DISPLAY_Y;
 // Define the row and column positions. Leave a gap of at least 1 pixel from the edges of the screen, so that we can highlight
 // a field by drawing an outline.
 
-#if DISPLAY_X == 400
-
-const PixelNumber margin = 1;
-const PixelNumber outlinePixels = 1;
-const PixelNumber fieldSpacing = 4;
-const PixelNumber statusFieldWidth = 150;
-
-const PixelNumber column1 = margin;
-const PixelNumber column2 = 72;			// current temp
-const PixelNumber column3 = 146;		// active temp
-const PixelNumber column4 = 208;		// standby temp
-const PixelNumber column5 = 270;
-
-const PixelNumber columnX = 275;
-const PixelNumber columnY = 333;
-
-const PixelNumber rowTextHeight = 20;	// height of the font we use
-const PixelNumber rowHeight = 22;
-
-#elif DISPLAY_X >= 480
+#if DISPLAY_X == 480
 
 const PixelNumber margin = 2;
 const PixelNumber outlinePixels = 2;
@@ -87,8 +68,33 @@ const PixelNumber column5 = 297;
 const PixelNumber columnX = 306;
 const PixelNumber columnY = 397;
 
-const PixelNumber rowTextHeight = 20;	// height of the font we use
+const PixelNumber rowTextHeight = 21;	// height of the font we use
 const PixelNumber rowHeight = 25;
+
+extern uint8_t glcd19x21[];				// declare which fonts we will be using
+#define DEFAULT_FONT	glcd19x21
+
+#elif DISPLAY_X >= 800
+
+const PixelNumber margin = 2;
+const PixelNumber outlinePixels = 3;
+const PixelNumber fieldSpacing = 9;
+const PixelNumber statusFieldWidth = 300;
+
+const PixelNumber column1 = margin;
+const PixelNumber column2 = 141;			// current temp
+const PixelNumber column3 = 284;		// active temp
+const PixelNumber column4 = 395;		// standby temp
+const PixelNumber column5 = 505;
+
+const PixelNumber columnX = 520;
+const PixelNumber columnY = 675;
+
+const PixelNumber rowTextHeight = 32;	// height of the font we use
+const PixelNumber rowHeight = 40;
+
+extern uint8_t glcd28x32[];				// declare which fonts we will be using
+#define DEFAULT_FONT	glcd28x32
 
 #endif
 
@@ -126,9 +132,6 @@ const uint32_t numMessageRows = (DisplayY - margin - rowTextHeight)/rowHeight - 
 const PixelNumber messageTimeWidth = 60;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
-
-// Declare which fonts we will be using
-extern uint8_t glcd19x20[];
 
 const Color activeBackColor = red;
 const Color standbyBackColor = yellow;
