@@ -543,7 +543,6 @@ void SaveSettings()
 	nvData.Save();
 	savedNvData = nvData;
 	CheckSettingsAreSaved();
-//	Buzzer::Beep(touchBeepFrequency, 400, Buzzer::MaxVolume);			// long beep to acknowledge it	
 }
 
 void PopupAreYouSure(Event ev, const char* text)
@@ -575,7 +574,7 @@ void ProcessTouch(DisplayField *f)
 		// no break
 	case evAdjustPercent:
 		mgr.Outline(f, outlineColor, outlinePixels);
-		mgr.SetPopup(setTempPopup, tempPopupX, tempPopupY);
+		mgr.SetPopup(setTempPopup, tempPopupX, popupY);
 		fieldBeingAdjusted = f;
 		break;
 
@@ -615,6 +614,7 @@ void ProcessTouch(DisplayField *f)
 
 	case evCalTouch:
 		CalibrateTouch();
+		CheckSettingsAreSaved();
 		break;
 
 	case evFactoryReset:
@@ -650,13 +650,13 @@ void ProcessTouch(DisplayField *f)
 		
 	case evXYPos:
 		mgr.Outline(f, outlineColor, outlinePixels);
-		mgr.SetPopup(setXYPopup, xyPopupX, xyPopupY);
+		mgr.SetPopup(setXYPopup, xyPopupX, popupY);
 		fieldBeingAdjusted = f;
 		break;
 
 	case evZPos:
 		mgr.Outline(f, outlineColor, outlinePixels);
-		mgr.SetPopup(setZPopup, xyPopupX, xyPopupY);
+		mgr.SetPopup(setZPopup, xyPopupX, popupY);
 		fieldBeingAdjusted = f;
 		break;
 
@@ -747,7 +747,7 @@ void ProcessTouch(DisplayField *f)
 
 	case evSetBaudRate:
 		mgr.Outline(f, outlineColor, outlinePixels);
-		mgr.SetPopup(baudPopup, xyPopupX, xyPopupY);
+		mgr.SetPopup(baudPopup, xyPopupX, popupY);
 		fieldBeingAdjusted = f;
 		break;
 
@@ -763,7 +763,7 @@ void ProcessTouch(DisplayField *f)
 
 	case evSetVolume:
 		mgr.Outline(f, outlineColor, outlinePixels);
-		mgr.SetPopup(volumePopup, xyPopupX, xyPopupY);
+		mgr.SetPopup(volumePopup, xyPopupX, popupY);
 		fieldBeingAdjusted = f;
 		break;
 
@@ -1583,9 +1583,7 @@ int main(void)
 		nvData.SetDefaults();
 		InitLcd(nvData.lcdOrientation);
 		CalibrateTouch();					// this includes the touch driver initialization
-		nvData.Save();
-		savedNvData = nvData;
-		CheckSettingsAreSaved();
+		SaveSettings();
 	}
 	
 	// Set up the baud rate

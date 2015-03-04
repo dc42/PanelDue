@@ -47,11 +47,11 @@ namespace Fields
 	}
 	
 	// Create a popup bar with string parameters
-	PopupField *CreateStringPopupBar(unsigned int numEntries, const char* const text[], const char* const params[], Event ev)
+	PopupField *CreateStringPopupBar(PixelNumber width, unsigned int numEntries, const char* const text[], const char* const params[], Event ev)
 	{
-		PopupField *pf = new PopupField(popupBarHeight, popupBarWidth, popupBackColour);
+		PopupField *pf = new PopupField(popupBarHeight, width, popupBackColour);
 		DisplayField::SetDefaultColours(white, selectablePopupBackColour);
-		PixelNumber entryWidth = (popupBarWidth + fieldSpacing - 2 * margin)/numEntries;
+		PixelNumber entryWidth = (width + fieldSpacing - 2 * margin)/numEntries;
 		for (unsigned int i = 0; i < numEntries; ++i)
 		{
 			StaticTextField *tp = new StaticTextField(popupBarFieldYoffset, margin + i * entryWidth, entryWidth - fieldSpacing, Centre, text[i]);
@@ -62,15 +62,15 @@ namespace Fields
 	}
 
 	// Create a popup bar with integer parameters
-	PopupField *CreateIntPopupBar(unsigned int numEntries, const char* const text[], const int params[], Event ev)
+	PopupField *CreateIntPopupBar(PixelNumber width, unsigned int numEntries, const char* const text[], const int params[], Event ev, Event zeroEv)
 	{
-		PopupField *pf = new PopupField(popupBarHeight, popupBarWidth, popupBackColour);
+		PopupField *pf = new PopupField(popupBarHeight, width, popupBackColour);
 		DisplayField::SetDefaultColours(white, selectablePopupBackColour);
-		PixelNumber entryWidth = (popupBarWidth + fieldSpacing - 2 * margin)/numEntries;
+		PixelNumber entryWidth = (width + fieldSpacing - 2 * margin)/numEntries;
 		for (unsigned int i = 0; i < numEntries; ++i)
 		{
 			StaticTextField *tp = new StaticTextField(popupBarFieldYoffset, margin + i * entryWidth, entryWidth - fieldSpacing, Centre, text[i]);
-			tp->SetEvent(ev, params[i]);
+			tp->SetEvent((params[i] == 0) ? zeroEv : ev, params[i]);
 			pf->AddField(tp);
 		}
 		return pf;
@@ -206,21 +206,21 @@ namespace Fields
 		mgr.AddField(resetButtonField);
 
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(row6, 0, 70, Left, "Speed"));
+		mgr.AddField(new StaticTextField(row6, 0, speedTextWidth, Left, "Speed"));
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(spd = new IntegerField(row6, 70, 60, "", "%"));
+		mgr.AddField(spd = new IntegerField(row6, speedTextWidth, percentageWidth, "", "%"));
 		spd->SetValue(100);
 		spd->SetEvent(evAdjustPercent, "M220 S");
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(row6, 140, 30, Left, "E1"));
+		mgr.AddField(new StaticTextField(row6, e1FactorXpos, efactorTextWidth, Left, "E1"));
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(e1Percent = new IntegerField(row6, 170, 60, "", "%"));
+		mgr.AddField(e1Percent = new IntegerField(row6, e1FactorXpos + efactorTextWidth, percentageWidth, "", "%"));
 		e1Percent->SetValue(100);
 		e1Percent->SetEvent(evAdjustPercent, "M221 D0 S");
 		DisplayField::SetDefaultColours(white, defaultBackColor);
-		mgr.AddField(new StaticTextField(row6, 250, 30, Left, "E2"));
+		mgr.AddField(new StaticTextField(row6, e2FactorXpos, efactorTextWidth, Left, "E2"));
 		DisplayField::SetDefaultColours(white, selectableBackColor);
-		mgr.AddField(e2Percent = new IntegerField(row6, 280, 60, "", "%"));
+		mgr.AddField(e2Percent = new IntegerField(row6, e2FactorXpos + efactorTextWidth, percentageWidth, "", "%"));
 		e2Percent->SetValue(100);
 		e2Percent->SetEvent(evAdjustPercent, "M221 D1 S");
 	
@@ -257,8 +257,10 @@ namespace Fields
 		DisplayField::SetDefaultColours(white, selectableBackColor);
 		mgr.AddField(scrollFilesLeftField = new StaticTextField(row1, 80, 50, Centre, "<"));
 		scrollFilesLeftField->SetEvent(evScrollFiles, -numFileRows);
+		scrollFilesLeftField->Show(false);
 		mgr.AddField(scrollFilesRightField = new StaticTextField(row1, DisplayX - (80 + 50), 50, Centre, ">"));
 		scrollFilesRightField->SetEvent(evScrollFiles, numFileRows);
+		scrollFilesRightField->Show(false);
 		filesRoot = mgr.GetRoot();
 
 		// Create the fields for the Message tab
@@ -283,11 +285,11 @@ namespace Fields
 		DisplayField::SetDefaultColours(white, defaultBackColor);
 		// The firmware version field doubles up as an area for displaying debug messages, so make it the full width of the display
 		mgr.AddField(fwVersionField = new StaticTextField(row1, margin, DisplayX, Left, "Panel Due firmware version " VERSION_TEXT));
-		mgr.AddField(freeMem = new IntegerField(row2, margin, 195, "Free RAM: "));
-		mgr.AddField(touchX = new IntegerField(row2, 200, 130, "Touch: ", ","));
-		mgr.AddField(touchY = new IntegerField(row2, 330, 50, ""));
-		mgr.AddField(baudRateField = new IntegerField(row3, margin, 195, "Baud rate: "));
-		mgr.AddField(settingsNotSavedField = new StaticTextField(row4, margin, 300, Left, ""));
+		mgr.AddField(freeMem = new IntegerField(row2, margin, DisplayX/2 - margin, "Free RAM: "));
+		mgr.AddField(touchX = new IntegerField(row2, DisplayX/2, DisplayX/4, "Touch: ", ","));
+		mgr.AddField(touchY = new IntegerField(row2, (DisplayX * 3)/4, DisplayX/4, ""));
+		mgr.AddField(baudRateField = new IntegerField(row3, margin, DisplayX/2 - margin, "Baud rate: "));
+		mgr.AddField(settingsNotSavedField = new StaticTextField(row4, margin, DisplayX - 2 * margin, Left, ""));
 
 		DisplayField::SetDefaultColours(white, selectableBackColor);
 		AddCommandCell(row6, 0, 3, "Baud rate", evSetBaudRate, nullptr);
@@ -305,33 +307,19 @@ namespace Fields
 		touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "");		// the text is filled in within CalibrateTouch
 
 		// Create the popup window used to adjust temperatures and fan speed
-		setTempPopup = new PopupField(40, 330, popupBackColour);
-		DisplayField::SetDefaultColours(white, selectablePopupBackColour);
-		DisplayField *tp = new StaticTextField(10, 5, 60, Centre, "-10");
-		tp->SetEvent(evAdjustInt, -10);
-		setTempPopup->AddField(tp);
-		tp = new StaticTextField(10, 70, 60, Centre, "-1");
-		tp->SetEvent(evAdjustInt, -1);
-		setTempPopup->AddField(tp);
-		tp = new StaticTextField(10, 135, 60, Centre, "Set");
-		tp->SetEvent(evSetInt, 0);
-		setTempPopup->AddField(tp);
-		tp = new StaticTextField(10, 200, 60, Centre, "+1");
-		tp->SetEvent(evAdjustInt, 1);
-		setTempPopup->AddField(tp);
-		tp = new StaticTextField(10, 265, 60, Centre, "+10");
-		tp->SetEvent(evAdjustInt, 10);
-		setTempPopup->AddField(tp);
+		static const char* const tempPopupText[] = {"-10", "-1", "Set", "+1", "+10"};
+		static const int tempPopupParams[] = { -10, -1, 0, 1, 10 };
+		setTempPopup = CreateIntPopupBar(tempPopupBarWidth, 5, tempPopupText, tempPopupParams, evAdjustInt, evSetInt);
 
 		// Create the popup window used to adjust XY position
 		static const char * const xyPopupText[] = {"-50", "-5", "-0.5", "+0.5", "+5", "+50" };
 		static const char * const xyPopupParams[] = {"-50", "-5", "-0.5", "0.5", "5", "50" };
-		setXYPopup = CreateStringPopupBar(6, xyPopupText, xyPopupParams, evAdjustPosition);
+		setXYPopup = CreateStringPopupBar(xyPopupBarWidth, 6, xyPopupText, xyPopupParams, evAdjustPosition);
 
 		// Create the popup window used to adjust Z position
 		static const char * const zPopupText[] = {"-5", "-0.5", "-0.05", "+0.05", "+0.5", "+5" };
 		static const char * const zPopupParams[] = {"-5", "-0.5", "-0.05", "0.05", "0.5", "5" };
-		setZPopup = CreateStringPopupBar(6, zPopupText, zPopupParams, evAdjustPosition);
+		setZPopup = CreateStringPopupBar(zPopupBarWidth, 6, zPopupText, zPopupParams, evAdjustPosition);
 	
 		// Create the popup window used to display the file dialog
 		filePopup = new PopupField(filePopupHeight, filePopupWidth, popupBackColour);
@@ -351,7 +339,7 @@ namespace Fields
 		filePopup->AddField(fpGeneratedByField);
 
 		DisplayField::SetDefaultColours(white, selectablePopupBackColour);
-		tp = new StaticTextField(10 + 7 * rowHeight, 10, filePopupWidth/3 - 20, Centre, "Print");
+		DisplayField *tp = new StaticTextField(10 + 7 * rowHeight, 10, filePopupWidth/3 - 20, Centre, "Print");
 		tp->SetEvent(evPrint, 0);
 		filePopup->AddField(tp);
 		tp = new StaticTextField(10 + 7 * rowHeight, filePopupWidth/3 + 10, filePopupWidth/3 - 20, Centre, "Cancel");
@@ -364,12 +352,12 @@ namespace Fields
 		// Create the baud rate adjustment popup
 		static const char* const baudPopupText[] = { "9600", "19200", "38400", "57600", "115200" };
 		static const int baudPopupParams[] = { 9600, 19200, 38400, 57600, 115200 };
-		baudPopup = CreateIntPopupBar(5, baudPopupText, baudPopupParams, evAdjustBaudRate);
+		baudPopup = CreateIntPopupBar(fullPopupBarWidth, 5, baudPopupText, baudPopupParams, evAdjustBaudRate, evAdjustBaudRate);
 	
 		// Create the volume adjustment popup
 		static const char* const volumePopupText[Buzzer::MaxVolume + 1] = { "Off", "1", "2", "3", "4", "5" };
 		static const int volumePopupParams[Buzzer::MaxVolume + 1] = { 0, 1, 2, 3, 4, 5 };
-		volumePopup = CreateIntPopupBar(Buzzer::MaxVolume + 1, volumePopupText, volumePopupParams, evAdjustVolume);
+		volumePopup = CreateIntPopupBar(fullPopupBarWidth, Buzzer::MaxVolume + 1, volumePopupText, volumePopupParams, evAdjustVolume, evAdjustVolume);
 		
 		// Create the "Are you sure?" popup
 		areYouSurePopup = new PopupField(areYouSurePopupHeight, areYouSurePopupWidth, popupBackColour);

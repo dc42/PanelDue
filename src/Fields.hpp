@@ -71,15 +71,25 @@ const PixelNumber columnY = 397;
 const PixelNumber rowTextHeight = 21;	// height of the font we use
 const PixelNumber rowHeight = 25;
 
+const PixelNumber speedTextWidth = 70;
+const PixelNumber efactorTextWidth = 30;
+const PixelNumber percentageWidth = 60;
+const PixelNumber e1FactorXpos = 140, e2FactorXpos = 250;
+
+const PixelNumber messageTimeWidth = 60;
+
+const PixelNumber popupY = 195;
+const PixelNumber fullPopupBarWidth = DisplayX - 6;
+
 extern uint8_t glcd19x21[];				// declare which fonts we will be using
 #define DEFAULT_FONT	glcd19x21
 
-#elif DISPLAY_X >= 800
+#elif DISPLAY_X == 800
 
-const PixelNumber margin = 2;
+const PixelNumber margin = 4;
 const PixelNumber outlinePixels = 3;
-const PixelNumber fieldSpacing = 9;
-const PixelNumber statusFieldWidth = 300;
+const PixelNumber fieldSpacing = 12;
+const PixelNumber statusFieldWidth = 350;
 
 const PixelNumber column1 = margin;
 const PixelNumber column2 = 141;			// current temp
@@ -88,13 +98,27 @@ const PixelNumber column4 = 395;		// standby temp
 const PixelNumber column5 = 505;
 
 const PixelNumber columnX = 520;
-const PixelNumber columnY = 675;
+const PixelNumber columnY = 660;
 
 const PixelNumber rowTextHeight = 32;	// height of the font we use
 const PixelNumber rowHeight = 40;
 
+const PixelNumber speedTextWidth = 105;
+const PixelNumber efactorTextWidth = 45;
+const PixelNumber percentageWidth = 90;
+const PixelNumber e1FactorXpos = 220, e2FactorXpos = 375;
+
+const PixelNumber messageTimeWidth = 90;
+
+const PixelNumber popupY = 345;
+const PixelNumber fullPopupBarWidth = DisplayX - 10;
+
 extern uint8_t glcd28x32[];				// declare which fonts we will be using
 #define DEFAULT_FONT	glcd28x32
+
+#else
+
+#error Unsupported DISPLAY_X value
 
 #endif
 
@@ -109,14 +133,17 @@ const PixelNumber row8 = row7 + rowHeight;
 const PixelNumber row9 = row8 + rowHeight;
 const PixelNumber rowTabs = DisplayY - rowTextHeight - margin;	// place at bottom of screen with a margin
 
-const PixelNumber xyPopupX = 3, xyPopupY = 195;
-const PixelNumber tempPopupX = 35, tempPopupY = 195;
+const PixelNumber xyPopupBarWidth = fullPopupBarWidth;
+const PixelNumber zPopupBarWidth = fullPopupBarWidth;
+const PixelNumber tempPopupBarWidth = (2 * fullPopupBarWidth)/3;
+
+const PixelNumber xyPopupX = (DisplayX - xyPopupBarWidth)/2;
+const PixelNumber tempPopupX = (DisplayX - tempPopupBarWidth)/2;
 const PixelNumber filePopupWidth = DisplayX - 40, filePopupHeight = 8 * rowHeight + 20;
 const PixelNumber areYouSurePopupWidth = DisplayX - 80, areYouSurePopupHeight = 3 * rowHeight + 20;
 
-const PixelNumber popupBarWidth = DisplayX - 6;
-const PixelNumber popupBarHeight = 40;
-const PixelNumber popupBarFieldYoffset = 10;
+const PixelNumber popupBarHeight = rowTextHeight + 18;
+const PixelNumber popupBarFieldYoffset = 9;
 
 const uint32_t numFileColumns = 2;
 const uint32_t numFileRows = (DisplayY - margin - (2 * rowTextHeight) - 10)/rowHeight;
@@ -129,7 +156,6 @@ const uint32_t numDisplayedMacros = numMacroColumns * numMacroRows;
 const PixelNumber firstMacroRow = row7 + 5;
 
 const uint32_t numMessageRows = (DisplayY - margin - rowTextHeight)/rowHeight - 2;
-const PixelNumber messageTimeWidth = 60;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
 
