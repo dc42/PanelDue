@@ -636,11 +636,11 @@ void ProcessTouch(DisplayField *f)
 			break;
 		
 		case 1:
-			SerialIo::SendString((heaterStatus[1] == 2) ? "T0\n" : "T1\n");
+			SerialIo::SendString((heaterStatus[1] == 2) ? "T-1\n" : "T0\n");
 			break;
 		
 		case 2:
-			SerialIo::SendString((heaterStatus[2] == 2) ? "T0\n" : "T2\n");
+			SerialIo::SendString((heaterStatus[2] == 2) ? "T-1\n" : "T1\n");
 			break;
 		
 		default:
@@ -1463,7 +1463,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvGeometry:
 			if (status != psConfiguring && status != psConnecting)
 			{
-				isDelta = (strcmp(data, "delta") == 0);
+				isDelta = (stricmp(data, "delta") == 0);
 				gotGeometry = true;
 				if (gotMachineName)
 				{

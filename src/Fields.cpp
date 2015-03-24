@@ -114,10 +114,10 @@ namespace Fields
 		mgr.AddField(t2ActiveTemp = new IntegerField(row4, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
 		mgr.AddField(t2StandbyTemp = new IntegerField(row4, column4, column5 - column4 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
 		mgr.AddField(bedActiveTemp = new IntegerField(row5, column3, column4 - column3 - fieldSpacing, NULL, DEGREE_SYMBOL "C"));
-		t1ActiveTemp->SetEvent(evAdjustTemp, "G10 P1 S");
-		t1StandbyTemp->SetEvent(evAdjustTemp, "G10 P1 R");
-		t2ActiveTemp->SetEvent(evAdjustTemp, "G10 P2 S");
-		t2StandbyTemp->SetEvent(evAdjustTemp, "G10 P2 R");
+		t1ActiveTemp->SetEvent(evAdjustTemp, "G10 P0 S");
+		t1StandbyTemp->SetEvent(evAdjustTemp, "G10 P0 R");
+		t2ActiveTemp->SetEvent(evAdjustTemp, "G10 P1 S");
+		t2StandbyTemp->SetEvent(evAdjustTemp, "G10 P1 R");
 		bedActiveTemp->SetEvent(evAdjustTemp, "M140 S");
 
 		DisplayField::SetDefaultColours(white, defaultBackColor);
@@ -163,7 +163,7 @@ namespace Fields
 			{
 				for (unsigned int r = 0; r < numMacroRows; ++r)
 				{
-					StaticTextField *t = new StaticTextField((r * rowHeight) + firstMacroRow, (macroFieldWidth * c) + margin, macroFieldWidth - fieldSpacing, Centre, "");
+					StaticTextField *t = new StaticTextField((r * macroRowHeight) + firstMacroRow, (macroFieldWidth * c) + margin, macroFieldWidth - fieldSpacing, Centre, "");
 					mgr.AddField(t);
 					macroFields[macroNum] = t;
 					++macroNum;

@@ -70,6 +70,8 @@ const PixelNumber columnY = 397;
 
 const PixelNumber rowTextHeight = 21;	// height of the font we use
 const PixelNumber rowHeight = 25;
+const PixelNumber macroRowHeight = rowHeight;
+const PixelNumber panelSpacing = 8;
 
 const PixelNumber speedTextWidth = 70;
 const PixelNumber efactorTextWidth = 30;
@@ -102,6 +104,8 @@ const PixelNumber columnY = 660;
 
 const PixelNumber rowTextHeight = 32;	// height of the font we use
 const PixelNumber rowHeight = 40;
+const PixelNumber macroRowHeight = rowHeight + 10;
+const PixelNumber panelSpacing = 18;
 
 const PixelNumber speedTextWidth = 105;
 const PixelNumber efactorTextWidth = 45;
@@ -127,7 +131,7 @@ const PixelNumber row2 = row1 + rowHeight;
 const PixelNumber row3 = row2 + rowHeight;
 const PixelNumber row4 = row3 + rowHeight;
 const PixelNumber row5 = row4 + rowHeight;
-const PixelNumber row6 = row5 + rowHeight + 8;					// leave a gap between the two panels
+const PixelNumber row6 = row5 + rowHeight + panelSpacing;					// leave a gap between the two panels
 const PixelNumber row7 = row6 + rowHeight;
 const PixelNumber row8 = row7 + rowHeight;
 const PixelNumber row9 = row8 + rowHeight;
@@ -153,7 +157,7 @@ const PixelNumber firstFileRow = (DisplayY - margin - (2 * rowTextHeight) - (num
 const uint32_t numMacroColumns = 3;
 const uint32_t numMacroRows = 3;
 const uint32_t numDisplayedMacros = numMacroColumns * numMacroRows;
-const PixelNumber firstMacroRow = row7 + 5;
+const PixelNumber firstMacroRow = row7 + panelSpacing;
 
 const uint32_t numMessageRows = (DisplayY - margin - rowTextHeight)/rowHeight - 2;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
@@ -185,7 +189,7 @@ namespace Fields
 const size_t machineNameLength = 30;
 const size_t printingFileLength = 40;
 const size_t zprobeBufLength = 12;
-const size_t generatedByTextLength = 30;
+const size_t generatedByTextLength = 50;
 
 extern String<machineNameLength> machineName;
 extern String<printingFileLength> printingFile;
