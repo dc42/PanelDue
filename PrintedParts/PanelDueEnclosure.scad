@@ -15,8 +15,8 @@
 
 // Set ONE of the following 3 variables true according to your display type
 Itead43=false;
-Itead50=true;
-Other43=false;
+Itead50=false;
+Other43=true;
 
 Encoder=false;					// true if hole wanted for rotary encoder
 Lid=false;						// true if lid required
@@ -25,7 +25,7 @@ Mount=false;
 RelieveOverhang=0;				// see note 1 above
 
 // Set up the main enclosure parameters
-MWall=2;							// Main box MWall thickness
+MWall=2.4;						// Main box MWall thickness (multiple of extrusion width)
 MBase=2;							// Main box MBase (front panel) thickness
 MRad=MWall;						// MMRadius of box edges
 Mclearance= (Lid) ? 5 : 2;		// clearance between board edge and inside of box
@@ -35,6 +35,9 @@ MBez=1;							// This is the thickness covering the non-visible
 USBclear=2;						// Clearance to leave all around USB connector
 ResetHoleSide=2;					// Side of the square reset hole
 BuzzerHoleSide=1.5;				// Side of the square buzzer holes
+
+ResetGuideInnerRadius=2;
+ResetGuideOuterRadius=4.4;
 
 MountHeight=32;					// Height at which to put appjaws1's mount
 
@@ -89,8 +92,8 @@ LCDpcb = (Itead43) ? [-1,106,-6.1,73.6]
 			: (Itead50) ? [-1,119.2,-7.8,85.4]
 			: [-7,113,-3.2,71];	// The edges of the LCD PCB [Left,Right,Bottom,Top]
 LCDheight= (Itead43) ? 5.3 : (Itead50) ? 5.0 : 5.3;	// Height of top surface of LCD above PCB (mount standoff height)
-LCDmnthole=2;						// Hole to take self-tapping screw
-LCDbossDia=5;						// Diameter of boss under each mounting hole
+LCDmnthole=2.2;					// Hole to take self-tapping screw
+LCDbossDia=7;						// Diameter of boss under each mounting hole
 LCDbossD2=LCDbossDia*2;			// MBase diameter of boss supports
 LCDbossFR=(LCDbossDia-LCDmnthole)/2; // Bottom fillet MMRadius of bosses
 LCDsupW=1;						// Width of boss supports
@@ -115,8 +118,8 @@ PCBbuzzer=[37.8,50.5];			// Coordinates of buzzer
 
 PCBshaftDia=7;					// Diameter of hole for rotary encoder shaft
 PCBheight=13;						// Height controller PCB above LCD standoff
-PCBmnthole=2;						// Hole to take self-tapping screw
-PCBbossDia=5;						// Diameter of boss under each mounting hole
+PCBmnthole=2.2;					// Hole to take self-tapping screw
+PCBbossDia=7;						// Diameter of boss under each mounting hole
 PCBbossD2=PCBbossDia*2;			// MBase diameter of boss supports
 PCBbossFR=(PCBbossDia-PCBmnthole)/2; // Bottom fillet MMRadius of bosses
 PCBsupW=1;						// Width of boss supports
@@ -160,6 +163,8 @@ LidbossD2=LidbossDia*2;		// MBase diameter of boss supports
 LidbossFR=(LidbossDia-Lidmnthole)/2; // Bottom fillet MMRadius of bosses
 LidsupW=1;						// Width of boss supports
 
+ResetGuideHeight=LCDheight+PCBheight-6;
+
 overlap=0.1;
 $fn=50;  // 50 is good for printing, reduce to render faster while experimenting with parameters
 
@@ -195,6 +200,7 @@ mirror([Front ? 1:0,0,0])
 	if (ShowPCB){
 		translate([PCBpos[0],PCBpos[1],PCBheight+LCDheight+MBez]) rotate([0,0,PCBrot]) PCBshape();
 	}
+	translate([PCBpos[0],PCBpos[1],0]) rotate([0,0,PCBrot]) ResetGuides();
 }
 
 module RoundBox(Len,Wid,Ht,Rad,Wall,Base)
@@ -310,6 +316,20 @@ module BuzzerHoles()
 
 		}
 	}
+}
+
+module ResetGuides()
+{
+	translate([PCBreset[0],PCBreset[1],MBase - overlap])
+		difference() {
+			cylinder(r=ResetGuideOuterRadius, h=ResetGuideHeight+overlap);
+			translate([0,0,-overlap]) cylinder(r=ResetGuideInnerRadius, h=ResetGuideHeight+3*overlap);
+		}
+	translate([PCBerase[0],PCBerase[1],MBase - overlap])
+		difference() {
+			cylinder(r=ResetGuideOuterRadius, h=ResetGuideHeight+overlap);
+			translate([0,0,-overlap]) cylinder(r=ResetGuideInnerRadius, h=ResetGuideHeight+3*overlap);
+		}
 }
 
 // This creates the mounts for the LCD
