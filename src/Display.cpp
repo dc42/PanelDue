@@ -17,14 +17,33 @@ extern void WriteCommand(char c);
 
 // Static fields of class DisplayField
 LcdFont DisplayField::defaultFont = NULL;
-Color DisplayField::defaultFcolour = 0xFFFF;
-Color DisplayField::defaultBcolour = 0;
+Colour DisplayField::defaultFcolour = white;
+Colour DisplayField::defaultBcolour = black;
+Colour DisplayField::defaultButtonBorderColour = black;
+Colour DisplayField::defaultGradColour = 0;
+Colour DisplayField::defaultPressedBackColour = black;
+Colour DisplayField::defaultPressedGradColour = 0;
 
 DisplayField::DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
 	: y(py), x(px), width(pw), fcolour(defaultFcolour), bcolour(defaultBcolour),
 		evt(nullEvent), font(defaultFont), changed(true), visible(true), next(NULL)
 {
 	param.sParam = NULL;
+}
+
+/*static*/ void DisplayField::SetDefaultColours(Colour pf, Colour pb, Colour pbb, Colour pg, Colour pbp, Colour pgp)
+{
+	defaultFcolour = pf;
+	defaultBcolour = pb;
+	defaultButtonBorderColour = pbb;
+	defaultGradColour = pg;
+	defaultPressedBackColour = pbp;
+	defaultPressedGradColour = pgp;
+}
+
+PixelNumber DisplayField::GetHeight() const
+{
+	return lcd.getFontHeight();
 }
 
 void DisplayField::Show(bool v)
@@ -65,7 +84,7 @@ DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
 	return best;
 }
 
-void DisplayField::SetColours(Color pf, Color pb)
+void DisplayField::SetColours(Colour pf, Colour pb)
 {
 	if (fcolour != pf || bcolour != pb)
 	{
@@ -80,7 +99,7 @@ DisplayManager::DisplayManager()
 {
 }
 
-void DisplayManager::Init(Color bc)
+void DisplayManager::Init(Colour bc)
 {
 	backgroundColor = bc;
 	ClearAll();
@@ -114,14 +133,16 @@ void DisplayManager::RefreshAll(bool full)
 	}
 }
 
+bool DisplayManager::ObscuredByPopup(const DisplayField *p) const
+{
+	return HavePopup()
+			&& p->GetMaxY() >= popupY && p->GetMinY() < popupY + popupField->GetHeight()
+			&& p->GetMaxX() >= popupX && p->GetMinX() < popupX + popupField->GetWidth();
+}
+
 bool DisplayManager::Visible(const DisplayField *p) const
 {
-	return p->IsVisible() &&
-			(    !HavePopup()
-			  || (   p->GetMaxY() < popupY || p->GetMinY() >= popupY + popupField->GetHeight()
-				  || p->GetMaxX() < popupX || p->GetMinX() >= popupX + popupField->GetWidth()
-			     )
-			);
+	return p->IsVisible() && !ObscuredByPopup(p);
 }
 
 // Get the field that has been touched, or null if we can't find one
@@ -146,7 +167,7 @@ void DisplayManager::SetPopup(PopupField * null p, PixelNumber px, PixelNumber p
 		if (popupField != NULL)
 		{
 			lcd.setColor(backgroundColor);
-			lcd.fillRect(popupX, popupY, popupX + popupField->GetWidth() - 1, popupY + popupField->GetHeight() - 1);
+			lcd.fillRoundRect(popupX, popupY, popupX + popupField->GetWidth() - 1, popupY + popupField->GetHeight() - 1);
 			
 			// Re-display the background fields
 			for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
@@ -185,7 +206,7 @@ void DisplayManager::AttachPopup(PopupField * pp, DisplayField *p)
 
 // Draw an outline around a field. The field and 1 pixel around it are assumed to be visible.
 // Not sure what will happen of the field goes right up to one of the edges of the display! better avoid that situation.
-void DisplayManager::Outline(DisplayField *f, Color c, PixelNumber numPixels)
+void DisplayManager::Outline(DisplayField *f, Colour c, PixelNumber numPixels)
 {
 	lcd.setColor(c);
 	for (PixelNumber i = 1; i <= numPixels; ++i)
@@ -194,98 +215,63 @@ void DisplayManager::Outline(DisplayField *f, Color c, PixelNumber numPixels)
 	}
 }
 
-//TODO: make this work properly when field f is obscured by a popup
 void DisplayManager::Show(DisplayField *f, bool v)
 {
 	if (f->IsVisible() != v)
 	{
 		f->Show(v);
 
-		// Check whether the field is currently in the display list, if so then show or hide it
-		for (DisplayField *p = root; p != NULL; p = p->next)
+		if (!ObscuredByPopup(f))
 		{
-			if (p == f)
+			// Check whether the field is currently in the display list, if so then show or hide it
+			for (DisplayField *p = root; p != NULL; p = p->next)
 			{
-				if (v)
+				if (p == f)
 				{
-					f->Refresh(true, 0, 0);
+					if (v)
+					{
+						f->Refresh(true, 0, 0);
+					}
+					else
+					{
+						lcd.setColor(backgroundColor);
+						lcd.fillRect(f->GetMinX(), f->GetMinY(), f->GetMaxX(), f->GetMaxY());
+					}
+					break;
 				}
-				else
-				{
-					lcd.setColor(backgroundColor);
-					lcd.fillRect(f->GetMinX(), f->GetMinY(), f->GetMaxX(), f->GetMaxY());
-				}
-				break;
 			}
 		}
 	}
 }
 
-// Set the font and colours, print the label (if any) and leave the cursor at the correct position for the data
-void LabelledField::DoLabel(bool full, PixelNumber xOffset, PixelNumber yOffset)
-pre(full || changed)
+void DisplayManager::Press(Button *f, bool v)
 {
-	lcd.setFont(font);
-	lcd.setColor(fcolour);
-	lcd.setBackColor(bcolour);
-	if (label != NULL && (full || changed))
-	{
-		lcd.setTextPos(x + xOffset, y + yOffset, x + xOffset + width);
-		lcd.print(label);
-		labelColumns = lcd.getTextX() + 1 - x - xOffset;
-	}
-	else
-	{
-		lcd.setTextPos(x + xOffset + labelColumns, y + yOffset, x + xOffset + width);
-	}
-}
+	f->Press(v);
 
-void TextField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
-{
-	if (full || changed)
+	if (HavePopup())
 	{
-		DoLabel(full, xOffset, yOffset);
-		lcd.print(text);
-		lcd.clearToMargin();
-		changed = false;
-	}
-}
-
-void FloatField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
-{
-	if (full || changed)
-	{
-		DoLabel(full, xOffset, yOffset);
-//		lcd.setTranslation(".", DECIMAL_POINT);		// translate full stop to decimal point while printing numbers
-		lcd.print(val, numDecimals);
-//		lcd.setTranslation(NULL, NULL);
-		if (units != NULL)
+		for (DisplayField *p = popupField->GetRoot(); p != NULL; p = p->next)
 		{
-			lcd.print(units);
+			if (p == f)
+			{
+				f->Refresh(true, popupX, popupY);
+				return;
+			}
 		}
-		lcd.clearToMargin();
-		changed = false;
 	}
-}
 
-void IntegerField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
-{
-	if (full || changed)
+	if (!ObscuredByPopup(f))
 	{
-		DoLabel(full, xOffset, yOffset);
-		lcd.setTranslation(".", "\x16");
-		lcd.print(val);
-		lcd.setTranslation(NULL, NULL);
-		if (units != NULL)
+		for (DisplayField *p = root; p != NULL; p = p->next)
+		if (p == f)
 		{
-			lcd.print(units);
+			f->Refresh(true, 0, 0);
+			return;
 		}
-		lcd.clearToMargin();
-		changed = false;
-	}
+	}	
 }
 
-void StaticTextField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
+void RegularField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full || changed)
 	{
@@ -295,19 +281,120 @@ void StaticTextField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffse
 		lcd.setTextPos(x + xOffset, y + yOffset, x + xOffset + width);
 		if (align == Left)
 		{
-			lcd.print(text);
+			PrintText();
 			lcd.clearToMargin();
 		}
 		else
 		{
 			lcd.clearToMargin();
 			lcd.setTextPos(0, 9999, width);
-			lcd.print(text);    // dummy print to get text width
+			PrintText();    // dummy print to get text width
 			PixelNumber spare = width - lcd.getTextX();
 			lcd.setTextPos(x + xOffset + ((align == Centre) ? spare/2 : spare), y + yOffset, x + xOffset + width);
-			lcd.print(text);
+			PrintText();
 		}
 		changed = false;
+	}
+}
+
+void TextField::PrintText() const
+{
+	if (label != NULL)
+	{
+		lcd.print(label);
+	}
+	if (text != NULL)
+	{
+		lcd.print(text);
+	}
+}
+
+void FloatField::PrintText() const
+{
+	if (label != NULL)
+	{
+		lcd.print(label);
+	}
+	lcd.print(val, numDecimals);
+	if (units != NULL)
+	{
+		lcd.print(units);
+	}
+}
+
+void IntegerField::PrintText() const
+{
+	if (label != NULL)
+	{
+		lcd.print(label);
+	}
+	lcd.print(val);
+	if (units != NULL)
+	{
+		lcd.print(units);
+	}
+}
+
+void StaticTextField::PrintText() const
+{
+	lcd.print(text);
+}
+
+PixelNumber Button::GetHeight() const
+{
+	return lcd.getFontHeight() + 4;
+}
+
+void Button::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
+{
+	if (full || changed)
+	{
+		lcd.setFont(font);
+		lcd.setColor((pressed) ? pressedBackColour : bcolour);
+		// Note that we draw the filled rounded rectangle with the full width but 2 pixels less height than the border.
+		// This means that we start with the requested colour inside the border.
+		lcd.fillRoundRect(x + xOffset, y + yOffset + 1, x + xOffset + width - 1, y + yOffset + lcd.getFontHeight() + 2,
+							(pressed) ? pressedGradColour : gradColour, 2);
+		lcd.setColor(borderColour);
+		lcd.drawRoundRect(x + xOffset, y + yOffset, x + xOffset + width - 1, y + yOffset + lcd.getFontHeight() + 3);
+		lcd.setTransparentBackground(true);
+		lcd.setColor(fcolour);
+		lcd.setTextPos(0, 9999, width - 6);
+		PrintText();							// dummy print to get text width
+		PixelNumber spare = width - 6 - lcd.getTextX();
+		lcd.setTextPos(x + xOffset + 3 + spare/2, y + yOffset + 2, x + xOffset + width - 3);	// text is always centre-aligned
+		PrintText();
+		lcd.setTransparentBackground(false);
+		changed = false;
+	}
+}
+
+void TextButton::PrintText() const
+{
+	lcd.print(text);
+}
+
+void IntegerButton::PrintText() const
+{
+	if (label != NULL)
+	{
+		lcd.print(label);
+	}
+	lcd.setTranslation(".", "\x16");
+	lcd.print(val);
+	lcd.setTranslation(NULL, NULL);
+	if (units != NULL)
+	{
+		lcd.print(units);
+	}
+}
+
+void FloatButton::PrintText() const
+{
+	lcd.print(val, numDecimals);
+	if (units != NULL)
+	{
+		lcd.print(units);
 	}
 }
 
@@ -345,7 +432,7 @@ void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 	}
 }
 
-PopupField::PopupField(PixelNumber ph, PixelNumber pw, Color pb)
+PopupField::PopupField(PixelNumber ph, PixelNumber pw, Colour pb)
 	: height(ph), width(pw), backgroundColour(pb), root(NULL)
 {
 }
@@ -354,13 +441,13 @@ void PopupField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full)
 	{
+		// Draw a rectangle inside the border
+		lcd.setColor(green);
+		lcd.fillRoundRect(xOffset, yOffset + 1, xOffset + width - 1, yOffset + height - 2);
+
 		// Draw a black border
 		lcd.setColor(black);
-		lcd.drawRect(xOffset, yOffset, xOffset + width - 1, yOffset + height - 1);
-		
-		// Draw a rectangle inside that one
-		lcd.setColor(green);
-		lcd.fillRect(xOffset + 1, yOffset + 1, xOffset + width - 2, yOffset + height - 2);
+		lcd.drawRoundRect(xOffset, yOffset, xOffset + width - 1, yOffset + height - 1);
 	}
 	
 	for (DisplayField * null p = root; p != NULL; p = p->next)

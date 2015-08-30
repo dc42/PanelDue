@@ -139,7 +139,7 @@ struct FontDescriptor
 };
 
 
-typedef uint16_t Color;
+typedef uint16_t Colour;
 
 class UTFT : public Print
 {
@@ -147,20 +147,21 @@ public:
 	UTFT(DisplayType model, TransferMode pMode, unsigned int RS, unsigned int WR, unsigned int CS, unsigned int RST, unsigned int SER_LATCH = 0);
 	void InitLCD(DisplayOrientation po = Landscape);
 	void clrScr();
-	void fillScr(Color c);
+	void fillScr(Colour c);
 	void drawPixel(int x, int y);
 	void drawLine(int x1, int y1, int x2, int y2);
 	void drawRect(int x1, int y1, int x2, int y2);
 	void drawRoundRect(int x1, int y1, int x2, int y2);
-	void fillRect(int x1, int y1, int x2, int y2);
-	void fillRoundRect(int x1, int y1, int x2, int y2);
+	void fillRect(int x1, int y1, int x2, int y2, Colour grad = 0);
+	void fillRoundRect(int x1, int y1, int x2, int y2, Colour grad = 0, uint8_t gradChange = 1);
 	void drawCircle(int x, int y, int radius);
 	void fillCircle(int x, int y, int radius);
 		
 	// Colour management. We store colours in native 16-bit format, but support conversion from RGB.
-	void setColor(Color c);
-	void setBackColor(Color c);
-	static Color fromRGB(uint8_t r, uint8_t g, uint8_t b);
+	void setColor(Colour c) { fcolour = c; }
+	void setBackColor(Colour c) { bcolour = c; }
+	void setTransparentBackground(bool b) { transparentBackground = b; }
+	static Colour fromRGB(uint8_t r, uint8_t g, uint8_t b);
 		
 	// The following are for backwards compatibility
 	void setColor(uint8_t r, uint8_t g, uint8_t b) { setColor(fromRGB(r, g, b)); }
@@ -189,10 +190,11 @@ public:
 	uint16_t getDisplayYSize() const;
 	uint16_t getTextX() const { return textXpos; }
 	uint16_t getTextY() const { return textYpos; }
+	uint16_t getFontHeight() const { return cfont.y_size; }
 
 private:
-	uint8_t fcolorhi, fcolorlo;
-	uint8_t bcolorhi, bcolorlo;
+	uint16_t fcolour, bcolour;
+	bool transparentBackground;
 	DisplayOrientation orient;
 	uint16_t disp_x_size, disp_y_size;
 	DisplayType displayModel;
@@ -219,11 +221,11 @@ private:
 
 	// Low level interface
 	void LCD_Write_COM(uint8_t VL);
-	void LCD_Write_DATA(uint8_t VH, uint8_t VL);
-	void LCD_Write_DATA(uint8_t VL);
-	void LCD_Write_Repeated_DATA(uint8_t VH, uint8_t VL, uint16_t num);
-	void LCD_Write_Repeated_DATA(uint8_t VH, uint8_t VL, uint16_t num1, uint16_t num2);
-	void LCD_Write_COM_DATA(uint8_t com1, uint16_t dat1);
+	void LCD_Write_DATA8(uint8_t VL);
+	void LCD_Write_DATA16(uint16_t VHL);
+	void LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num);
+	void LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num1, uint16_t num2);
+	void LCD_Write_COM_DATA16(uint8_t com1, uint16_t dat1);
 	void LCD_Write_COM_DATA8(uint8_t com1, uint8_t dat1);
 		
 	void drawHLine(int x, int y, int len);

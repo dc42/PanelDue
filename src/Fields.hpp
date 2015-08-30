@@ -57,6 +57,7 @@ const PixelNumber DisplayY = DISPLAY_Y;
 const PixelNumber margin = 2;
 const PixelNumber outlinePixels = 2;
 const PixelNumber fieldSpacing = 6;
+const PixelNumber popupFieldSpacing = 10;
 const PixelNumber statusFieldWidth = 200;
 
 const PixelNumber column1 = margin;
@@ -80,7 +81,7 @@ const PixelNumber e1FactorXpos = 140, e2FactorXpos = 250;
 
 const PixelNumber messageTimeWidth = 60;
 
-const PixelNumber popupY = 195;
+const PixelNumber popupY = 182;
 const PixelNumber fullPopupBarWidth = DisplayX - 6;
 
 extern uint8_t glcd19x21[];				// declare which fonts we will be using
@@ -91,6 +92,7 @@ extern uint8_t glcd19x21[];				// declare which fonts we will be using
 const PixelNumber margin = 4;
 const PixelNumber outlinePixels = 3;
 const PixelNumber fieldSpacing = 12;
+const PixelNumber popupFieldSpacing = 12;
 const PixelNumber statusFieldWidth = 350;
 
 const PixelNumber column1 = margin;
@@ -131,22 +133,22 @@ const PixelNumber row2 = row1 + rowHeight;
 const PixelNumber row3 = row2 + rowHeight;
 const PixelNumber row4 = row3 + rowHeight;
 const PixelNumber row5 = row4 + rowHeight;
-const PixelNumber row6 = row5 + rowHeight + panelSpacing;					// leave a gap between the two panels
+const PixelNumber row6 = row5 + rowHeight + panelSpacing;		// leave a gap between the two panels
 const PixelNumber row7 = row6 + rowHeight;
 const PixelNumber row8 = row7 + rowHeight;
 const PixelNumber row9 = row8 + rowHeight;
-const PixelNumber rowTabs = DisplayY - rowTextHeight - margin;	// place at bottom of screen with a margin
+const PixelNumber rowTabs = DisplayY - rowTextHeight;			// place at bottom of screen with no margin
 
 const PixelNumber xyPopupBarWidth = fullPopupBarWidth;
 const PixelNumber zPopupBarWidth = fullPopupBarWidth;
-const PixelNumber tempPopupBarWidth = (2 * fullPopupBarWidth)/3;
+const PixelNumber tempPopupBarWidth = (3 * fullPopupBarWidth)/4;
 
 const PixelNumber xyPopupX = (DisplayX - xyPopupBarWidth)/2;
 const PixelNumber tempPopupX = (DisplayX - tempPopupBarWidth)/2;
 const PixelNumber filePopupWidth = DisplayX - 40, filePopupHeight = 8 * rowHeight + 20;
 const PixelNumber areYouSurePopupWidth = DisplayX - 80, areYouSurePopupHeight = 3 * rowHeight + 20;
 
-const PixelNumber popupBarHeight = rowTextHeight + 18;
+const PixelNumber popupBarHeight = rowTextHeight + 22;
 const PixelNumber popupBarFieldYoffset = 9;
 
 const uint32_t numFileColumns = 2;
@@ -163,19 +165,40 @@ const uint32_t numMessageRows = (DisplayY - margin - rowTextHeight)/rowHeight - 
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
 
-const Color activeBackColor = red;
-const Color standbyBackColor = yellow;
-const Color defaultBackColor = blue;
-const Color errorBackColour = magenta;
-const Color selectableBackColor = black;
-const Color outlineColor = green;
-const Color popupBackColour = green;
-const Color selectablePopupBackColour = UTFT::fromRGB(0, 128, 0);		// dark green
-const Color homedBackColour = UTFT::fromRGB(0, 0, 100);					// dark blue
-const Color notHomedBackColour = UTFT::fromRGB(255, 128, 0);			// orange
-const Color pauseButtonBackColor = UTFT::fromRGB(255, 128, 0);			// orange
-const Color resumeButtonBackColor = UTFT::fromRGB(0, 200, 0);			// green but not too bright
-const Color resetButtonBackColor = red;
+// Colours
+const Colour titleBarTextColour = white;
+const Colour titleBarBackColour = red;
+const Colour labelTextColour = black;
+const Colour infoTextColour = black;
+const Colour defaultBackColour = white; //UTFT::fromRGB(220, 220, 220);
+const Colour activeBackColour = UTFT::fromRGB(255, 128, 128);			// light red
+const Colour standbyBackColour = UTFT::fromRGB(255, 255, 128);			// light yellow
+const Colour errorTextColour = white;
+const Colour errorBackColour = magenta;
+
+const Colour outlineColour = green;
+const Colour popupBackColour = green;
+const Colour popupTextColour = black;
+const Colour popupButtonTextColour = white;
+const Colour popupButtonBackColour = UTFT::fromRGB(255, 128, 255);		// light magenta
+
+const Colour buttonTextColour = black;
+const Colour buttonPressedTextColour = black;
+const Colour buttonBackColour = white;
+const Colour buttonGradColour = UTFT::fromRGB(248-1, 248-1, 248);
+const Colour buttonPressedBackColour = UTFT::fromRGB(192, 255, 192);
+const Colour buttonPressedGradColour = UTFT::fromRGB(248-1, 248-1, 248);
+const Colour buttonBorderColour = black;
+const Colour homedButtonBackColour = UTFT::fromRGB(224, 224, 255);		// light blue
+const Colour notHomedButtonBackColour = UTFT::fromRGB(255, 224, 192);	// light orange
+const Colour pauseButtonBackColour = UTFT::fromRGB(255, 224, 192);		// light orange
+const Colour resumeButtonBackColour = UTFT::fromRGB(255, 255, 128);		// light yellow
+const Colour resetButtonBackColour = UTFT::fromRGB(255, 192, 192);		// light red
+
+const Colour progressBarColour = UTFT::fromRGB(0, 160, 0);
+const Colour progressBarBackColour = white;
+
+const Colour touchSpotColour = black;
 
 namespace Fields
 {
@@ -196,18 +219,25 @@ extern String<printingFileLength> printingFile;
 extern String<zprobeBufLength> zprobeBuf;
 extern String<generatedByTextLength> generatedByText;
 
-extern FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *xPos, *yPos, *zPos, *fpHeightField, *fpLayerHeightField;
-extern IntegerField *bedActiveTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp, *spd, *e1Percent, *e2Percent, *fanSpeed, *fanRpm;
-extern IntegerField *bedStandbyTemp, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *baudRateField;
+extern FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *fpHeightField, *fpLayerHeightField;
+extern FloatButton *xPos, *yPos, *zPos;
+extern IntegerButton *bedActiveTemp, *bedStandbyTemp, *t1ActiveTemp, *t2ActiveTemp, *t1StandbyTemp, *t2StandbyTemp;
+extern IntegerButton *spd, *e1Percent, *e2Percent, *fanSpeed, *baudRateButton, *volumeButton;
+extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm;
 extern ProgressBar *printProgressBar;
-extern StaticTextField *nameField, *statusField, *head1State, *head2State, *bedState, *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup, *touchCalibInstruction;
-extern StaticTextField *filenameFields[numDisplayedFiles], *macroFields[numDisplayedMacros], *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows], *scrollFilesLeftField, *scrollFilesRightField;
-extern StaticTextField *homeFields[3], *homeAllField, *fwVersionField, *areYouSureTextField, *timeLeftField;
+extern TextButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
+extern TextButton *filenameButtons[numDisplayedFiles], *macroButtons[numDisplayedMacros], *scrollFilesLeftButton, *scrollFilesRightButton;
+extern TextButton *homeButtons[3], *homeAllButton, *bedCompButton;
+extern StaticTextField *nameField, *statusField;
+extern TextButton *head1State, *head2State, *bedState;
+extern StaticTextField *touchCalibInstruction;
+extern StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
+extern StaticTextField *fwVersionField, *areYouSureTextField, *timeLeftField;
 extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
-extern DisplayField * null currentTab;
-extern DisplayField * null fieldBeingAdjusted;
+extern Button * null currentTab;
+extern Button * null fieldBeingAdjusted;
+extern Button * null currentButton;
 extern PopupField *setTempPopup, *setXYPopup, *setZPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup;
-//extern TextField *commandField;
 extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *printingField;
 
 // Event numbers, used to say what we need to do when a field is touched
