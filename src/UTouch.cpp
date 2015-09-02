@@ -82,11 +82,13 @@ bool UTouch::getTouchData(bool wantY, uint16_t &rslt)
 	touch_ReadData(command);						// discard the first result and send the same command again
 
 	const size_t numReadings = 4;
-	const uint16_t maxDiff = 4;
+	const uint16_t maxDiff = 3;
 	const unsigned int maxAttempts = 16;
 
 	uint16_t ring[numReadings];
-	uint16_t sum = 0;
+	uint32_t sum = 0;
+	
+	// Take enough readings to fill the ring buffer
 	for (size_t i = 0; i < numReadings; ++i)
 	{
 		uint16_t val = touch_ReadData(command);
@@ -94,21 +96,30 @@ bool UTouch::getTouchData(bool wantY, uint16_t &rslt)
 		sum += val;
 	}
 
+	// Test whether every reading is within 'maxDiff' of the average reading.
+	// If it is, return the average reading.
+	// If not, take another reading and try again, up to 'maxAttempts' times.
 	uint16_t avg;
-	bool ok;
 	size_t last = 0;
+	bool ok;
 	for (unsigned int i = 0; i < maxAttempts; ++i)
 	{
-		avg = sum/numReadings;
+		avg = (uint16_t)(sum/numReadings);
 		ok = true;
 		for (size_t i = 0; ok && i < numReadings; ++i)
 		{
-			ok = diff(avg, ring[i]) < maxDiff;
+			if (diff(avg, ring[i]) > maxDiff)
+			{
+				ok = false;
+				break;
+			}
 		}
 		if (ok)
 		{
 			break;
 		}
+		
+		// Take another reading
 		sum -= ring[last];
 		uint16_t val = touch_ReadData(command);
 		ring[last] = val;
