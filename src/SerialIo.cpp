@@ -13,6 +13,8 @@
 
 namespace SerialIo
 {
+	static unsigned int lineNumber = 0;
+
 	// Initialize the serial I/O subsystem, or re-initialize it with a new baud rate
 	void Init(uint32_t baudRate)
 	{
@@ -47,6 +49,7 @@ namespace SerialIo
 	}
 
 	void SendChar(char c)
+	decrease(numChars == 0)
 	{
 		if (c == '\n')
 		{
@@ -75,7 +78,7 @@ namespace SerialIo
 				checksum = 0;
 				// Send a dummy line number
 				SendCharAndChecksum('N');
-				SendCharAndChecksum('0');
+				SendInt(lineNumber++);			// numChars is no longer zero, so only recurses once
 				SendCharAndChecksum(' ');
 			}
 			SendCharAndChecksum(c);

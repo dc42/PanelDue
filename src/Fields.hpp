@@ -26,14 +26,6 @@ const DisplayOrientation DefaultTouchOrientAdjust = SwapXY;
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
 
-#elif DISPLAY_TYPE == DISPLAY_TYPE_INVERTED_43
-
-# define DISPLAY_CONTROLLER		SSD1963_480
-const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
-const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY);
-# define DISPLAY_X				(480)
-# define DISPLAY_Y				(272)
-
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_50
 
 # define DISPLAY_CONTROLLER		SSD1963_800
