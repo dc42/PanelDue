@@ -13,10 +13,11 @@
 // 3) If "Front" is set to true then parameters are interpreted as being viewed
 //    from the front of the LCD, otherwise they are viewed from the back
 
-// Set ONE of the following 3 variables true according to your display type
+// Set ONE of the following 4 variables true according to your display type
 Itead43=false;
 Itead50=false;
-Other43=true;
+Other43=false;
+Other50=true;
 
 Encoder=false;					// true if hole wanted for rotary encoder
 Lid=false;						// true if lid required
@@ -47,7 +48,7 @@ MountHeight=32;					// Height at which to put appjaws1's mount
 
 //************ Leave what follows alone unless you want to change the design ****************
 
-Left=Other43;						//true if controller board to left of display
+Left=Other43 || Other50;		//true if controller board to left of display
 Bottom=Itead43 || Itead50;		//true if controller board below the display
 Right=false;
 SmTol=0.1;						//small tolerence
@@ -63,13 +64,15 @@ Front=true;
 //        I have chosen the bottom left of the LCD screen as the origin, but
 //        use anything and the code will sort it out.
 //        co-ordinates are LCD display side down unless "Front" is "true".
-LCDscrn= (Itead43) ? [0,105.6,0,67.8]
+LCDscrn =   (Itead43) ? [0,105.6,0,67.8]
 			: (Itead50) ? [0,119,0,78.6]
-			: [0,106,0,67.8];	// The edges of the whole LCD screen area [Left,Right,Bottom,Top]
+			: (Other43) ? [0,106,0,67.8]
+			:             [0,119.5,0,78.5];	// The edges of the whole LCD screen area [Left,Right,Bottom,Top]
 
-LCDview= (Itead43) ? [3,103,7,64.8]
+LCDview =   (Itead43) ? [3,103,7,64.8]
 			: (Itead50) ? [2.5,114.5,3,71.5]
-			: [3,103,7,64.8];	// The edges of the visible region of the LCD screen (L,R,B,T)
+			: (Other43) ? [3,103,7,64.8]
+			:             [2.5,117,3,76];	// The edges of the visible region of the LCD screen (L,R,B,T)
 
 LCDmounts= (Itead43) ?
 			  [
@@ -85,23 +88,39 @@ LCDmounts= (Itead43) ?
 				[1.5,83.2],
 				[116.5,83.2],
 			  ]
-			: [						// Enter the relative coordinates [X,Y] of each mounting hole
+			: (Other43) ? [		// Enter the relative coordinates [X,Y] of each mounting hole
 				[-3.5,0],			// You may have as many mounting holes as you like
 				[110.5,0],		// Each hole is defined separately for flexibility
 				[-3.5,67.8],		// so that holes do not have to be on a rectangular pitch
 				[110.5,67.8]		// ... add/remove as needed for modules with more/less mounting holes
+			  ]
+			: [
+				[-4,-0.5],
+				[124,-0.5],
+				[-4,78],
+				[124,78],
 			  ];					
 
-LCDpcb = (Itead43) ? [-1,106,-6.1,73.6]
+LCDpcb =    (Itead43) ? [-1,106,-6.1,73.6]
 			: (Itead50) ? [-1,119.2,-7.8,85.4]
-			: [-7,113,-3.2,71];	// The edges of the LCD PCB [Left,Right,Bottom,Top]
-LCDheight= (Itead43) ? 5.3 : (Itead50) ? 5.0 : 5.3;	// Height of top surface of LCD above PCB (mount standoff height)
+			: (Other43) ? [-7,113,-3.2,71]
+			:             [-7,126.5,-3.5,80.5];	// The edges of the LCD PCB [Left,Right,Bottom,Top]
+
+LCDheight = (Itead43) ? 5.3 
+			: (Itead50) ? 5.0 
+			: (Other43) ? 5.3 
+			: 5.3;					// Height of top surface of LCD above PCB (mount standoff height)
+
+LCDpin1=	  (Itead43) ? [28.2,-5.0] 
+			: (Itead50) ? [35.8,-5.0]
+			: (Other43) ? [110.8,10.0]
+			: [124.27,14.37];
+
 LCDmnthole=2.2;					// Hole to take self-tapping screw
 LCDbossDia=7;						// Diameter of boss under each mounting hole
 LCDbossD2=LCDbossDia*2;			// MBase diameter of boss supports
 LCDbossFR=(LCDbossDia-LCDmnthole)/2; // Bottom fillet MMRadius of bosses
 LCDsupW=1;						// Width of boss supports
-LCDpin1=(Itead43) ? [28.2,-5.0] : (Itead50) ? [35.8,-5.0] : [110.8,10.0];
 
 // Controller PCB module parameters
 // The origin for these coordinates is pin 1 of the 40-pin connector, which is assumed to be 
@@ -387,12 +406,11 @@ module Boss(HoleD,Dia1,Dia2,Ht,MWall)
 	{
 		union()
 		{
-		cylinder (r=Dia1/2,h=Ht);
-		Xsupport(Dia1,Dia2,Ht,MWall);
-		CirFillet(Dia1,MWall);
+			cylinder (r=Dia1/2,h=Ht);
+			Xsupport(Dia1,Dia2,Ht,MWall);
+			CirFillet(Dia1,MWall);
 		}
-	translate([0,0,-.1])
-	cylinder(r=HoleD/2,h=Ht+.2);
+		translate([0,0,-.1]) cylinder(r=HoleD/2,h=Ht+.2);
 	}
 }
 
@@ -402,16 +420,14 @@ module Xsupport(Dia1,Dia2,Ht,MWall)
 	{
 		union()
 		{
-		translate([-Dia2/2,-MWall/2,0])
-		cube([Dia2,MWall,Ht]);
-		translate([-MWall/2,-Dia2/2,0])
-		cube([MWall,Dia2,Ht]);
+			translate([-Dia2/2,-MWall/2,0]) cube([Dia2,MWall,Ht]);
+			translate([-MWall/2,-Dia2/2,0]) cube([MWall,Dia2,Ht]);
 		}
 		difference()
 		{
-		translate([0,0,-1])
-		cylinder(r=Dia2,h=Ht+2);
-		cylinder(r1=Dia2/2,r2=Dia1/2,h=Ht+.1);
+			translate([0,0,-1])
+			cylinder(r=Dia2,h=Ht+2);
+			cylinder(r1=Dia2/2,r2=Dia1/2,h=Ht+.1);
 		}
 	}
 }
@@ -420,27 +436,18 @@ module CirFillet(D,R)
 {
 	difference()
 	{
-	rotate_extrude()
-	translate([D/2,0,0])
-	square(R);
-
-	rotate_extrude()
-	translate([D/2+R,R,0])
-	circle(r=R);
+		rotate_extrude() translate([D/2,0,0]) square(R);
+		rotate_extrude() translate([D/2+R,R,0]) circle(r=R);
 	}
 }
 
 // Draws a negative crosshair		
 module Cross(R,H)
 {
-	rotate([0,0,0])
-	Quad(R,H);
-	rotate([0,0,90])
-	Quad(R,H);
-	rotate([0,0,180])
-	Quad(R,H);
-	rotate([0,0,270])
-	Quad(R,H);
+	rotate([0,0,0]) Quad(R,H);
+	rotate([0,0,90]) Quad(R,H);
+	rotate([0,0,180]) Quad(R,H);
+	rotate([0,0,270]) Quad(R,H);
 }
 
 module Quad(R,H)
@@ -448,11 +455,8 @@ module Quad(R,H)
 	difference()
 	{
 		cylinder(r=R,h=H);
-
-		translate([-500,-500,-.1])
-		cube([500.1,1000,H+.2]);
-		translate([-500,-500,-.1])
-		cube([1000,500.1,H+.2]);
+		translate([-500,-500,-.1]) cube([500.1,1000,H+.2]);
+		translate([-500,-500,-.1]) 	cube([1000,500.1,H+.2]);
 	}
 }
 
