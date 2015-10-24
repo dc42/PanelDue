@@ -163,11 +163,6 @@ public:
 	void setTransparentBackground(bool b) { transparentBackground = b; }
 	static Colour fromRGB(uint8_t r, uint8_t g, uint8_t b);
 		
-	// The following are for backwards compatibility
-	void setColor(uint8_t r, uint8_t g, uint8_t b) { setColor(fromRGB(r, g, b)); }
-	void setBackColor(uint8_t r, uint8_t g, uint8_t b)  { setBackColor(fromRGB(r, g, b)); }
-	void fillScr(uint8_t r, uint8_t g, uint8_t b) { fillScr(fromRGB(r, g, b)); }
-		
 	// New print functions
 	// Set up translation for characters. Useful for translating fullstop into decimal point, or changing the width of spaces.
 	// Either the first string passed must be NULL, or the two strings must have equal lengths as returned by strlen().
@@ -179,9 +174,9 @@ public:
 	using Print::print;
 		
 	void setFont(const uint8_t* font);
-	void drawBitmap(int x, int y, int sx, int sy, bitmapdatatype data, int scale = 1);
+	void drawBitmap(int x, int y, int sx, int sy, const uint16_t *data, int scale = 1, bool byCols = true);
 #ifndef DISABLE_BITMAP_ROTATE
-	void drawBitmap(int x, int y, int sx, int sy, bitmapdatatype data, int deg, int rox, int roy);
+	void drawBitmap(int x, int y, int sx, int sy, const uint16_t *data, int deg, int rox, int roy);
 #endif
 	void lcdOff();
 	void lcdOn();
@@ -191,6 +186,7 @@ public:
 	uint16_t getTextX() const { return textXpos; }
 	uint16_t getTextY() const { return textYpos; }
 	uint16_t getFontHeight() const { return cfont.y_size; }
+	static uint16_t GetFontHeight(const uint8_t *f) { return reinterpret_cast<const FontDescriptor*>(f)->y_size; }
 
 private:
 	uint16_t fcolour, bcolour;

@@ -133,7 +133,7 @@ public:
 	
 	bool equalsIgnoreCase(const char* s) const
 	{
-		return stricmp(s, this->storage) == 0;
+		return strcasecmp(s, this->storage) == 0;
 	}
 };
 

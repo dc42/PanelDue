@@ -9,6 +9,5 @@
 
 #define regtype volatile uint8_t
 #define regsize uint8_t
-#define bitmapdatatype unsigned int*
 
 #endif

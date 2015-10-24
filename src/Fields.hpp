@@ -46,6 +46,8 @@ const PixelNumber DisplayY = DISPLAY_Y;
 
 #if DISPLAY_X == 480
 
+const unsigned int maxHeads = 4;
+
 const PixelNumber margin = 2;
 const PixelNumber outlinePixels = 2;
 const PixelNumber fieldSpacing = 6;
@@ -81,6 +83,8 @@ extern uint8_t glcd19x21[];				// declare which fonts we will be using
 
 #elif DISPLAY_X == 800
 
+const unsigned int maxHeads = 6;
+
 const PixelNumber margin = 4;
 const PixelNumber outlinePixels = 3;
 const PixelNumber fieldSpacing = 12;
@@ -88,7 +92,7 @@ const PixelNumber popupFieldSpacing = 12;
 const PixelNumber statusFieldWidth = 350;
 
 const PixelNumber column1 = margin;
-const PixelNumber column2 = 141;			// current temp
+const PixelNumber column2 = 141;		// current temp
 const PixelNumber column3 = 284;		// active temp
 const PixelNumber column4 = 395;		// standby temp
 const PixelNumber column5 = 505;
@@ -119,6 +123,9 @@ extern uint8_t glcd28x32[];				// declare which fonts we will be using
 #error Unsupported DISPLAY_X value
 
 #endif
+
+const PixelNumber bedColumn = (DISPLAY_X + fieldSpacing)/(maxHeads + 1);
+const PixelNumber tempButtonWidth = (DISPLAY_X + fieldSpacing)/(maxHeads + 1) - fieldSpacing;
 
 const PixelNumber row1 = 0;										// we don't need a top margin
 const PixelNumber row2 = row1 + rowHeight;
@@ -177,9 +184,9 @@ const Colour popupButtonBackColour = UTFT::fromRGB(255, 128, 255);		// light mag
 const Colour buttonTextColour = black;
 const Colour buttonPressedTextColour = black;
 const Colour buttonBackColour = white;
-const Colour buttonGradColour = UTFT::fromRGB(248-1, 248-1, 248);
+const Colour buttonGradColour = UTFT::fromRGB(8, 4, 8);
 const Colour buttonPressedBackColour = UTFT::fromRGB(192, 255, 192);
-const Colour buttonPressedGradColour = UTFT::fromRGB(248-1, 248-1, 248);
+const Colour buttonPressedGradColour = UTFT::fromRGB(8, 8, 8);
 const Colour buttonBorderColour = black;
 const Colour homedButtonBackColour = UTFT::fromRGB(224, 224, 255);		// light blue
 const Colour notHomedButtonBackColour = UTFT::fromRGB(255, 224, 192);	// light orange
@@ -217,11 +224,13 @@ extern IntegerButton *bedActiveTemp, *bedStandbyTemp, *t1ActiveTemp, *t2ActiveTe
 extern IntegerButton *spd, *e1Percent, *e2Percent, *fanSpeed, *baudRateButton, *volumeButton;
 extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm;
 extern ProgressBar *printProgressBar;
-extern TextButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
-extern TextButton *filenameButtons[numDisplayedFiles], *macroButtons[numDisplayedMacros], *scrollFilesLeftButton, *scrollFilesRightButton;
-extern TextButton *homeButtons[3], *homeAllButton, *bedCompButton;
+extern Button *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
+extern TextButton *filenameButtons[numDisplayedFiles], *macroButtons[numDisplayedMacros];
+extern Button *scrollFilesLeftButton, *scrollFilesRightButton;
+extern Button *homeButtons[3], *homeAllButton;
+extern TextButton *bedCompButton;
 extern StaticTextField *nameField, *statusField;
-extern TextButton *head1State, *head2State, *bedState;
+extern Button *head1State, *head2State, *bedState;
 extern StaticTextField *touchCalibInstruction;
 extern StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
 extern StaticTextField *fwVersionField, *areYouSureTextField, *timeLeftField;

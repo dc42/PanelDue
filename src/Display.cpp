@@ -6,7 +6,11 @@
  */ 
 
 #include "Display.hpp"
+#undef array
+#undef result
 #include <algorithm>
+#define array _ecv_array
+#define result _ecv_result
 
 extern UTFT lcd;
 
@@ -26,9 +30,8 @@ Colour DisplayField::defaultPressedGradColour = 0;
 
 DisplayField::DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
 	: y(py), x(px), width(pw), fcolour(defaultFcolour), bcolour(defaultBcolour),
-		evt(nullEvent), font(defaultFont), changed(true), visible(true), next(NULL)
+		changed(true), visible(true), next(NULL)
 {
-	param.sParam = NULL;
 }
 
 /*static*/ void DisplayField::SetDefaultColours(Colour pf, Colour pb, Colour pbb, Colour pg, Colour pbp, Colour pgp)
@@ -39,11 +42,6 @@ DisplayField::DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
 	defaultGradColour = pg;
 	defaultPressedBackColour = pbp;
 	defaultPressedGradColour = pgp;
-}
-
-PixelNumber DisplayField::GetHeight() const
-{
-	return lcd.getFontHeight();
 }
 
 void DisplayField::Show(bool v)
@@ -95,7 +93,7 @@ void DisplayField::SetColours(Colour pf, Colour pb)
 }
 
 DisplayManager::DisplayManager()
-	: backgroundColor(0), root(NULL), popupField(NULL)
+	: root(NULL), popupField(NULL), backgroundColor(0)
 {
 }
 
@@ -271,7 +269,7 @@ void DisplayManager::Press(Button *f, bool v)
 	}	
 }
 
-void RegularField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
+void FieldWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full || changed)
 	{
@@ -279,7 +277,7 @@ void RegularField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 		lcd.setColor(fcolour);
 		lcd.setBackColor(bcolour);
 		lcd.setTextPos(x + xOffset, y + yOffset, x + xOffset + width);
-		if (align == Left)
+		if (align == TextAlignment::Left)
 		{
 			PrintText();
 			lcd.clearToMargin();
@@ -290,7 +288,7 @@ void RegularField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 			lcd.setTextPos(0, 9999, width);
 			PrintText();    // dummy print to get text width
 			PixelNumber spare = width - lcd.getTextX();
-			lcd.setTextPos(x + xOffset + ((align == Centre) ? spare/2 : spare), y + yOffset, x + xOffset + width);
+			lcd.setTextPos(x + xOffset + ((align == TextAlignment::Centre) ? spare/2 : spare), y + yOffset, x + xOffset + width);
 			PrintText();
 		}
 		changed = false;
@@ -340,25 +338,33 @@ void StaticTextField::PrintText() const
 	lcd.print(text);
 }
 
-PixelNumber Button::GetHeight() const
+Button::Button(PixelNumber py, PixelNumber px, PixelNumber pw)
+	: DisplayField(py, px, pw), borderColour(defaultButtonBorderColour), gradColour(defaultGradColour),
+	  pressedBackColour(defaultPressedBackColour), pressedGradColour(defaultPressedGradColour), evt(nullEvent),
+	  pressed(false)
 {
-	return lcd.getFontHeight() + 4;
+	param.sParam = NULL;
 }
 
-void Button::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
+void Button::DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const
+{
+	lcd.setColor((pressed) ? pressedBackColour : bcolour);
+	// Note that we draw the filled rounded rectangle with the full width but 2 pixels less height than the border.
+	// This means that we start with the requested colour inside the border.
+	lcd.fillRoundRect(x + xOffset, y + yOffset + 1, x + xOffset + width - 1, y + yOffset + GetHeight() - 2,
+	(pressed) ? pressedGradColour : gradColour, buttonGradStep);
+	lcd.setColor(borderColour);
+	lcd.drawRoundRect(x + xOffset, y + yOffset, x + xOffset + width - 1, y + yOffset + GetHeight() - 1);	
+}
+
+void ButtonWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full || changed)
 	{
-		lcd.setFont(font);
-		lcd.setColor((pressed) ? pressedBackColour : bcolour);
-		// Note that we draw the filled rounded rectangle with the full width but 2 pixels less height than the border.
-		// This means that we start with the requested colour inside the border.
-		lcd.fillRoundRect(x + xOffset, y + yOffset + 1, x + xOffset + width - 1, y + yOffset + lcd.getFontHeight() + 2,
-							(pressed) ? pressedGradColour : gradColour, 2);
-		lcd.setColor(borderColour);
-		lcd.drawRoundRect(x + xOffset, y + yOffset, x + xOffset + width - 1, y + yOffset + lcd.getFontHeight() + 3);
+		DrawOutline(xOffset, yOffset);
 		lcd.setTransparentBackground(true);
 		lcd.setColor(fcolour);
+		lcd.setFont(font);
 		lcd.setTextPos(0, 9999, width - 6);
 		PrintText();							// dummy print to get text width
 		PixelNumber spare = width - 6 - lcd.getTextX();
@@ -374,15 +380,24 @@ void TextButton::PrintText() const
 	lcd.print(text);
 }
 
+void IconButton::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
+{
+	if (full || changed)
+	{
+		DrawOutline(xOffset, yOffset);
+		const uint16_t sx = GetIconWidth(icon), sy = GetIconHeight(icon);
+		lcd.drawBitmap(x + (width - sx)/2, y + (GetHeight() - sy)/2, sx, sy, GetIconData(icon));
+		changed = false;
+	}
+}
+
 void IntegerButton::PrintText() const
 {
 	if (label != NULL)
 	{
 		lcd.print(label);
 	}
-	lcd.setTranslation(".", "\x16");
 	lcd.print(val);
-	lcd.setTranslation(NULL, NULL);
 	if (units != NULL)
 	{
 		lcd.print(units);
@@ -433,7 +448,7 @@ void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 }
 
 PopupField::PopupField(PixelNumber ph, PixelNumber pw, Colour pb)
-	: height(ph), width(pw), backgroundColour(pb), root(NULL)
+	: root(NULL), height(ph), width(pw), backgroundColour(pb)
 {
 }
 

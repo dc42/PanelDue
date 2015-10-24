@@ -9,7 +9,13 @@
 #ifndef PRINT_H_
 #define PRINT_H_
 
+#include "ecv.h"
+#undef array
+#undef result
 #include "asf.h"
+#define array _ecv_array
+#define result _ecv_result
+
 #include <cstddef>
 #include <cstring>
 #include <cmath>

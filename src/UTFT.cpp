@@ -1618,14 +1618,14 @@ void UTFT::fillRoundRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gr
 		if (++gradCount == gradChange)
 		{
 			gradCount = 0;
-			fcolour += grad;
+			fcolour -= grad;
 		}
 		drawHLine(x1+1, y1, x2-x1-2);
 		++y1;
 		if (++gradCount == gradChange)
 		{
 			gradCount = 0;
-			fcolour += grad;
+			fcolour -= grad;
 		}
 		while (y1 + 1 < y2)
 		{
@@ -1634,7 +1634,7 @@ void UTFT::fillRoundRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gr
 			if (++gradCount == gradChange)
 			{
 				gradCount = 0;
-				fcolour += grad;
+				fcolour -= grad;
 			}
 		}
 		drawHLine(x1+1, y1, x2-x1-2);
@@ -1642,7 +1642,7 @@ void UTFT::fillRoundRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gr
 		if (++gradCount == gradChange)
 		{
 			gradCount = 0;
-			fcolour += grad;
+			fcolour -= grad;
 		}
 		drawHLine(x1+2, y1, x2-x1-4);
 		
@@ -2107,31 +2107,30 @@ void UTFT::setFont(const uint8_t* font)
 	cfont.font += 5;
 }
 
-//TODO implement for inverted modes
-void UTFT::drawBitmap(int x, int y, int sx, int sy, bitmapdatatype data, int scale)
+void UTFT::drawBitmap(int x, int y, int sx, int sy, const uint16_t * data, int scale, bool byCols)
 {
-	assertCS();
 	int curY = y;
-	for (int ty=0; ty<sy; ty++)
+	assertCS();
+	for (int ty = 0; ty < sy; ty++)
 	{
 		for (int i = 0; i < scale; ++i)
 		{
 			setXY(x, curY, x+(sx*scale)-1, curY);
 			if (orient & InvertBitmap)
 			{
-				for (int tx=sx; tx!=0; )
+				for (int tx = sx; tx != 0; )
 				{
 					--tx;
-					uint16_t col = *(uint16_t*)(&data[(ty*sx)+tx]);
-					LCD_Write_Repeated_DATA16(col>>8, col & 0xff, scale);
+					uint16_t col = data[(byCols) ? (tx*sy)+ty : (ty*sx)+tx];
+					LCD_Write_Repeated_DATA16(col, scale);
 				}
 			}
 			else
 			{
-				for (int tx=0; tx<sx; tx++)
+				for (int tx = 0; tx < sx; tx++)
 				{
-					uint16_t col = *(uint16_t*)(&data[(ty*sx)+tx]);
-					LCD_Write_Repeated_DATA16(col>>8, col & 0xff, scale);
+					uint16_t col = data[(byCols) ? (tx*sy)+ty : (ty*sx)+tx];
+					LCD_Write_Repeated_DATA16(col, scale);
 				}
 			}
 			++curY;
@@ -2143,12 +2142,14 @@ void UTFT::drawBitmap(int x, int y, int sx, int sy, bitmapdatatype data, int sca
 
 #ifndef DISABLE_BITMAP_ROTATE
 
-void UTFT::drawBitmap(int x, int y, int sx, int sy, bitmapdatatype data, int deg, int rox, int roy)
+void UTFT::drawBitmap(int x, int y, int sx, int sy, uint16_t *data, int deg, int rox, int roy)
 {
 	double radian = deg*0.0175;  
 
 	if (deg==0)
+	{
 		drawBitmap(x, y, sx, sy, data);
+	}
 	else
 	{
 		assertCS();
@@ -2156,13 +2157,13 @@ void UTFT::drawBitmap(int x, int y, int sx, int sy, bitmapdatatype data, int deg
 		{
 			for (int tx=0; tx<sx; tx++)
 			{
-				uint16_t col = *(uint16_t*(&data[(ty*sx)+tx]);
+				uint16_t col = data[(ty*sx)+tx];
 
 				int newx=x+rox+(((tx-rox)*cos(radian))-((ty-roy)*sin(radian)));
 				int newy=y+roy+(((ty-roy)*cos(radian))+((tx-rox)*sin(radian)));
 
 				setXY(newx, newy, newx, newy);
-				LCD_Write_DATA8(col>>8,col & 0xff);
+				LCD_Write_DATA16(col);
 			}
 		}
 		removeCS();

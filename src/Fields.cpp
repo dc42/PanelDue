@@ -11,6 +11,7 @@
 #include "PanelDue.hpp"
 #include "Buzzer.hpp"
 #include "Fields.hpp"
+#include "Icons/Icons_21h.hpp"
 
 FloatField *bedCurrentTemp, *t1CurrentTemp, *t2CurrentTemp, *fpHeightField, *fpLayerHeightField;
 FloatButton *xPos, *yPos, *zPos;
@@ -18,9 +19,11 @@ IntegerButton *bedActiveTemp, *bedStandbyTemp, *t1ActiveTemp, *t2ActiveTemp, *t1
 IntegerButton *spd, *e1Percent, *e2Percent, *fanSpeed, *baudRateButton, *volumeButton;
 IntegerField *fanRpm, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField;
 ProgressBar *printProgressBar;
-TextButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
-TextButton *filenameButtons[numDisplayedFiles], *macroButtons[numDisplayedMacros], *scrollFilesLeftButton, *scrollFilesRightButton;
-TextButton *homeButtons[3], *homeAllButton, *bedCompButton, *head1State, *head2State, *bedState;
+Button *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
+TextButton *filenameButtons[numDisplayedFiles], *macroButtons[numDisplayedMacros];
+Button *scrollFilesLeftButton, *scrollFilesRightButton;
+Button *homeButtons[3], *homeAllButton, *head1State, *head2State, *bedState;
+TextButton *bedCompButton;
 StaticTextField *nameField, *statusField, *touchCalibInstruction;
 StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
 StaticTextField *fwVersionField, *settingsNotSavedField, *areYouSureTextField;
@@ -38,11 +41,15 @@ String<printingFileLength> printingFile;
 String<zprobeBufLength> zprobeBuf;
 String<generatedByTextLength> generatedByText;
 
+const int defaultTemperatures[7] = { 0, 0, 0, 0, 0, 0, 0 };
+	
+const Icon heaterIcons[7] = { IconBed_21h, IconNozzle1_21h, IconNozzle2_21h, IconNozzle1_21h, IconNozzle1_21h, IconNozzle1_21h, IconNozzle1_21h };
+
 namespace Fields
 {
 
-	// Add a command cell
-	TextButton *AddTextButton(PixelNumber row, unsigned int col, unsigned int numCols, const char* text, Event evt, const char* param)
+	// Add a text button
+	TextButton *AddTextButton(PixelNumber row, unsigned int col, unsigned int numCols, const char* array text, Event evt, const char* param)
 	{
 		PixelNumber width = (DisplayX - 2 * margin + fieldSpacing)/numCols - fieldSpacing;
 		PixelNumber xpos = col * (width + fieldSpacing) + margin;
@@ -52,8 +59,19 @@ namespace Fields
 		return f;
 	}
 
-	// Add a command cell
-	IntegerButton *AddIntegerButton(PixelNumber row, unsigned int col, unsigned int numCols, const char* label, const char *units, Event evt)
+	// Add an icon button
+	IconButton *AddIconButton(PixelNumber row, unsigned int col, unsigned int numCols, Icon ic, Event evt, const char* param)
+	{
+		PixelNumber width = (DisplayX - 2 * margin + fieldSpacing)/numCols - fieldSpacing;
+		PixelNumber xpos = col * (width + fieldSpacing) + margin;
+		IconButton *f = new IconButton(row - 2, xpos, width, ic);
+		f->SetEvent(evt, param);
+		mgr.AddField(f);
+		return f;
+	}
+
+	// Add an integer button
+	IntegerButton *AddIntegerButton(PixelNumber row, unsigned int col, unsigned int numCols, const char * array null label, const char * array null units, Event evt)
 	{
 		PixelNumber width = (DisplayX - 2 * margin + fieldSpacing)/numCols - fieldSpacing;
 		PixelNumber xpos = col * (width + fieldSpacing) + margin;
@@ -61,6 +79,43 @@ namespace Fields
 		f->SetEvent(evt, 0);
 		mgr.AddField(f);
 		return f;
+	}
+	
+	void CreateIntButtonRow(PopupField * null pf, PixelNumber top, PixelNumber left, PixelNumber buttonWidth, PixelNumber spacing, unsigned int numButtons,
+								const int * array values, const char * array null label, const char* array null units, Event evt)
+	{
+		for (unsigned int i = 0; i < numButtons; ++i)
+		{
+			IntegerButton *tp = new IntegerButton(top, left + i * (buttonWidth + spacing), buttonWidth, label, units);
+			tp->SetValue(values[i]);
+			tp->SetEvent(evt, i);
+			if (pf == nullptr)
+			{
+				mgr.AddField(tp);
+			}
+			else
+			{
+				pf->AddField(tp);
+			}		
+		}	
+	}
+
+	void CreateIconButtonRow(PopupField * null pf, PixelNumber top, PixelNumber left, PixelNumber buttonWidth, PixelNumber spacing, unsigned int numButtons,
+								const Icon * array icons, Event evt)
+	{
+		for (unsigned int i = 0; i < numButtons; ++i)
+		{
+			IconButton *tp = new IconButton(top, left + i * (buttonWidth + spacing), buttonWidth, icons[i]);
+			tp->SetEvent(evt, i);
+			if (pf == nullptr)
+			{
+				mgr.AddField(tp);
+			}
+			else
+			{
+				pf->AddField(tp);
+			}
+		}
 	}
 
 	// Create a popup bar with string parameters
@@ -111,18 +166,26 @@ namespace Fields
 		baseRoot = mgr.GetRoot();		// save the root of fields that we usually display
 	
 		DisplayField::SetDefaultColours(titleBarTextColour, titleBarBackColour);
-		mgr.AddField(nameField = new StaticTextField(row1, 0, DisplayX - statusFieldWidth, Centre, machineName.c_str()));
-		mgr.AddField(statusField = new StaticTextField(row1, DisplayX - statusFieldWidth, statusFieldWidth, Right, ""));
+		mgr.AddField(nameField = new StaticTextField(row1, 0, DisplayX - statusFieldWidth, TextAlignment::Centre, machineName.c_str()));
+		mgr.AddField(statusField = new StaticTextField(row1, DisplayX - statusFieldWidth, statusFieldWidth, TextAlignment::Right, ""));
 
-		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);	
-		mgr.AddField(new StaticTextField(row2, column2, column3 - column2 - fieldSpacing, Centre, "Current"));
-		mgr.AddField(new StaticTextField(row2, column3, column4 - column3 - fieldSpacing, Centre, "Active"));
-		mgr.AddField(new StaticTextField(row2, column4, column5 - column4 - fieldSpacing, Centre, "Idle"));
+#if 0
+		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
 
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
-		mgr.AddField(head1State = new TextButton(row3 - 2, column1, column2 - column1 - fieldSpacing, "Head 1"));
-		mgr.AddField(head2State = new TextButton(row4 - 2, column1, column2 - column1 - fieldSpacing, "Head 2"));
-		mgr.AddField(bedState = new TextButton(row5 - 2, column1, column2 - column1 - fieldSpacing, "Bed"));
+		CreateIconButtonRow(nullptr, row1, bedColumn, tempButtonWidth, fieldSpacing, maxHeads + 1, headIcons, evSelectHead);
+		CreateIntButtonRow(nullptr, row2, bedColumn, tempButtonWidth, fieldSpacing, maxHeads + 1, defaultTemperatures, nullptr, DEGREE_SYMBOL "C", evAdjustTemp);
+		CreateIntButtonRow(nullptr, row3, bedColumn, tempButtonWidth, fieldSpacing, maxHeads + 1, defaultTemperatures, nullptr, DEGREE_SYMBOL "C", evAdjustTemp);
+#else
+		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);	
+		mgr.AddField(new StaticTextField(row2, column2, column3 - column2 - fieldSpacing, TextAlignment::Centre, "Current"));
+		mgr.AddField(new StaticTextField(row2, column3, column4 - column3 - fieldSpacing, TextAlignment::Centre, "Active"));
+		mgr.AddField(new StaticTextField(row2, column4, column5 - column4 - fieldSpacing, TextAlignment::Centre, "Idle"));
+
+		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
+		mgr.AddField(head1State = new IconButton(row3 - 2, column1, column2 - column1 - fieldSpacing, heaterIcons[1]));
+		mgr.AddField(head2State = new IconButton(row4 - 2, column1, column2 - column1 - fieldSpacing, heaterIcons[2]));
+		mgr.AddField(bedState = new IconButton(row5 - 2, column1, column2 - column1 - fieldSpacing, heaterIcons[0]));
 		head1State->SetEvent(evSelectHead, 1);
 		head2State->SetEvent(evSelectHead, 2);
 		bedState->SetEvent(evSelectHead, 0);
@@ -140,17 +203,17 @@ namespace Fields
 		bedActiveTemp->SetEvent(evAdjustTemp, "M140 S");
 
 		DisplayField::SetDefaultColours(infoTextColour, defaultBackColour);
-		mgr.AddField(t1CurrentTemp = new FloatField(row3, column2, column3 - column2 - fieldSpacing, Centre, 1, nullptr, DEGREE_SYMBOL "C"));
-		mgr.AddField(t2CurrentTemp = new FloatField(row4, column2, column3 - column2 - fieldSpacing, Centre, 1, nullptr, DEGREE_SYMBOL "C"));
-		mgr.AddField(bedCurrentTemp = new FloatField(row5, column2, column3 - column2 - fieldSpacing, Centre, 1, nullptr, DEGREE_SYMBOL "C"));
-
+		mgr.AddField(t1CurrentTemp = new FloatField(row3, column2, column3 - column2 - fieldSpacing, TextAlignment::Centre, 1, nullptr, DEGREE_SYMBOL "C"));
+		mgr.AddField(t2CurrentTemp = new FloatField(row4, column2, column3 - column2 - fieldSpacing, TextAlignment::Centre, 1, nullptr, DEGREE_SYMBOL "C"));
+		mgr.AddField(bedCurrentTemp = new FloatField(row5, column2, column3 - column2 - fieldSpacing, TextAlignment::Centre, 1, nullptr, DEGREE_SYMBOL "C"));
+#endif
 		commonRoot = mgr.GetRoot();		// save the root of fields that we display on more than one page
 		
 		// Create the extra fields for the Control tab
-		mgr.AddField(new StaticTextField(row2, columnX, columnY - columnX - fieldSpacing, Centre, "X"));
-		mgr.AddField(new StaticTextField(row2, columnY, DisplayX - columnY - margin, Centre, "Y"));
-		mgr.AddField(new StaticTextField(row4, columnX, columnY - columnX - fieldSpacing, Centre, "Z"));
-		mgr.AddField(new StaticTextField(row4, columnY, DisplayX - columnY - margin, Centre, "Probe"));
+		mgr.AddField(new StaticTextField(row2, columnX, columnY - columnX - fieldSpacing, TextAlignment::Centre, "X"));
+		mgr.AddField(new StaticTextField(row2, columnY, DisplayX - columnY - margin, TextAlignment::Centre, "Y"));
+		mgr.AddField(new StaticTextField(row4, columnX, columnY - columnX - fieldSpacing, TextAlignment::Centre, "Z"));
+		mgr.AddField(new StaticTextField(row4, columnY, DisplayX - columnY - margin, TextAlignment::Centre, "Probe"));
 
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		mgr.AddField(xPos = new FloatButton(row3 - 2, columnX, columnY - columnX - fieldSpacing, 1));
@@ -162,7 +225,7 @@ namespace Fields
 
 		zprobeBuf[0] = 0;
 		DisplayField::SetDefaultColours(infoTextColour, defaultBackColour);
-		mgr.AddField(zProbe = new TextField(row5, columnY, DisplayX - columnY - margin, Centre, NULL, zprobeBuf.c_str()));
+		mgr.AddField(zProbe = new TextField(row5, columnY, DisplayX - columnY - margin, TextAlignment::Centre, NULL, zprobeBuf.c_str()));
 	
 		DisplayField::SetDefaultColours(buttonTextColour, notHomedButtonBackColour);
 		homeAllButton = AddTextButton(row6 - 2, 0, 5, "Home all", evSendCommand, "G28");
@@ -196,14 +259,14 @@ namespace Fields
 		// Create the fields for the Printing tab
 		mgr.SetRoot(commonRoot);
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row2, columnX, columnY - columnX - fieldSpacing, Centre, "Fan"));
-		mgr.AddField(new StaticTextField(row2, columnY, DisplayX - columnY - margin, Centre, "RPM"));
+		mgr.AddField(new StaticTextField(row2, columnX, columnY - columnX - fieldSpacing, TextAlignment::Centre, "Fan"));
+		mgr.AddField(new StaticTextField(row2, columnY, DisplayX - columnY - margin, TextAlignment::Centre, "RPM"));
 
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		mgr.AddField(fanSpeed = new IntegerButton(row3 - 2, columnX, columnY - columnX - fieldSpacing));
 		fanSpeed->SetEvent(evAdjustPercent, "M106 S");
 		DisplayField::SetDefaultColours(infoTextColour, defaultBackColour);
-		mgr.AddField(fanRpm = new IntegerField(row3, columnY, DisplayX - columnY - margin, Centre));
+		mgr.AddField(fanRpm = new IntegerField(row3, columnY, DisplayX - columnY - margin, TextAlignment::Centre));
 
 		DisplayField::SetDefaultColours(buttonTextColour, pauseButtonBackColour);
 		pauseButtonField = new TextButton(row5 - 2, columnX, DisplayX - columnX - margin, "Pause print");
@@ -221,40 +284,40 @@ namespace Fields
 		mgr.AddField(resetButtonField);
 
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row6, margin, speedTextWidth, Left, "Speed"));
+		mgr.AddField(new StaticTextField(row6, margin, speedTextWidth, TextAlignment::Left, "Speed"));
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		mgr.AddField(spd = new IntegerButton(row6 - 2, speedTextWidth, percentageWidth, nullptr, "%"));
 		spd->SetValue(100);
 		spd->SetEvent(evAdjustPercent, "M220 S");
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row6, e1FactorXpos, efactorTextWidth, Left, "E1"));
+		mgr.AddField(new StaticTextField(row6, e1FactorXpos, efactorTextWidth, TextAlignment::Left, "E1"));
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		mgr.AddField(e1Percent = new IntegerButton(row6 - 2, e1FactorXpos + efactorTextWidth, percentageWidth, nullptr, "%"));
 		e1Percent->SetValue(100);
 		e1Percent->SetEvent(evAdjustPercent, "M221 D0 S");
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row6, e2FactorXpos, efactorTextWidth, Left, "E2"));
+		mgr.AddField(new StaticTextField(row6, e2FactorXpos, efactorTextWidth, TextAlignment::Left, "E2"));
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		mgr.AddField(e2Percent = new IntegerButton(row6 - 2, e2FactorXpos + efactorTextWidth, percentageWidth, nullptr, "%"));
 		e2Percent->SetValue(100);
 		e2Percent->SetEvent(evAdjustPercent, "M221 D1 S");
 	
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(printingField = new TextField(row7, margin, DisplayX, Left, "Printing ", printingFile.c_str()));
+		mgr.AddField(printingField = new TextField(row7, margin, DisplayX, TextAlignment::Left, "Printing ", printingFile.c_str()));
 	
 		DisplayField::SetDefaultColours(progressBarColour, progressBarBackColour);
 		mgr.AddField(printProgressBar = new ProgressBar(row8, margin, 8, DisplayX - 2 * margin));
 		mgr.Show(printProgressBar, false);
 		
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(timeLeftField = new StaticTextField(row9, margin, DisplayX - 2 * margin, Left, ""));
+		mgr.AddField(timeLeftField = new StaticTextField(row9, margin, DisplayX - 2 * margin, TextAlignment::Left, ""));
 
 		printRoot = mgr.GetRoot();
 
 		// Create the fields for the Files tab
 		mgr.SetRoot(baseRoot);
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row1 + 2, 135, DisplayX - 2*135, Centre, "Files on SD card"));
+		mgr.AddField(new StaticTextField(row1 + 2, 135, DisplayX - 2*135, TextAlignment::Centre, "Files on SD card"));
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		{
 			const PixelNumber fileFieldWidth = (DisplayX + fieldSpacing - 2*margin)/numFileColumns;
@@ -283,14 +346,14 @@ namespace Fields
 		// Create the fields for the Message tab
 		mgr.SetRoot(baseRoot);
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row1, 135, DisplayX - 2*135, Centre, "Messages"));
+		mgr.AddField(new StaticTextField(row1, 135, DisplayX - 2*135, TextAlignment::Centre, "Messages"));
 		{
 			for (unsigned int r = 0; r < numMessageRows; ++r)
 			{
-				StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 8, margin, messageTimeWidth, Left, "");
+				StaticTextField *t = new StaticTextField(((r + 1) * rowHeight) + 8, margin, messageTimeWidth, TextAlignment::Left, "");
 				mgr.AddField(t);
 				messageTimeFields[r] = t;
-				t = new StaticTextField(((r + 1) * rowHeight) + 8, messageTextX, messageTextWidth, Left, "");
+				t = new StaticTextField(((r + 1) * rowHeight) + 8, messageTextX, messageTextWidth, TextAlignment::Left, "");
 				mgr.AddField(t);
 				messageTextFields[r] = t;
 			}
@@ -301,13 +364,13 @@ namespace Fields
 		mgr.SetRoot(baseRoot);
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
 		// The firmware version field doubles up as an area for displaying debug messages, so make it the full width of the display
-		mgr.AddField(fwVersionField = new StaticTextField(row1, margin, DisplayX, Left, "Panel Due firmware version " VERSION_TEXT));
-		mgr.AddField(freeMem = new IntegerField(row2, margin, DisplayX/2 - margin, Left, "Free RAM: "));
-		mgr.AddField(touchX = new IntegerField(row2, DisplayX/2, DisplayX/4, Left, "Touch: ", ","));
-		mgr.AddField(touchY = new IntegerField(row2, (DisplayX * 3)/4, DisplayX/4, Left));
+		mgr.AddField(fwVersionField = new StaticTextField(row1, margin, DisplayX, TextAlignment::Left, "Panel Due firmware version " VERSION_TEXT));
+		mgr.AddField(freeMem = new IntegerField(row2, margin, DisplayX/2 - margin, TextAlignment::Left, "Free RAM: "));
+		mgr.AddField(touchX = new IntegerField(row2, DisplayX/2, DisplayX/4, TextAlignment::Left, "Touch: ", ","));
+		mgr.AddField(touchY = new IntegerField(row2, (DisplayX * 3)/4, DisplayX/4, TextAlignment::Left));
 		
 		DisplayField::SetDefaultColours(errorTextColour, errorBackColour);
-		mgr.AddField(settingsNotSavedField = new StaticTextField(row4, margin, DisplayX - 2 * margin, Left, "Some settings are not saved!"));
+		mgr.AddField(settingsNotSavedField = new StaticTextField(row4, margin, DisplayX - 2 * margin, TextAlignment::Left, "Some settings are not saved!"));
 		settingsNotSavedField->Show(false);
 
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
@@ -323,7 +386,7 @@ namespace Fields
 	
 		mgr.SetRoot(NULL);
 	
-		touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, Centre, "");		// the text is filled in within CalibrateTouch
+		touchCalibInstruction = new StaticTextField(DisplayY/2 - 10, 0, DisplayX, TextAlignment::Centre, "");		// the text is filled in within CalibrateTouch
 
 		// Create the popup window used to adjust temperatures and fan speed
 		static const char* const tempPopupText[] = {"-5", "-1", "Set", "+1", "+5"};
@@ -344,12 +407,12 @@ namespace Fields
 		filePopup = new PopupField(filePopupHeight, filePopupWidth, popupBackColour);
 		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
 
-		fpNameField = new TextField(10, 10, filePopupWidth - 20, Left, "Filename: ");
-		fpSizeField = new IntegerField(10 + rowHeight, 10, filePopupWidth - 20, Left, "Size: ", " bytes");
-		fpLayerHeightField = new FloatField(10 + 2 * rowHeight, 10, filePopupWidth - 20, Left, 1, "Layer height: ","mm");
-		fpHeightField = new FloatField(10 + 3 * rowHeight, 10, filePopupWidth - 20, Left, 1, "Object height: ", "mm");
-		fpFilamentField = new IntegerField(10 + 4 * rowHeight, 10, filePopupWidth - 20, Left, "Filament needed: ", "mm");
-		fpGeneratedByField = new TextField(10 + 5 * rowHeight, 10, filePopupWidth - 20, Left, "Sliced by: ", generatedByText.c_str());
+		fpNameField = new TextField(10, 10, filePopupWidth - 20, TextAlignment::Left, "Filename: ");
+		fpSizeField = new IntegerField(10 + rowHeight, 10, filePopupWidth - 20, TextAlignment::Left, "Size: ", " bytes");
+		fpLayerHeightField = new FloatField(10 + 2 * rowHeight, 10, filePopupWidth - 20, TextAlignment::Left, 1, "Layer height: ","mm");
+		fpHeightField = new FloatField(10 + 3 * rowHeight, 10, filePopupWidth - 20, TextAlignment::Left, 1, "Object height: ", "mm");
+		fpFilamentField = new IntegerField(10 + 4 * rowHeight, 10, filePopupWidth - 20, TextAlignment::Left, "Filament needed: ", "mm");
+		fpGeneratedByField = new TextField(10 + 5 * rowHeight, 10, filePopupWidth - 20, TextAlignment::Left, "Sliced by: ", generatedByText.c_str());
 		filePopup->AddField(fpNameField);
 		filePopup->AddField(fpSizeField);
 		filePopup->AddField(fpLayerHeightField);
@@ -358,7 +421,7 @@ namespace Fields
 		filePopup->AddField(fpGeneratedByField);
 
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
-		DisplayField *tp = new TextButton(10 + 7 * rowHeight, 10, filePopupWidth/3 - 20, "Print");
+		Button *tp = new TextButton(10 + 7 * rowHeight, 10, filePopupWidth/3 - 20, "Print");
 		tp->SetEvent(evPrint, 0);
 		filePopup->AddField(tp);
 		tp = new TextButton(10 + 7 * rowHeight, filePopupWidth/3 + 10, filePopupWidth/3 - 20, "Cancel");
@@ -381,8 +444,8 @@ namespace Fields
 		// Create the "Are you sure?" popup
 		areYouSurePopup = new PopupField(areYouSurePopupHeight, areYouSurePopupWidth, popupBackColour);
 		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
-		areYouSurePopup->AddField(areYouSureTextField = new StaticTextField(10, margin, areYouSurePopupWidth - 2 * margin, Centre, ""));
-		areYouSurePopup->AddField(new StaticTextField(10 + rowHeight, margin, areYouSurePopupWidth - 2 * margin, Centre, "Are you sure?"));
+		areYouSurePopup->AddField(areYouSureTextField = new StaticTextField(10, margin, areYouSurePopupWidth - 2 * margin, TextAlignment::Centre, ""));
+		areYouSurePopup->AddField(new StaticTextField(10 + rowHeight, margin, areYouSurePopupWidth - 2 * margin, TextAlignment::Centre, "Are you sure?"));
 
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
 		tp = new TextButton(10 + 2 * rowHeight, 10, areYouSurePopupWidth/2 - 20, "Yes");

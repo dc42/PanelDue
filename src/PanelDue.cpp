@@ -7,7 +7,15 @@
 // 3. No pure virtual functions. This is because in release builds, having pure virtual functions causes huge amounts of the C++ library to be linked in
 //    (possibly because it wants to print a message if a pure virtual function is called).
 
+#include "ecv.h"
+#undef array
+#undef result
 #include "asf.h"
+#define array _ecv_array
+#define result _ecv_result
+
+#include <cstring>
+
 #include "Mem.hpp"
 #include "Display.hpp"
 #include "UTFT.hpp"
@@ -273,7 +281,7 @@ void FlashData::Save() const
 // Return true if the second string is alphabetically greater then the first, case insensitive
 bool StringGreaterThan(const char* a, const char* b)
 {
-	return stricmp(a, b) > 0;
+	return strcasecmp(a, b) > 0;
 }
 
 // Refresh the list of files on the Files tab
@@ -352,7 +360,7 @@ ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numE
 	while (high > low)
 	{
 		const size_t mid = (high - low)/2 + low;
-		const int t = stricmp(key, table[mid].varName);
+		const int t = strcasecmp(key, table[mid].varName);
 		if (t == 0)
 		{
 			return table[mid].rde;
@@ -366,7 +374,7 @@ ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numE
 			high = mid;
 		}
 	}
-	return (low < numElems && stricmp(key, table[low].varName) == 0) ? table[low].rde : rcvUnknown;
+	return (low < numElems && strcasecmp(key, table[low].varName) == 0) ? table[low].rde : rcvUnknown;
 }
 
 // Return true if sending a command or file list request to the printer now is a good idea.
@@ -1325,13 +1333,13 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				{
 					switch(index)
 					{
-						case 0:
+					case 0:
 						UpdateField(e1Percent, ival);
 						break;
-						case 1:
+					case 1:
 						UpdateField(e2Percent, ival);
 						break;
-						default:
+					default:
 						break;
 					}
 				}
@@ -1528,7 +1536,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvGeometry:
 			if (status != psConfiguring && status != psConnecting)
 			{
-				isDelta = (stricmp(data, "delta") == 0);
+				isDelta = (strcasecmp(data, "delta") == 0);
 				gotGeometry = true;
 				if (gotMachineName)
 				{
