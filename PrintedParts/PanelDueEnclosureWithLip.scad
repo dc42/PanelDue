@@ -72,7 +72,7 @@ LCDscrn =   (Itead43) ? [0,105.6,0,67.8]
 LCDview =   (Itead43) ? [3,103,7,64.8]
 			: (Itead50) ? [2.5,114.5,3,71.5]
 			: (Other43) ? [3,103,7,64.8]
-			:             [2.5,117,3,76];	// The edges of the visible region of the LCD screen (L,R,B,T)
+			:             [4.5,118,6,77];	// The edges of the visible region of the LCD screen (L,R,B,T)
 
 LCDmounts= (Itead43) ?
 			  [
