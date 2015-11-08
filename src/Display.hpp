@@ -36,8 +36,8 @@ const Colour black = 0x0000;
 const uint8_t buttonGradStep = 12;
 
 typedef uint16_t PixelNumber;
-typedef uint8_t Event;
-const Event nullEvent = 0;
+typedef uint8_t event_t;
+const event_t nullEvent = 0;
 
 enum class TextAlignment : uint8_t { Left, Centre, Right };
 	
@@ -74,7 +74,7 @@ public:
 	PixelNumber GetMinY() const { return y; }
 	PixelNumber GetMaxY() const { return y + GetHeight() - 1; }
 		
-	virtual Event GetEvent() const { return nullEvent; }
+	virtual event_t GetEvent() const { return nullEvent; }
 
 	static void SetDefaultColours(Colour pf, Colour pb) { defaultFcolour = pf; defaultBcolour = pb; }
 	static void SetDefaultColours(Colour pf, Colour pb, Colour pbb, Colour pg, Colour pbp, Colour pgp);
@@ -102,48 +102,10 @@ public:
 	void AddField(DisplayField *p);
 	DisplayField * null FindEvent(int x, int y);
 	DisplayField * null GetRoot() const { return root; }
+	void Redraw(DisplayField *f, PixelNumber xOffset, PixelNumber yOffset);
 };
 
-class Button : public DisplayField
-{
-	union
-	{
-		const char* null sParam;
-		int iParam;
-//		float fParam;
-	} param;
-
-	Colour borderColour, gradColour, pressedBackColour, pressedGradColour;
-	Event evt;								// event number that is triggered by touching this field
-	bool pressed;
-
-protected:
-	Button(PixelNumber py, PixelNumber px, PixelNumber pw);
-	
-	void DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const;
-
-public:
-	bool IsButton() const override final { return true; }
-
-	void SetEvent(Event e, const char* null sp ) { evt = e; param.sParam = sp; }
-	void SetEvent(Event e, int ip ) { evt = e; param.iParam = ip; }
-//	void SetEvent(Event e, float fp ) { evt = e; param.fParam = fp; }
-
-	Event GetEvent() const override { return evt; }
-
-	const char* null GetSParam() const { return param.sParam; }
-	int GetIParam() const { return param.iParam; }
-//	float GetFParam() const { return param.fParam; }
-
-	void Press(bool p)
-	{
-		if (p != pressed)
-		{
-			pressed = p;
-			changed = true;
-		}
-	}
-};
+class Button;
 
 class DisplayManager
 {
@@ -203,7 +165,7 @@ protected:
 	void PrintText() const override;
 
 public:
-	TextField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char * array pl, const char* array pt = NULL)
+	TextField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char * array null pl, const char* array null pt = nullptr)
 		: FieldWithText(py, px, pw, pa), label(pl), text(pt)
 	{
 	}
@@ -211,6 +173,12 @@ public:
 	void SetValue(const char* array s)
 	{
 		text = s;
+		changed = true;
+	}
+
+	void SetLabel(const char* array s)
+	{
+		label = s;
 		changed = true;
 	}
 };
@@ -249,7 +217,7 @@ protected:
 
 public:
 	IntegerField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char *pl = NULL, const char *pu = NULL)
-		: FieldWithText(py, px, pw, pa), label(pl), units(pu), val(0.0)
+		: FieldWithText(py, px, pw, pa), label(pl), units(pu), val(0)
 	{
 	}
 
@@ -278,12 +246,59 @@ public:
 	}
 };
 
+class Button : public DisplayField
+{
+	union
+	{
+		const char* null sParam;
+		int iParam;
+		//float fParam;
+	} param;
+
+	Colour borderColour, gradColour, pressedBackColour, pressedGradColour;
+	event_t evt;								// event number that is triggered by touching this field
+	bool pressed;
+
+protected:
+	Button(PixelNumber py, PixelNumber px, PixelNumber pw);
+	
+	void DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const;
+	
+	static PixelNumber textMargin;
+	static PixelNumber iconMargin;
+
+public:
+	bool IsButton() const override final { return true; }
+
+	void SetEvent(event_t e, const char* null sp ) { evt = e; param.sParam = sp; }
+	void SetEvent(event_t e, int ip ) { evt = e; param.iParam = ip; }
+	//void SetEvent(event_t e, float fp ) { evt = e; param.fParam = fp; }
+
+	event_t GetEvent() const override { return evt; }
+
+	const char* null GetSParam() const { return param.sParam; }
+	int GetIParam() const { return param.iParam; }
+	//float GetFParam() const { return param.fParam; }
+
+	void Press(bool p)
+	{
+		if (p != pressed)
+		{
+			pressed = p;
+			changed = true;
+		}
+	}
+	
+	static void SetTextMargin(PixelNumber p) { textMargin = p; }
+	static void SetIconMargin(PixelNumber p) { iconMargin = p; }
+};
+
 class ButtonWithText : public Button
 {
 	LcdFont font;
 	
 protected:
-	PixelNumber GetHeight() const override { return UTFT::GetFontHeight(font) + 4; }
+	PixelNumber GetHeight() const override { return UTFT::GetFontHeight(font) + 2 * textMargin + 2; }
 
 	virtual void PrintText() const {}		// ideally would be pure virtual
 
@@ -294,6 +309,18 @@ public:
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;	
 };
 
+class CharButton : public ButtonWithText
+{
+	LcdFont font;
+	char c;
+
+public:
+	CharButton(PixelNumber py, PixelNumber px, PixelNumber pw, char pc, event_t e);
+
+protected:	
+	void PrintText() const override;
+};
+
 class TextButton : public ButtonWithText
 {
 	const char *text;
@@ -302,8 +329,9 @@ protected:
 	void PrintText() const override;
 
 public:
-	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt)
-		: ButtonWithText(py, px, pw), text(pt) {}
+	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt);
+	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt, event_t e, int param);
+	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt, event_t e, const char * array param);
 
 	void SetText(const char* array pt)
 	{
@@ -317,7 +345,7 @@ class IconButton : public Button
 	Icon icon;
 	
 protected:
-	PixelNumber GetHeight() const override { return GetIconHeight(icon) + 4; }
+	PixelNumber GetHeight() const override { return GetIconHeight(icon) + 2 * iconMargin + 2; }
 
 public:
 	IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic)

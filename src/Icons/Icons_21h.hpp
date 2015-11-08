@@ -6,9 +6,9 @@
  */ 
 
 
-#ifndef ICONS_H_
-#define ICONS_H_
+#ifndef ICONS_21H_H_
+#define ICONS_21H_H_
 
-extern const uint16_t IconNozzle1_21h[], IconNozzle2_21h[], IconBed_21h[];
+extern const uint16_t IconNozzle1_21h[], IconNozzle2_21h[], IconNozzle3_21h[], IconNozzle4_21h[], IconBed_21h[];
 
-#endif /* ICONS_H_ */
+#endif /* ICONS_21H_H_ */

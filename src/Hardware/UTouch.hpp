@@ -17,8 +17,8 @@ public:
 	UTouch(unsigned int tclk, unsigned int tcs, unsigned int tdin, unsigned int dout, unsigned int irq);
 
 	void	init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust = Default);
-	bool	read(uint16_t &x, uint16_t &y);
-	void	calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh);
+	bool	read(uint16_t &x, uint16_t &y, uint16_t * null rawX = nullptr, uint16_t * null rawY = nullptr);
+	void	calibrate(uint16_t xlow, uint16_t xhigh, uint16_t ylow, uint16_t yhigh, uint16_t margin);
 	void	adjustOrientation(DisplayOrientation a) { orientAdjust = (DisplayOrientation) (orientAdjust ^ a); }
 	DisplayOrientation getOrientation() const { return orientAdjust; }
     
@@ -26,7 +26,8 @@ private:
 	OneBitPort portCLK, portCS, portDIN, portDOUT, portIRQ;
 	DisplayOrientation orientAdjust;
 	uint16_t disp_x_size, disp_y_size;
-	int16_t	touch_x_left, touch_x_right, touch_y_top, touch_y_bottom;
+	uint16_t scaleX, scaleY;
+	int16_t offsetX, offsetY;
 
 	bool	getTouchData(bool wantY, uint16_t &rslt);
 	void	touch_WriteCommand(uint8_t command);

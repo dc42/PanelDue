@@ -2115,21 +2115,29 @@ void UTFT::drawBitmap(int x, int y, int sx, int sy, const uint16_t * data, int s
 	{
 		for (int i = 0; i < scale; ++i)
 		{
-			setXY(x, curY, x+(sx*scale)-1, curY);
-			if (orient & InvertBitmap)
+			bool xySet = false;
+			for (int tx = 0; tx < sx; tx++)
 			{
-				for (int tx = sx; tx != 0; )
+				const int actualX = (orient & InvertBitmap) ? sx - tx - 1 : tx;
+				const uint16_t col = data[(byCols) ? (actualX * sy) + ty : (ty * sx) + actualX];
+				if (transparentBackground && col == 0xFFFF)
 				{
-					--tx;
-					uint16_t col = data[(byCols) ? (tx*sy)+ty : (ty*sx)+tx];
-					LCD_Write_Repeated_DATA16(col, scale);
+					xySet = false;
 				}
-			}
-			else
-			{
-				for (int tx = 0; tx < sx; tx++)
+				else
 				{
-					uint16_t col = data[(byCols) ? (tx*sy)+ty : (ty*sx)+tx];
+					if (!xySet)
+					{
+						if (orient & InvertBitmap)
+						{
+							setXY(x, curY, x + ((sx - tx) * scale) - 1, curY);
+						}
+						else
+						{
+							setXY(x + (tx * scale), curY, x + (sx * scale) - 1, curY);
+						}
+						xySet = true;
+					}
 					LCD_Write_Repeated_DATA16(col, scale);
 				}
 			}

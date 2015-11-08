@@ -10,16 +10,20 @@
 #include "SysTick.hpp"
 #include "Buzzer.hpp"
 
-volatile uint32_t tickCount;
-
-uint32_t GetTickCount()
+namespace SystemTick
 {
-	return tickCount;
+	volatile uint32_t tickCount;
+
+	uint32_t GetTickCount()
+	{
+		return tickCount;
+	}
+
 }
 
 void SysTick_Handler()
 {
-	++tickCount;
+	++SystemTick::tickCount;
 	Buzzer::Tick();
 }
 

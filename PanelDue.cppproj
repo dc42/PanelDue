@@ -523,6 +523,15 @@
     <Compile Include="src\ASF\sam\drivers\efc\efc.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\Hardware\Reset.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\RequestTimer.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\RequestTimer.hpp">
+      <SubType>compile</SubType>
+    </Compile>
     <None Include="src\ASF\sam\drivers\efc\efc.h">
       <SubType>compile</SubType>
     </None>
@@ -547,9 +556,6 @@
     <None Include="src\ASF\sam\services\flash_efc\flash_efc.h">
       <SubType>compile</SubType>
     </None>
-    <Compile Include="src\Buzzer.cpp">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="src\Buzzer.hpp">
       <SubType>compile</SubType>
     </Compile>
@@ -562,10 +568,10 @@
     <Compile Include="src\Fields.hpp">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\FlashStorage.cpp">
+    <Compile Include="src\FileManager.cpp">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\FlashStorage.hpp">
+    <Compile Include="src\FileManager.hpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Fonts\glcd19x21.cpp">
@@ -574,13 +580,79 @@
     <Compile Include="src\Fonts\glcd28x32.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\Hardware\Buzzer.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\Buzzer.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\DisplayOrientation.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\FlashStorage.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\FlashStorage.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\HW_AVR.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\HW_AVR_defines.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\Mem.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\Mem.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\memorysaver.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\OneBitPort.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\OneBitPort.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\SerialIo.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\SerialIo.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\SysTick.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\SysTick.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\UTFT.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\UTFT.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\UTouch.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Hardware\UTouch.hpp">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\Icons\Icons_21h.cpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Icons\Icons_21h.hpp">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\Mem.cpp">
+    <Compile Include="src\Icons\Icons_30h.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Icons\Icons_30h.hpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Library\Vector.hpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Mem.hpp">
@@ -593,15 +665,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\PanelDue.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\SysTick.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\SysTick.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\Vector.hpp">
       <SubType>compile</SubType>
     </Compile>
     <None Include="src\ASF\sam\drivers\pwm\pwm.h">
@@ -619,15 +682,6 @@
     <Compile Include="src\Display.hpp">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\DisplayOrientation.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\OneBitPort.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\OneBitPort.hpp">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="src\PanelDue.cpp">
       <SubType>compile</SubType>
     </Compile>
@@ -635,24 +689,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Print.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\SerialIo.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\SerialIo.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\UTFT.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\UTFT.hpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\UTouch.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\UTouch.hpp">
       <SubType>compile</SubType>
     </Compile>
     <None Include="src\ASF\common\services\clock\sam3s\pll.h">
@@ -724,15 +760,6 @@
     <None Include="src\ASF\sam\drivers\wdt\wdt.h">
       <SubType>compile</SubType>
     </None>
-    <Compile Include="src\HW_AVR.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\HW_AVR_defines.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\memorysaver.h">
-      <SubType>compile</SubType>
-    </Compile>
     <None Include="src\ASF\common\boards\board.h">
       <SubType>compile</SubType>
     </None>
@@ -1104,6 +1131,8 @@
     <Folder Include="src\config\" />
     <Folder Include="src\Fonts" />
     <Folder Include="src\Icons" />
+    <Folder Include="src\Hardware" />
+    <Folder Include="src\Library" />
   </ItemGroup>
   <Import Project="$(AVRSTUDIO_EXE_PATH)\\Vs\\Compiler.targets" />
 </Project>

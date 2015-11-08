@@ -14,12 +14,12 @@ UTouch::UTouch(unsigned int tclk, unsigned int tcs, unsigned int din, unsigned i
 void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust)
 {
 	orientAdjust			= orientationAdjust;
-	touch_x_left			= 0;
-	touch_x_right			= 4095;
-	touch_y_top				= 0;
-	touch_y_bottom			= 4095;
 	disp_x_size				= xp;
 	disp_y_size				= yp;
+	offsetX					= 0;
+	scaleX					= (uint16_t)(((uint32_t)(disp_x_size - 1) << 16)/4095);
+	offsetY					= 0;
+	scaleY					= (uint16_t)(((uint32_t)(disp_y_size - 1) << 16)/4095);
 	
 	portCLK.setMode(OneBitPort::Output);
 	portCS.setMode(OneBitPort::Output);
@@ -33,7 +33,7 @@ void UTouch::init(uint16_t xp, uint16_t yp, DisplayOrientation orientationAdjust
 }
 
 // If the panel is touched, return the coordinates in x and y and return true; else return false
-bool UTouch::read(uint16_t &px, uint16_t &py)
+bool UTouch::read(uint16_t &px, uint16_t &py, uint16_t * null rawX, uint16_t * null rawY)
 {
 	bool ret = false;
 	if (!portIRQ.read())			// if screen is touched
@@ -50,20 +50,28 @@ bool UTouch::read(uint16_t &px, uint16_t &py)
 					int16_t valx = (orientAdjust & SwapXY) ? ty : tx;
 					if (orientAdjust & ReverseX)
 					{
-						valx = 4096 - valx;
+						valx = 4095 - valx;
 					}
 						
-					int16_t cx = (int16_t)(((int32_t)(valx - touch_x_left) * (int32_t)disp_x_size) / (touch_x_right - touch_x_left));
-					px = (cx < 0) ? 0 : (cx >= disp_x_size) ? disp_x_size - 1 : cx;
+					int16_t cx = (int16_t)(((uint32_t)valx * (uint32_t)scaleX) >> 16) - offsetX;
+					px = (cx < 0) ? 0 : (cx >= disp_x_size) ? disp_x_size - 1 : (uint16_t)cx;
 
 					int16_t valy = (orientAdjust & SwapXY) ? tx : ty;
 					if (orientAdjust & ReverseY)
 					{
-						valy = 4096 - valy;
+						valy = 4095 - valy;
 					}
 	
-					int16_t cy = (int16_t)(((int32_t)(valy - touch_y_top) * (int32_t)disp_y_size) / (touch_y_bottom - touch_y_top));
-					py = (cy < 0) ? 0 : (cy >= disp_y_size) ? disp_y_size - 1 : cy;
+					int16_t cy = (int16_t)(((uint32_t)valy * (uint32_t)scaleY) >> 16) - offsetY;
+					py = (cy < 0) ? 0 : (cy >= disp_y_size) ? disp_y_size - 1 : (uint16_t)cy;
+					if (rawX != nullptr)
+					{
+						*rawX = valx;
+					}
+					if (rawY != nullptr)
+					{
+						*rawY = valy;
+					}
 					ret = true;
 				}				
 			}
@@ -184,12 +192,12 @@ uint16_t UTouch::touch_ReadData(uint8_t command)
 	return(data);
 }
 
-void UTouch::calibrate(int16_t xlow, int16_t xhigh, int16_t ylow, int16_t yhigh)
+void UTouch::calibrate(uint16_t xlow, uint16_t xhigh, uint16_t ylow, uint16_t yhigh, uint16_t margin)
 {
-	touch_x_left = ((int32_t)xlow * 4096)/disp_x_size;
-	touch_x_right = ((int32_t)xhigh * 4096)/disp_x_size;
-	touch_y_top = ((int32_t)ylow * 4096)/disp_y_size;
-	touch_y_bottom = ((int32_t)yhigh * 4096)/disp_y_size;
+	scaleX = (uint16_t)(((uint32_t)(disp_x_size - 1 - 2 * margin) << 16)/(xhigh - xlow));
+	offsetX = (int16_t)(((uint32_t)xlow * (uint32_t)scaleX) >> 16) - (int16_t)margin;
+	scaleY = (uint16_t)(((uint32_t)(disp_y_size - 1 - 2 * margin) << 16)/(yhigh - ylow));
+	offsetY = (int16_t)(((uint32_t)ylow * (uint32_t)scaleY) >> 16) - (int16_t)margin;
 }
 
 // End

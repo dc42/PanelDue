@@ -1,7 +1,7 @@
 // Controller for Ormerod to run on SAM3S2B
 // Coding rules:
 //
-// 1. Must compile with no g++ warnings, when all warning are enabled..
+// 1. Must compile with no g++ warnings, when all warning are enabled.
 // 2. Dynamic memory allocation using 'new' is permitted during the initialization phase only. No use of 'new' anywhere else,
 //    and no use of 'delete', 'malloc' or 'free' anywhere.
 // 3. No pure virtual functions. This is because in release builds, having pure virtual functions causes huge amounts of the C++ library to be linked in
@@ -16,19 +16,22 @@
 
 #include <cstring>
 
-#include "Mem.hpp"
+#include "Hardware/Mem.hpp"
 #include "Display.hpp"
-#include "UTFT.hpp"
-#include "UTouch.hpp"
-#include "SerialIo.hpp"
-#include "Buzzer.hpp"
-#include "SysTick.hpp"
+#include "Hardware/UTFT.hpp"
+#include "Hardware/UTouch.hpp"
+#include "Hardware/SerialIo.hpp"
+#include "Hardware/Buzzer.hpp"
+#include "Hardware/SysTick.hpp"
+#include "Hardware/Reset.hpp"
 #include "Misc.hpp"
-#include "Vector.hpp"
-#include "FlashStorage.hpp"
+#include "Library/Vector.hpp"
+#include "Hardware/FlashStorage.hpp"
 #include "PanelDue.hpp"
 #include "Configuration.hpp"
 #include "Fields.hpp"
+#include "FileManager.hpp"
+#include "RequestTimer.hpp"
 
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t printerResponseInterval = 1500;		// shortest time after a response that we send another poll (gives printer time to catch up)
@@ -47,12 +50,12 @@ UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
 UTouch touch(23, 24, 22, 21, 20);
 DisplayManager mgr;
 
+const char* array null currentFile;					// file whose info is displayed in the file info popup
+
 static uint32_t lastTouchTime;
 static uint32_t ignoreTouchTime;
 static uint32_t lastPollTime;
 static uint32_t lastResponseTime = 0;
-static uint32_t fileScrollOffset = 0;
-static bool fileListScrolled = false;
 static bool gotMachineName = false;
 static bool isDelta = false;
 static bool gotGeometry = false;
@@ -63,18 +66,9 @@ static unsigned int numHeads = 1;
 static unsigned int messageSeq = 0;
 static unsigned int newMessageSeq = 0;
 
-typedef Vector<char, 2048> FileList;				// we use a Vector instead of a String because we store multiple null-terminated strings in it
-typedef Vector<const char* array, 100> FileListIndex;
-
-FileList fileLists[3];								// one for gcode file list, one for macro list, one for receiving new lists into
-FileListIndex fileIndices[3];						// pointers into the individual filenames in the list
-int filesFileList = -1, macrosFileList = -1;		// which file list we use for the files listing and the macros listing
-int newFileList = -1;								// which file list we received a new listing into
-static const char* array null currentFile = NULL;	// file whose info is displayed in the popup menu
-
-String<100> fileDirectoryName;
-
 static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
+
+static bool restartNeeded = false;
 
 struct Message
 {
@@ -98,16 +92,19 @@ struct FlashData
 
 	uint32_t magic;
 	uint32_t baudRate;
-	int16_t xmin;
-	int16_t xmax;
-	int16_t ymin;
-	int16_t ymax;
+	uint16_t xmin;
+	uint16_t xmax;
+	uint16_t ymin;
+	uint16_t ymax;
 	DisplayOrientation lcdOrientation;
 	DisplayOrientation touchOrientation;
 	uint32_t touchVolume;
+	uint32_t language;
+	char dummy;
 	
 	FlashData() : magic(muggleVal) { }
 	bool operator==(const FlashData& other);
+	bool operator!=(const FlashData& other) { return !operator==(other); }
 	bool Valid() const { return magic == magicVal; }
 	void SetInvalid() { magic = muggleVal; }
 	void SetDefaults();
@@ -115,8 +112,7 @@ struct FlashData
 	void Save() const;
 };
 
-// When we can switch to C++11, uncomment this line
-//static_assert(sizeof(FlashData) <= FLASH_DATA_LENGTH);
+static_assert(sizeof(FlashData) <= FLASH_DATA_LENGTH, "Flash data too large");
 
 FlashData nvData, savedNvData;
 
@@ -186,59 +182,17 @@ struct ReceiveDataTableEntry
 	const char* varName;
 };
 
-static Event eventToConfirm = nullEvent;
+static Event eventToConfirm = evNull;
 
 const size_t numHeaters = 3;
 int heaterStatus[numHeaters];
 
 bool OkToSend();		// forward declaration
 
-class RequestTimer
-{
-	enum { stopped, running, ready } timerState;
-	uint32_t startTime;
-	uint32_t delayTime;
-	const char *command;
-	
-public:
-	RequestTimer(uint32_t del, const char *cmd);
-	void SetPending() { timerState = ready; }
-	void Stop() { timerState = stopped; }
-	bool Process();
-};
-
 RequestTimer macroListTimer(FileInfoRequestTimeout, "M20 S2 P/macros");
 RequestTimer filesListTimer(FileInfoRequestTimeout, "M20 S2 P/gcodes");
 RequestTimer fileInfoTimer(FileInfoRequestTimeout, "M36");
 RequestTimer machineConfigTimer(FileInfoRequestTimeout, "M408 S1");
-
-RequestTimer::RequestTimer(uint32_t del, const char *cmd)
-	: delayTime(del), command(cmd)
-{
-	timerState = stopped;
-}
-
-bool RequestTimer::Process()
-{
-	if (timerState == running)
-	{
-		uint32_t now = GetTickCount();
-		if (now - startTime > delayTime)
-		{
-			timerState = ready;
-		}
-	}
-
-	if (timerState == ready && OkToSend())
-	{
-		SerialIo::SendString(command);
-		SerialIo::SendChar('\n');
-		startTime = GetTickCount();
-		timerState = running;
-		return true;
-	}
-	return false;
-}
 
 bool FlashData::operator==(const FlashData& other)
 {
@@ -250,7 +204,8 @@ bool FlashData::operator==(const FlashData& other)
 		&& ymax == other.ymax
 		&& lcdOrientation == other.lcdOrientation
 		&& touchOrientation == other.touchOrientation
-		&& touchVolume == other.touchVolume;
+		&& touchVolume == other.touchVolume
+		&& language == other.language;
 }
 
 void FlashData::SetDefaults()
@@ -263,95 +218,28 @@ void FlashData::SetDefaults()
 	lcdOrientation = DefaultDisplayOrientAdjust;
 	touchOrientation = DefaultTouchOrientAdjust;
 	touchVolume = Buzzer::DefaultVolume;
+	language = 0;
 	magic = magicVal;
 }
 
 // Load parameters from flash memory
 void FlashData::Load()
 {
-	FlashStorage::read(0, &nvData, sizeof(nvData));
+	FlashStorage::read(0, &(this->magic), &(this->dummy) - (char*)(&(this->magic)));
 }
 
 // Save parameters to flash memory
 void FlashData::Save() const
 {
-	FlashStorage::write(0, this, sizeof(*this));
+	FlashStorage::write(0, &(this->magic), &(this->dummy) - (const char*)(&(this->magic)));
 }
 
-// Return true if the second string is alphabetically greater then the first, case insensitive
-bool StringGreaterThan(const char* a, const char* b)
+struct FileList
 {
-	return strcasecmp(a, b) > 0;
-}
-
-// Refresh the list of files on the Files tab
-void RefreshFileList()
-{
-	if (filesFileList >= 0)
-	{
-		FileListIndex& fileIndex = fileIndices[filesFileList];
-	
-		// 1. Sort the file list
-		fileIndex.sort(StringGreaterThan);
-	
-		// 2. Make sure the scroll position is still sensible
-		if (fileScrollOffset >= fileIndex.size())
-		{
-			fileScrollOffset = ((fileIndex.size() - 1)/numFileRows) * numFileRows;
-		}
-	
-		// 3. Display the scroll buttons if needed
-		mgr.Show(scrollFilesLeftButton, fileScrollOffset != 0);
-		mgr.Show(scrollFilesRightButton, fileScrollOffset + (numFileRows * numFileColumns) < fileIndex.size());
-	
-		// 4. Display the file list
-		for (size_t i = 0; i < numDisplayedFiles; ++i)
-		{
-			TextButton *f = filenameButtons[i];
-			if (i + fileScrollOffset < fileIndex.size())
-			{
-				const char *text = fileIndex[i + fileScrollOffset];
-				f->SetText(text);
-				f->SetEvent(evFile, text);
-				mgr.Show(f, true);
-			}
-			else
-			{
-				f->SetText("");
-				mgr.Show(f, false);
-			}
-		}
-		fileListScrolled = false;
-	}
-}
-
-// Refresh the list of macro commands
-void RefreshMacroList()
-{
-	if (macrosFileList >= 0)
-	{
-		FileListIndex& macroIndex = fileIndices[macrosFileList];
-		// 1. Sort the macro list
-		macroIndex.sort(StringGreaterThan);
-	
-		// 2. Display the macro list
-		for (size_t i = 0; i < numDisplayedMacros; ++i)
-		{
-			TextButton *f = macroButtons[i];
-			if (i < macroIndex.size())
-			{
-				const char *text = macroIndex[i];
-				f->SetText(text);
-				f->SetEvent(evMacro, text);
-				mgr.Show(f, true);
-			}
-			else
-			{
-				mgr.Show(f, false);
-			}
-		}
-	}
-}
+	int listNumber;
+	size_t scrollOffset;
+	String<100> path;
+};
 
 // Search an ordered table for a matching string
 ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numElems, const char* key)
@@ -397,15 +285,10 @@ void ChangeTab(Button *newTab)
 		switch(newTab->GetEvent())
 		{
 		case evTabControl:
-			macroListTimer.SetPending();								// refresh the list of macros
 			mgr.SetRoot(controlRoot);
 			break;
 		case evTabPrint:
 			mgr.SetRoot(printRoot);
-			break;
-		case evTabFiles:
-			filesListTimer.SetPending();								// refresh the list of files
-			mgr.SetRoot(filesRoot);
 			break;
 		case evTabMsg:
 			mgr.SetRoot(messageRoot);
@@ -421,16 +304,16 @@ void ChangeTab(Button *newTab)
 	}
 	if (currentButton == newTab)
 	{
-		currentButton = NULL;		// to prevent it being released
+		currentButton = NULL;			// to prevent it being released
 	}
 	mgr.RefreshAll(true);
 }
 
-void InitLcd(DisplayOrientation dor)
+void InitLcd(DisplayOrientation dor, uint8_t language)
 {
-	lcd.InitLCD(dor);				// set up the LCD
-	Fields::CreateFields();			// create all the fields
-	mgr.RefreshAll(true);			// redraw everything
+	lcd.InitLCD(dor);					// set up the LCD
+	Fields::CreateFields(language);		// create all the fields
+	mgr.RefreshAll(true);				// redraw everything
 
 	currentTab = NULL;
 }
@@ -438,7 +321,7 @@ void InitLcd(DisplayOrientation dor)
 // Ignore touches for a long time
 void DelayTouchLong()
 {
-	lastTouchTime = GetTickCount();
+	lastTouchTime = SystemTick::GetTickCount();
 	ignoreTouchTime = longTouchDelay;
 }
 
@@ -461,7 +344,7 @@ void ErrorBeep()
 
 // Draw a spot and wait until the user touches it, returning the touch coordinates in tx and ty.
 // The alternative X and Y locations are so that the caller can allow for the touch panel being possibly inverted.
-void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber altY, uint16_t& tx, uint16_t& ty)
+void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber altY, bool wantY, uint16_t& rawRslt)
 {
 	const PixelNumber touchCircleRadius = 8;
 	const PixelNumber touchCalibMaxError = 40;
@@ -471,13 +354,15 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 	
 	for (;;)
 	{
-		if (touch.read(tx, ty))
+		uint16_t tx, ty, rawX, rawY;
+		if (touch.read(tx, ty, &rawX, &rawY))
 		{
 			if (   (abs((int)tx - (int)x) <= touchCalibMaxError || abs((int)tx - (int)altX) <= touchCalibMaxError)
 				&& (abs((int)ty - (int)y) <= touchCalibMaxError || abs((int)ty - (int)altY) <= touchCalibMaxError)
 			   ) 
 			{
 				TouchBeep();
+				rawRslt = (wantY) ? rawY : rawX;
 				break;
 			}
 		}
@@ -489,8 +374,6 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 
 void CalibrateTouch()
 {
-	const PixelNumber touchCalibMargin = 15;
-
 	DisplayField *oldRoot = mgr.GetRoot();
 	touchCalibInstruction->SetValue("Touch the spot");				// in case the user didn't need to press the reset button last time
 	mgr.SetRoot(touchCalibInstruction);
@@ -501,29 +384,23 @@ void CalibrateTouch()
 
 	// Draw spots on the edges of the screen, one at a time, and ask the user to touch them.
 	// For the first two, we allow for the touch panel being the wrong way round.
-	uint16_t xLow, xHigh, yLow, yHigh, dummy;
-	DoTouchCalib(DisplayX/2, touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin,	dummy, yLow);
-	if (yLow > DisplayY/2)
+	DoTouchCalib(DisplayX/2, touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin, true, nvData.ymin);
+	if (nvData.ymin >= 4096/2)
 	{
 		touch.adjustOrientation(ReverseY);
-		yLow = DisplayY - 1 - yLow;
+		nvData.ymin = 4095 - nvData.ymin;
 	}
-	DoTouchCalib(DisplayX - touchCalibMargin - 1, DisplayY/2, touchCalibMargin, DisplayY/2, xHigh, dummy);
-	if (xHigh < DisplayX/2)
+	DoTouchCalib(DisplayX - touchCalibMargin - 1, DisplayY/2, touchCalibMargin, DisplayY/2, false, nvData.xmax);
+	if (nvData.xmax < 4096/2)
 	{
 		touch.adjustOrientation(ReverseX);
-		xHigh = DisplayX - 1 - xHigh;
+		nvData.xmax = 4095 - nvData.xmax;
 	}
-	DoTouchCalib(DisplayX/2, DisplayY - 1 - touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin, dummy, yHigh);
-	DoTouchCalib(touchCalibMargin, DisplayY/2, touchCalibMargin, DisplayY/2, xLow, dummy);
+	DoTouchCalib(DisplayX/2, DisplayY - 1 - touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin, true, nvData.ymax);
+	DoTouchCalib(touchCalibMargin, DisplayY/2, touchCalibMargin, DisplayY/2, false, nvData.xmin);
 	
-	// Extrapolate the values we read to the edges of the screen
-	nvData.xmin = (int)xLow - (int)touchCalibMargin;
-	nvData.xmax = (int)xHigh + (int)touchCalibMargin;
-	nvData.ymin = (int)yLow - (int)touchCalibMargin;
-	nvData.ymax = (int)yHigh + (int)touchCalibMargin;
 	nvData.touchOrientation = touch.getOrientation();
-	touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
+	touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax, touchCalibMargin);
 	
 	mgr.SetRoot(oldRoot);
 	mgr.ClearAll();
@@ -542,9 +419,9 @@ void FactoryReset()
 	nvData.SetInvalid();
 	nvData.Save();
 	savedNvData = nvData;
-	Buzzer::Beep(touchBeepFrequency, 400, Buzzer::MaxVolume);			// long beep to acknowledge it
+	Buzzer::Beep(touchBeepFrequency, 400, Buzzer::MaxVolume);		// long beep to acknowledge it
 	while (Buzzer::Noisy()) { }
-	rstc_start_software_reset(RSTC);									// reset the processor
+	Restart();														// reset the processor
 }
 
 // Save settings
@@ -552,15 +429,22 @@ void SaveSettings()
 {
 	while (Buzzer::Noisy()) { }
 	nvData.Save();
-	savedNvData = nvData;
+	// To make sure it worked, load the settings again
+	savedNvData.Load();
 	CheckSettingsAreSaved();
 }
 
-void PopupAreYouSure(Event ev, const char* text)
+void PopupAreYouSure(Event ev, const char* text, const char* query = "Are you sure?")
 {
 	eventToConfirm = ev;
 	areYouSureTextField->SetValue(text);
+	areYouSureQueryField->SetValue(query);
 	mgr.SetPopup(areYouSurePopup, (DisplayX - areYouSurePopupWidth)/2, (DisplayY - areYouSurePopupHeight)/2);
+}
+
+void PopupRestart()
+{
+	PopupAreYouSure(evRestart, "Restart required", "Restart now?");
 }
 
 void Adjusting(Button *f)
@@ -597,24 +481,29 @@ void ProcessTouch(DisplayField *df)
 		Button *f = static_cast<Button*>(df);
 		currentButton = f;
 		mgr.Press(f, true);
-		Event ev = f->GetEvent();
+		Event ev = (Event)(f->GetEvent());
 		switch(ev)
 		{
 		case evTabControl:
 		case evTabPrint:
-		case evTabFiles:
+//		case evTabFiles:
 		case evTabMsg:
 		case evTabInfo:
 			ChangeTab(f);
 			break;
 
-		case evAdjustTemp:
+		case evAdjustActiveTemp:
+		case evAdjustStandbyTemp:
 			if (static_cast<IntegerButton*>(f)->GetValue() < 0)
 			{
 				static_cast<IntegerButton*>(f)->SetValue(0);
 			}
-			// no break
-		case evAdjustPercent:
+			Adjusting(f);
+			mgr.SetPopup(setTempPopup, tempPopupX, popupY);
+			break;
+
+		case evAdjustSpeed:
+		case evExtrusionFactor:
 			Adjusting(f);
 			mgr.SetPopup(setTempPopup, tempPopupX, popupY);
 			break;
@@ -622,12 +511,65 @@ void ProcessTouch(DisplayField *df)
 		case evSetInt:
 			if (fieldBeingAdjusted != NULL)
 			{
-				const char* null cmd = fieldBeingAdjusted->GetSParam();
-				if (cmd != NULL)
+				int val = static_cast<const IntegerButton*>(fieldBeingAdjusted)->GetValue();
+				switch(fieldBeingAdjusted->GetEvent())
 				{
-					SerialIo::SendString(cmd);
-					SerialIo::SendInt(static_cast<const IntegerButton*>(fieldBeingAdjusted)->GetValue());
-					SerialIo::SendChar('\n');
+				case evAdjustActiveTemp:
+					{
+						int heater = fieldBeingAdjusted->GetIParam();
+						if (heater == 0)
+						{
+							SerialIo::SendString("M140 S");
+							SerialIo::SendInt(val);
+							SerialIo::SendChar('\n');
+						}
+						else
+						{
+							SerialIo::SendString("G10 P");
+							SerialIo::SendInt(heater - 1);
+							SerialIo::SendString(" S");
+							SerialIo::SendInt(val);
+							SerialIo::SendChar('\n');
+						}
+					}
+					break;
+					
+				case evAdjustStandbyTemp:
+					{
+						int heater = fieldBeingAdjusted->GetIParam();
+						if (heater > 0)
+						{
+							SerialIo::SendString("G10 P");
+							SerialIo::SendInt(heater - 1);
+							SerialIo::SendString(" R");
+							SerialIo::SendInt(val);
+							SerialIo::SendChar('\n');
+						}
+					}
+					break;
+				
+				case evExtrusionFactor:
+					{
+						int heater = fieldBeingAdjusted->GetIParam();
+						SerialIo::SendString("M221 P");
+						SerialIo::SendInt(heater);
+						SerialIo::SendString(" S");
+						SerialIo::SendInt(val);
+						SerialIo::SendChar('\n');
+					}
+					break;
+					
+				default:
+					{
+						const char* null cmd = fieldBeingAdjusted->GetSParam();
+						if (cmd != NULL)
+						{
+							SerialIo::SendString(cmd);
+							SerialIo::SendInt(val);
+							SerialIo::SendChar('\n');
+						}
+					}
+					break;
 				}
 				mgr.SetPopup(NULL);
 				StopAdjusting();
@@ -642,14 +584,25 @@ void ProcessTouch(DisplayField *df)
 			}
 			break;
 
-		case evAdjustPosition:
-			if (fieldBeingAdjusted != NULL)
-			{
-				SerialIo::SendString("G91\n");
-				SerialIo::SendString(fieldBeingAdjusted->GetSParam());
-				SerialIo::SendString(f->GetSParam());
-				SerialIo::SendString(" F6000\nG90\n");
-			}
+		case evMove:
+			mgr.SetPopup(movePopup, movePopupX, movePopupY);
+			break;
+		
+		case evMoveX:
+		case evMoveY:
+		case evMoveZ:
+			SerialIo::SendString("G91\nG1 ");
+			SerialIo::SendChar((ev == evMoveX) ? 'X' : (ev == evMoveY) ? 'Y' : 'Z');
+			SerialIo::SendString(f->GetSParam());
+			SerialIo::SendString(" F6000\nG90\n");
+			break;
+
+		case evListFiles:
+			FileManager::DisplayFilesList();
+			break;
+
+		case evListMacros:
+			FileManager::DisplayMacrosList();
 			break;
 
 		case evCalTouch:
@@ -661,43 +614,44 @@ void ProcessTouch(DisplayField *df)
 			PopupAreYouSure(ev, "Confirm factory reset");
 			break;
 
+		case evRestart:
+			PopupAreYouSure(ev, "Confirm restart");
+			break;
+
 		case evSaveSettings:
 			SaveSettings();
+			if (restartNeeded)
+			{
+				PopupRestart();
+			}
 			break;
 
 		case evSelectHead:
-			switch(f->GetIParam())
 			{
-			case 0:
-				// There is no command to switch the bed to standby temperature, so we always set it to the active temperature
-				SerialIo::SendString("M140 S");
-				SerialIo::SendInt(bedActiveTemp->GetValue());
-				SerialIo::SendChar('\n');
-				break;
-		
-			case 1:
-				SerialIo::SendString((heaterStatus[1] == 2) ? "T-1\n" : "T0\n");
-				break;
-		
-			case 2:
-				SerialIo::SendString((heaterStatus[2] == 2) ? "T-1\n" : "T1\n");
-				break;
-		
-			default:
-				break;
+				int head = f->GetIParam();
+				if (head == 0)
+				{
+					// There is no command to switch the bed to standby temperature, so we always set it to the active temperature
+					SerialIo::SendString("M140 S");
+					SerialIo::SendInt(activeTemps[0]->GetValue());
+					SerialIo::SendChar('\n');
+				}
+				else if (head < (int)maxHeaters)
+				{
+					if (heaterStatus[head] == 2)		// if head is active
+					{
+						SerialIo::SendString("T-1\n");
+					}
+					else
+					{
+						SerialIo::SendChar('T');
+						SerialIo::SendInt(head - 1);
+						SerialIo::SendChar('\n');
+					}
+				}
 			}
 			break;
-		
-		case evXYPos:
-			Adjusting(f);
-			mgr.SetPopup(setXYPopup, xyPopupX, popupY);
-			break;
-
-		case evZPos:
-			Adjusting(f);
-			mgr.SetPopup(setZPopup, xyPopupX, popupY);
-			break;
-
+	
 		case evFile:
 			{
 				const char *fileName = f->GetSParam();
@@ -781,9 +735,12 @@ void ProcessTouch(DisplayField *df)
 			break;
 
 		case evScrollFiles:
-			fileScrollOffset += f->GetIParam();
-			fileListScrolled = true;
-			ShortenTouchDelay();
+			FileManager::Scroll(f->GetIParam());
+			ShortenTouchDelay();				
+			break;
+
+		case evKeyboard:
+			mgr.SetPopup(keyboardPopup, keyboardPopupX, keyboardPopupY);
 			break;
 
 		case evInvertDisplay:
@@ -795,7 +752,7 @@ void ProcessTouch(DisplayField *df)
 
 		case evSetBaudRate:
 			Adjusting(f);
-			mgr.SetPopup(baudPopup, xyPopupX, popupY);
+			mgr.SetPopup(baudPopup, fullWidthPopupX, popupY);
 			break;
 
 		case evAdjustBaudRate:
@@ -810,7 +767,7 @@ void ProcessTouch(DisplayField *df)
 
 		case evSetVolume:
 			Adjusting(f);
-			mgr.SetPopup(volumePopup, xyPopupX, popupY);
+			mgr.SetPopup(volumePopup, fullWidthPopupX, popupY);
 			break;
 
 		case evAdjustVolume:
@@ -820,7 +777,20 @@ void ProcessTouch(DisplayField *df)
 			CheckSettingsAreSaved();
 			break;
 
+		case evSetLanguage:
+			Adjusting(f);
+			mgr.SetPopup(languagePopup, fullWidthPopupX, popupY);
+			break;
+
+		case evAdjustLanguage:
+			nvData.language = f->GetIParam();
+			languageButton->SetText(longLanguageNames[nvData.language]);
+			CheckSettingsAreSaved();						// not sure we need this because we are going to reset anyway
+			break;
+
 		case evYes:
+			CurrentButtonReleased();
+			mgr.SetPopup(nullptr);
 			switch (eventToConfirm)
 			{
 			case evFactoryReset:
@@ -828,30 +798,61 @@ void ProcessTouch(DisplayField *df)
 				break;
 
 			case evDeleteFile:
-				if (currentFile != NULL)
+				if (currentFile != nullptr)
 				{
 					SerialIo::SendString("M30 ");
 					SerialIo::SendString(currentFile);
 					SerialIo::SendChar('\n');
 					filesListTimer.SetPending();
-					currentFile = NULL;
+					currentFile = nullptr;
 				}
+				break;
+
+			case evRestart:
+				if (nvData != savedNvData)
+				{
+					SaveSettings();
+				}
+				Restart();
 				break;
 
 			default:
 				break;
 			}
-			eventToConfirm = nullEvent;
+			eventToConfirm = evNull;
+			currentFile = NULL;
+			break;
+
+		case evCancel:
+			eventToConfirm = evNull;
 			currentFile = NULL;
 			CurrentButtonReleased();
 			mgr.SetPopup(NULL);
 			break;
 
-		case evCancel:
-			eventToConfirm = nullEvent;
-			currentFile = NULL;
-			CurrentButtonReleased();
-			mgr.SetPopup(NULL);
+		case evKey:
+			if (!userCommandBuffer.full())
+			{
+				userCommandBuffer.add((char)f->GetIParam());
+				userCommandField->SetChanged();
+			}
+			break;
+
+		case evBackspace:
+			if (!userCommandBuffer.isEmpty())
+			{
+				userCommandBuffer.erase(userCommandBuffer.size() - 1);
+				userCommandField->SetChanged();
+				ShortenTouchDelay();
+			}
+			break;
+
+		case evSendKeyboardCommand:
+			if (userCommandBuffer.size() != 0)
+			{
+				SerialIo::SendString(userCommandBuffer.c_str());
+				SerialIo::SendChar('\n');
+			}
 			break;
 
 		default:
@@ -865,14 +866,24 @@ void ProcessTouchOutsidePopup()
 {
 	switch(fieldBeingAdjusted->GetEvent())
 	{
-	case evAdjustTemp:
-	case evXYPos:
-	case evZPos:
+	case evAdjustActiveTemp:
+	case evAdjustStandbyTemp:
 	case evSetBaudRate:
 	case evSetVolume:
-	case evAdjustPercent:
-		mgr.SetPopup(NULL);
+	case evAdjustSpeed:
+	case evExtrusionFactor:
+		mgr.SetPopup(nullptr);
 		StopAdjusting();
+		break;
+
+	case evSetLanguage:
+		mgr.SetPopup(nullptr);
+		StopAdjusting();
+		if (nvData.language != savedNvData.language)
+		{
+			restartNeeded = true;
+			PopupRestart();
+		}
 		break;
 	
 	default:
@@ -904,7 +915,7 @@ void UpdateMessages(bool all)
 		}
 		else
 		{
-			uint32_t age = (GetTickCount() - tim)/1000;	// age of message in seconds
+			uint32_t age = (SystemTick::GetTickCount() - tim)/1000;	// age of message in seconds
 			if (age < 10 * 60)
 			{
 				snprintf(p, Message::rttLen, "%lum%02lu", age/60, age%60);
@@ -951,7 +962,7 @@ void AppendMessage(const char* data)
 {
 	newMessageStartRow = (messageStartRow == 0) ? numMessageRows : messageStartRow - 1;
 	safeStrncpy(messages[newMessageStartRow].msg, data, maxMessageChars);
-	messages[newMessageStartRow].receivedTime = GetTickCount();
+	messages[newMessageStartRow].receivedTime = SystemTick::GetTickCount();
 }
 
 void DisplayNewMessage()
@@ -975,7 +986,7 @@ void UpdatePrintingFields()
 	}
 	else
 	{
-		Fields::HidePauseResumeCancelButtons();
+		Fields::ShowFilesButton();
 	}
 	
 	bool showPrintProgress = (status == psPrinting || status == psPaused || status == psPausing || status == psResuming);
@@ -1159,40 +1170,19 @@ void StartReceivedMessage()
 {
 	newMessageSeq = messageSeq;
 	newMessageStartRow = messageStartRow;
-	fileDirectoryName.clear();
-	newFileList = -1;
+	FileManager::BeginNewMessage();
 }
 
 void EndReceivedMessage()
 {
-	lastResponseTime = GetTickCount();
+	lastResponseTime = SystemTick::GetTickCount();
 
 	if (newMessageSeq != messageSeq && newMessageStartRow != messageStartRow)
 	{
 		messageSeq = newMessageSeq;
 		DisplayNewMessage();
-	}
-	
-	if (newFileList >= 0)
-	{
-		// We received a new file list
-		if (fileDirectoryName.isEmpty() || fileDirectoryName.equalsIgnoreCase("/gcodes") || fileDirectoryName.equalsIgnoreCase("0:/gcodes/"))
-		{
-			if (currentFile == NULL)
-			{
-				filesFileList = newFileList;
-				RefreshFileList();
-				filesListTimer.Stop();
-			}
-		}
-		else if (fileDirectoryName.equalsIgnoreCase("/macros"))
-		{
-			macrosFileList = newFileList;
-			RefreshMacroList();
-			macroListTimer.Stop();
-		}
-		newFileList = -1;
-	}
+	}	
+	FileManager::EndReceivedMessage(currentFile != nullptr);	
 }
 
 // Public functions called by the SerialIo module
@@ -1205,22 +1195,9 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvActive:
 			{
 				int ival;
-				if (GetInteger(data, ival))
+				if (GetInteger(data, ival) && index < (int)maxHeaters)
 				{
-					switch(index)
-					{
-					case 0:
-						UpdateField(bedActiveTemp, ival);
-						break;
-					case 1:
-						UpdateField(t1ActiveTemp, ival);
-						break;
-					case 2:
-						UpdateField(t2ActiveTemp, ival);
-						break;
-					default:
-						break;
-					}
+					UpdateField(activeTemps[index], ival);
 				}
 			}
 			break;
@@ -1228,22 +1205,9 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvStandby:
 			{
 				int ival;
-				if (GetInteger(data, ival))
+				if (GetInteger(data, ival) && index < (int)maxHeaters && index != 0)
 				{
-					switch(index)
-					{
-					case 0:
-						UpdateField(bedStandbyTemp, ival);
-						break;
-					case 1:
-						UpdateField(t1StandbyTemp, ival);
-						break;
-					case 2:
-						UpdateField(t2StandbyTemp, ival);
-						break;
-					default:
-						break;
-					}
+					UpdateField(standbyTemps[index], ival);
 				}
 			}
 			break;
@@ -1251,28 +1215,15 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvHeaters:
 			{
 				float fval;
-				if (GetFloat(data, fval))
+				if (GetFloat(data, fval) && index < (int)maxHeaters)
 				{
-					switch(index)
+					currentTemps[index]->SetValue(fval);
+					if (index == (int)numHeads + 1)
 					{
-					case 0:
-						bedCurrentTemp->SetValue(fval);
-						break;
-					case 1:
-						t1CurrentTemp->SetValue(fval);
-						break;
-					case 2:
-						t2CurrentTemp->SetValue(fval);
-						if (numHeads == 1)
-						{
-							mgr.Show(t2CurrentTemp, true);
-							mgr.Show(t2ActiveTemp, true);
-							mgr.Show(t2StandbyTemp, true);
-							++numHeads;
-						}
-						break;
-					default:
-						break;
+						mgr.Show(currentTemps[index], true);
+						mgr.Show(activeTemps[index], true);
+						mgr.Show(standbyTemps[index], true);
+						++numHeads;
 					}
 				}
 			}
@@ -1285,20 +1236,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				{
 					heaterStatus[index] = ival;
 					Colour c = (ival == 1) ? standbyBackColour : (ival == 2) ? activeBackColour : (ival == 3) ? errorBackColour : defaultBackColour;
-					switch(index)
-					{
-						case 0:
-						bedCurrentTemp->SetColours(infoTextColour, c);
-						break;
-						case 1:
-						t1CurrentTemp->SetColours(infoTextColour, c);
-						break;
-						case 2:
-						t2CurrentTemp->SetColours(infoTextColour, c);
-						break;
-						default:
-						break;
-					}
+					currentTemps[index]->SetColours(infoTextColour, c);
 				}
 			}
 			break;
@@ -1329,50 +1267,19 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvEfactor:
 			{
 				int ival;
-				if (GetInteger(data, ival))
+				if (GetInteger(data, ival) && index + 1 < (int)maxHeaters)
 				{
-					switch(index)
-					{
-					case 0:
-						UpdateField(e1Percent, ival);
-						break;
-					case 1:
-						UpdateField(e2Percent, ival);
-						break;
-					default:
-						break;
-					}
+					UpdateField(extrusionFactors[index], ival);
 				}
 			}
 			break;
 		
 		case rcvFiles:
+			if (index == 0)
 			{
-				if (index == 0)
-				{
-					// Find a free file list and index to receive the filenames into
-					newFileList = 0;
-					while (newFileList == filesFileList || newFileList == macrosFileList)
-					{
-						++newFileList;
-					}
-				
-					_ecv_assert(0 <= newFileList && newFileList < 3);
-					fileLists[newFileList].clear();
-					fileIndices[newFileList].clear();
-				}
-				if (newFileList >= 0)
-				{
-					FileList& fileList = fileLists[newFileList];
-					FileListIndex& fileIndex = fileIndices[newFileList];
-					size_t len = strlen(data) + 1;		// we are going to copy the null terminator as well
-					if (len + fileList.size() < fileList.capacity() && fileIndex.size() < fileIndex.capacity())
-					{
-						fileIndex.add(fileList.c_ptr() + fileList.size());
-						fileList.add(data, len);
-					}
-				}
+				FileManager::BeginReceivingFiles();
 			}
+			FileManager::ReceiveFile(data);
 			break;
 		
 		case rcvFilament:
@@ -1420,7 +1327,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				if (b && i >= 0 && i < 10 * 24 * 60 * 60 && (status == psPrinting || status == psPaused))
 				{
 					timesLeft[index] = i;
-					timesLeftText.copyFrom("Estimated time left: filament ");
+					timesLeftText.copyFrom("filament ");
 					AppendTimeLeft(timesLeft[1]);
 					timesLeftText.catFrom(", file ");
 					AppendTimeLeft(timesLeft[0]);
@@ -1559,7 +1466,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvDir:
-			fileDirectoryName.copyFrom(data);
+			FileManager::ReceiveDirectoryName(data);
 			break;
 
 		default:
@@ -1587,14 +1494,14 @@ void SelfTest()
 	// Do internal and external loopback tests on the serial port
 
 	// Initialize fields with the widest expected values so that we can make sure they fit
-	bedCurrentTemp->SetValue(129.0);
-	t1CurrentTemp->SetValue(299.0);
-	t2CurrentTemp->SetValue(299.0);
-	bedActiveTemp->SetValue(120);
-	t1ActiveTemp->SetValue(280);
-	t2ActiveTemp->SetValue(280);
-	t1StandbyTemp->SetValue(280);
-	t2StandbyTemp->SetValue(280);
+	currentTemps[0]->SetValue(129.0);
+	currentTemps[1]->SetValue(299.0);
+	currentTemps[2]->SetValue(299.0);
+	activeTemps[0]->SetValue(120);
+	activeTemps[1]->SetValue(280);
+	activeTemps[2]->SetValue(280);
+	standbyTemps[1]->SetValue(280);
+	standbyTemps[2]->SetValue(280);
 	xPos->SetValue(220.9);
 	yPos->SetValue(220.9);
 	zPos->SetValue(199.99);
@@ -1602,8 +1509,8 @@ void SelfTest()
 	zProbe->SetValue("1023 (1023)");
 //	fanRPM->SetValue(9999);
 	spd->SetValue(169);
-	e1Percent->SetValue(169);
-	e2Percent->SetValue(169);
+	extrusionFactors[0]->SetValue(169);
+	extrusionFactors[1]->SetValue(169);
 }
 
 void SendRequest(const char *s, bool includeSeq = false)
@@ -1614,7 +1521,7 @@ void SendRequest(const char *s, bool includeSeq = false)
 		SerialIo::SendInt(messageSeq);
 	}
 	SerialIo::SendChar('\n');
-	lastPollTime = GetTickCount();
+	lastPollTime = SystemTick::GetTickCount();
 }
 
 /**
@@ -1634,7 +1541,7 @@ int main(void)
 	pmc_enable_periph_clk(ID_UART1);	// enable UART1 clock
 	
 	Buzzer::Init();
-	lastTouchTime = GetTickCount();
+	lastTouchTime = SystemTick::GetTickCount();
 	
 	SysTick_Config(SystemCoreClock / 1000);
 
@@ -1647,15 +1554,16 @@ int main(void)
 	if (nvData.Valid())
 	{
 		// The touch panel has already been calibrated
-		InitLcd(nvData.lcdOrientation);
+		InitLcd(nvData.lcdOrientation, nvData.language);
 		touch.init(DisplayX, DisplayY, nvData.touchOrientation);
-		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax);
+		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax, touchCalibMargin);
+		savedNvData = nvData;
 	}
 	else
 	{
 		// The touch panel has not been calibrated, and we do not know which way up it is
 		nvData.SetDefaults();
-		InitLcd(nvData.lcdOrientation);
+		InitLcd(nvData.lcdOrientation, nvData.language);
 		CalibrateTouch();					// this includes the touch driver initialization
 		SaveSettings();
 	}
@@ -1674,18 +1582,18 @@ int main(void)
 	UpdateMessages(true);
 	UpdatePrintingFields();
 
-	lastPollTime = GetTickCount() - printerPollInterval;	// allow a poll immediately
+	lastPollTime = SystemTick::GetTickCount() - printerPollInterval;	// allow a poll immediately
 	
 	// Hide the Head 2 parameters until we know we have a second head
-	mgr.Show(t2CurrentTemp, false);
-	mgr.Show(t2ActiveTemp, false);
-	mgr.Show(t2StandbyTemp, false);
+//	mgr.Show(t2CurrentTemp, false);
+//	mgr.Show(t2ActiveTemp, false);
+//	mgr.Show(t2StandbyTemp, false);
 	
-	mgr.Show(bedStandbyTemp, false);		// currently, we always hide the bed standby temperature because it doesn't do anything
+	mgr.Show(standbyTemps[0], false);		// currently, we always hide the bed standby temperature because it doesn't do anything
 	
 	// Display the Control tab
 	ChangeTab(tabControl);
-	lastResponseTime = GetTickCount();		// pretend we just received a response
+	lastResponseTime = SystemTick::GetTickCount();		// pretend we just received a response
 	
 	machineConfigTimer.SetPending();		// we need to fetch the machine name and configuration
 	
@@ -1701,8 +1609,8 @@ int main(void)
 			UpdateMessages(false);
 		}
 		
-		// 3a. Check for a touch on the touch panel.
-		if (GetTickCount() - lastTouchTime >= ignoreTouchTime)
+		// 3. Check for a touch on the touch panel.
+		if (SystemTick::GetTickCount() - lastTouchTime >= ignoreTouchTime)
 		{
 			uint16_t x, y;
 			if (touch.read(x, y))
@@ -1722,7 +1630,7 @@ int main(void)
 				else
 				{
 					f = mgr.FindEventOutsidePopup(x, y);
-					if (f != NULL && f == fieldBeingAdjusted)
+					if (f != nullptr && f == fieldBeingAdjusted)
 					{
 						DelayTouchLong();	// by default, ignore further touches for a long time
 						TouchBeep();
@@ -1734,12 +1642,6 @@ int main(void)
 			{
 				CurrentButtonReleased();
 			}
-		}
-		
-		// 3b. If the file list has changed due to scrolling, refresh it.
-		if (fileListScrolled)
-		{
-			RefreshFileList();
 		}
 		
 		// 4. Refresh the display
@@ -1759,7 +1661,7 @@ int main(void)
 		// 6. If it is time, poll the printer status.
 		// When the printer is executing a homing move or other file macro, it may stop responding to polling requests.
 		// Under these conditions, we slow down the rate of polling to avoid building up a large queue of them.
-		uint32_t now = GetTickCount();
+		uint32_t now = SystemTick::GetTickCount();
 		if (   now - lastPollTime >= printerPollInterval			// if we haven't polled the printer too recently...
 			&& now - lastResponseTime >= printerResponseInterval	// and we haven't had a response too recently
 		   )

@@ -40,6 +40,8 @@ public:
 	void add(const T& x) pre(filled < N) { storage[filled++] = x; }
 
 	void add(const T* array p, size_t n) pre(filled + n <= N);
+	
+	void erase(size_t pos, size_t count = 1);
 
 	void clear() { filled = 0; }
 
@@ -81,6 +83,20 @@ template<class T, size_t N> void Vector<T, N>::sort(bool (*sortfunc)(T, T))
 	}
 }
 
+template<class T, size_t N> void Vector<T, N>::erase(size_t pos, size_t count)
+{
+	while (pos + count < filled)
+	{
+		storage[pos] = storage[pos + count];
+		++pos;
+	}
+	if (pos < filled)
+	{
+		filled = pos;
+	}
+}
+
+// String class. This is like the vector class except that we always keep a null terminator so that we can call c_str() on it.
 template<size_t N> class String : public Vector<char, N + 1>
 {
 public:
@@ -96,6 +112,13 @@ public:
 	void add(char x) pre(this->filled < N)
 	{
 		this->storage[this->filled++] = x; 
+		this->storage[this->filled] = '\0';
+	}
+	
+	// Redefine 'erase' to preserve the null terminator
+	void erase(size_t pos, size_t count = 1)
+	{
+		static_cast<Vector<char, N + 1>*>(this)->erase(pos, count);
 		this->storage[this->filled] = '\0';
 	}
 		

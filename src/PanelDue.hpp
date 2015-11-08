@@ -10,6 +10,7 @@
 
 #include "UTFT.hpp"
 #include "Display.hpp"
+#include "RequestTimer.hpp"
 
 // Global functions in PanelDue.cpp that are called from elsewhere
 extern void ProcessReceivedValue(const char id[], const char val[], int index);
@@ -20,5 +21,6 @@ extern void EndReceivedMessage();
 // Global data in PanelDue.cpp that is used elsewhere
 extern UTFT lcd;
 extern DisplayManager mgr;
+extern RequestTimer filesListTimer, macroListTimer;
 
 #endif /* PANELDUE_H_ */
