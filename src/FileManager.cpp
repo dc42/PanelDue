@@ -158,6 +158,7 @@ namespace FileManager
 	void DisplayFilesList()
 	{
 		gcodeFilesList.RefreshPopup();
+		filePopupTitleField->SetValue("Files on SD card");
 		mgr.SetPopup(fileListPopup, fileListPopupX, fileListPopupY);
 		filesListTimer.SetPending();								// refresh the list of files
 	}
@@ -165,6 +166,7 @@ namespace FileManager
 	void DisplayMacrosList()
 	{
 		macroFilesList.RefreshPopup();
+		filePopupTitleField->SetValue("Macros");
 		mgr.SetPopup(fileListPopup, fileListPopupX, fileListPopupY);
 		macroListTimer.SetPending();								// refresh the list of macros
 	}		

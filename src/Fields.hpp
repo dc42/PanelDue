@@ -74,8 +74,6 @@ const PixelNumber e1FactorXpos = 140, e2FactorXpos = 250;
 const PixelNumber messageTimeWidth = 60;
 
 const PixelNumber popupY = 192;
-const PixelNumber fullPopupWidth = DisplayX - 6;
-const PixelNumber fullPopupHeight = DisplayY - 4;
 const PixelNumber popupSideMargin = 10;
 const PixelNumber popupTopMargin = 10;
 const PixelNumber popupFieldSpacing = 10;
@@ -115,8 +113,6 @@ const PixelNumber e1FactorXpos = 220, e2FactorXpos = 375;
 const PixelNumber messageTimeWidth = 90;
 
 const PixelNumber popupY = 345;
-const PixelNumber fullPopupWidth = DisplayX - 10;
-const PixelNumber fullPopupHeight = DisplayY - 10;
 const PixelNumber popupSideMargin = 20;
 const PixelNumber popupTopMargin = 20;
 const PixelNumber popupFieldSpacing = 20;
@@ -165,12 +161,14 @@ const PixelNumber pauseColumn = DISPLAY_X/2 + 10 + fieldSpacing;
 const PixelNumber resumeColumn = pauseColumn;
 const PixelNumber cancelColumn = pauseColumn + (DISPLAY_X - pauseColumn - fieldSpacing - margin)/2 + fieldSpacing;
 
+const PixelNumber fullPopupWidth = DisplayX - (2 * margin);
+const PixelNumber fullPopupHeight = DisplayY - (2 * margin);
 const PixelNumber fullWidthPopupX = (DisplayX - fullPopupWidth)/2;
 const PixelNumber popupBarHeight = buttonHeight + (2 * popupTopMargin);
 
 const PixelNumber tempPopupBarWidth = (3 * fullPopupWidth)/4;
 const PixelNumber tempPopupX = (DisplayX - tempPopupBarWidth)/2;
-const PixelNumber filePopupWidth = fullPopupWidth,
+const PixelNumber filePopupWidth = fullPopupWidth - (4 * margin),
 				  filePopupHeight = (8 * rowHeight) + (2 * popupTopMargin);
 const PixelNumber areYouSurePopupWidth = DisplayX - 80,
 				  areYouSurePopupHeight = (3 * rowHeight) + (2 * popupTopMargin);
@@ -186,7 +184,7 @@ const PixelNumber keyButtonWidth = (keyboardPopupWidth - 2 * popupSideMargin)/16
 const PixelNumber keyButtonHStep = (keyboardPopupWidth - 2 * popupSideMargin - keyButtonWidth)/11;
 const PixelNumber keyButtonVStep = buttonHeight + fileButtonRowSpacing;
 const PixelNumber keyboardPopupHeight = (6 * buttonHeight) + (4 * fileButtonRowSpacing) + (2 * popupTopMargin);
-const PixelNumber keyboardPopupX = fullWidthPopupX, keyboardPopupY = DisplayY - keyboardPopupHeight - margin;
+const PixelNumber keyboardPopupX = fullWidthPopupX, keyboardPopupY = margin;
 
 const unsigned int numFileColumns = 2;
 const unsigned int numFileRows = (fullPopupHeight - (2 * popupTopMargin) + fileButtonRowSpacing)/(buttonHeight + fileButtonRowSpacing) - 1;
@@ -196,7 +194,7 @@ const PixelNumber fileListPopupHeight = ((numFileRows + 1) * buttonHeight) + (nu
 const PixelNumber fileListPopupX = (DisplayX - fileListPopupWidth)/2;
 const PixelNumber fileListPopupY = (DisplayY - fileListPopupHeight)/2;
 
-const uint32_t numMessageRows = (DisplayY - margin - 2 * rowHeight)/rowTextHeight;
+const uint32_t numMessageRows = (rowTabs - margin - rowHeight)/rowTextHeight;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
 
@@ -250,7 +248,8 @@ const size_t machineNameLength = 30;
 const size_t printingFileLength = 40;
 const size_t zprobeBufLength = 12;
 const size_t generatedByTextLength = 50;
-const size_t userCommandLength = 50;
+const size_t maxUserCommandLength = 40;			// max length of a user gcode command
+const size_t numUserCommandBuffers = 6;			// number of command history buffers plus one
 
 const unsigned int numLanguages = 3;
 extern const char* const longLanguageNames[];
@@ -259,7 +258,8 @@ extern String<machineNameLength> machineName;
 extern String<printingFileLength> printingFile;
 extern String<zprobeBufLength> zprobeBuf;
 extern String<generatedByTextLength> generatedByText;
-extern String<userCommandLength> userCommandBuffer;
+extern String<maxUserCommandLength> userCommandBuffers[numUserCommandBuffers];
+extern size_t currentUserCommandBuffer;
 
 extern FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField;
 extern FloatField *xPos, *yPos, *zPos;
@@ -268,23 +268,23 @@ extern IntegerButton *spd, *fanSpeed, *baudRateButton, *volumeButton;
 extern IntegerButton *extrusionFactors[maxHeaters];
 extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm;
 extern ProgressBar *printProgressBar;
-extern Button *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
-extern Button *moveButton, *extrudeButton, *fanButton, *macroButton;
+extern SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
+extern SingleButton *moveButton, *extrudeButton, *fanButton, *macroButton;
 extern TextButton *filenameButtons[numDisplayedFiles], *languageButton;
-extern Button *scrollFilesLeftButton, *scrollFilesRightButton;
-extern Button *homeButtons[3], *homeAllButton;
+extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton;
+extern SingleButton *homeButtons[3], *homeAllButton;
 extern TextButton *bedCompButton;
-extern StaticTextField *nameField, *statusField;
-extern Button *heaterStates[maxHeaters];
+extern StaticTextField *nameField, *statusField, *filePopupTitleField;
+extern SingleButton *heaterStates[maxHeaters];
 extern StaticTextField *touchCalibInstruction;
 extern StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
 extern StaticTextField *fwVersionField, *areYouSureTextField, *areYouSureQueryField;
 extern TextField *timeLeftField;
 extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
-extern Button * null currentTab;
-extern Button * null fieldBeingAdjusted;
-extern Button * null currentButton;
-extern PopupField *setTempPopup, *movePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
+extern ButtonBase * null currentTab;
+extern ButtonPress fieldBeingAdjusted;
+extern ButtonPress currentButton;
+extern PopupWindow *setTempPopup, *movePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
 extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *printingField, *userCommandField;
 
 // Event numbers, used to say what we need to do when a field is touched
@@ -329,7 +329,7 @@ enum Event : uint8_t
 	evPausePrint,
 	evResumePrint,
 	
-	evKey, evBackspace, evSendKeyboardCommand,
+	evKey, evBackspace, evSendKeyboardCommand, evUp, evDown,
 	
 	evAdjustLanguage, evSetLanguage,
 	

@@ -41,6 +41,31 @@ const event_t nullEvent = 0;
 
 enum class TextAlignment : uint8_t { Left, Centre, Right };
 	
+class ButtonBase;
+
+// Small by-value class to identify what button has been pressed
+class ButtonPress
+{
+	ButtonBase * null button;
+	unsigned int index;
+	
+public:
+	ButtonPress();
+	ButtonPress(ButtonBase *b, unsigned int pi);	
+	void Clear();
+	
+	bool IsValid() const { return button != nullptr; }
+	ButtonBase * GetButton() const { return button; }
+	unsigned int GetIndex() const { return index; }
+
+	event_t GetEvent() const;		
+	int GetIParam() const;
+	const char* array GetSParam() const;		
+	bool operator==(const ButtonPress& other) const;
+	
+	bool operator!=(const ButtonPress& other) const { return !operator==(other); }
+};
+
 // Base class for a displayable field
 class DisplayField
 {
@@ -79,7 +104,7 @@ public:
 	static void SetDefaultColours(Colour pf, Colour pb) { defaultFcolour = pf; defaultBcolour = pb; }
 	static void SetDefaultColours(Colour pf, Colour pb, Colour pbb, Colour pg, Colour pbp, Colour pgp);
 	static void SetDefaultFont(LcdFont pf) { defaultFont = pf; }
-	static DisplayField * null FindEvent(int x, int y, DisplayField * null p);
+	static ButtonPress FindEvent(PixelNumber x, PixelNumber y, DisplayField * null p);
 	
 	// Icon management
 	static PixelNumber GetIconWidth(Icon ic) { return ic[0]; }
@@ -87,53 +112,55 @@ public:
 	static const uint16_t * array GetIconData(Icon ic) { return ic + 2; }
 };
 
-class PopupField
+class PopupWindow;
+
+class Window
 {
-private:
+protected:
 	DisplayField * null root;
-	PixelNumber height, width;
+	PopupWindow * null next;
 	Colour backgroundColour;
 	
 public:
-	PopupField(PixelNumber ph, PixelNumber pw, Colour pb);
-	PixelNumber GetHeight() const { return height; }
-	PixelNumber GetWidth() const { return width; }
-	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset);
+	Window(Colour pb);
+	virtual PixelNumber Xpos() const { return 0; }
+	virtual PixelNumber Ypos() const { return 0; }
 	void AddField(DisplayField *p);
-	DisplayField * null FindEvent(int x, int y);
+	ButtonPress FindEvent(PixelNumber x, PixelNumber y);
+	ButtonPress FindEventOutsidePopup(PixelNumber x, PixelNumber y);
 	DisplayField * null GetRoot() const { return root; }
-	void Redraw(DisplayField *f, PixelNumber xOffset, PixelNumber yOffset);
-};
-
-class Button;
-
-class DisplayManager
-{
-public:
-	DisplayManager();
-	void Init(Colour pb);
-	void ClearAll();
-	void AddField(DisplayField *pd);
-	void RefreshAll(bool full = 0);
-	DisplayField * null FindEvent(PixelNumber x, PixelNumber y);
-	DisplayField * null FindEventOutsidePopup(PixelNumber x, PixelNumber y);
-	bool HavePopup() const { return popupField != NULL; }
-	void SetPopup(PopupField * null p, PixelNumber px = 0, PixelNumber py = 0);
-	void AttachPopup(PopupField * pp, DisplayField *p);
+	void Redraw(DisplayField *f);
+	void Show(DisplayField *f, bool v);
+	void Press(ButtonPress bp, bool v);
+	void SetPopup(PopupWindow * p, PixelNumber px = 0, PixelNumber py = 0);
+	void ClearPopup();
 	bool ObscuredByPopup(const DisplayField *p) const;
 	bool Visible(const DisplayField *p) const;
-	DisplayField * null GetRoot() const { return root; }
-	void SetRoot(DisplayField * null r) { root = r; }
-	void Outline(DisplayField *f, Colour c, PixelNumber numPixels);
-	void RemoveOutline(DisplayField *f, PixelNumber numPixels) { Outline(f, backgroundColor, numPixels); }
-	void Show(DisplayField *f, bool v);
-	void Press(Button *f, bool v);
+};
 
+class MainWindow : public Window
+{
+public:
+	MainWindow();
+	void Init(Colour pb);
+	void ClearAll();
+	void Refresh(bool full = 0);
+	void SetRoot(DisplayField * null r) { root = r; }
+};
+
+class PopupWindow : public Window
+{
 private:
-	DisplayField * null root;
-	PopupField * null popupField;
-	PixelNumber popupX, popupY;
-	Colour backgroundColor;
+	PixelNumber height, width, xPos, yPos;
+	
+public:
+	PopupWindow(PixelNumber ph, PixelNumber pw, Colour pb);
+	PixelNumber GetHeight() const { return height; }
+	PixelNumber GetWidth() const { return width; }
+	PixelNumber Xpos() const override { return xPos; }
+	PixelNumber Ypos() const override { return yPos; }
+	void Refresh(bool full);
+	void SetPos(PixelNumber px, PixelNumber py) { xPos = px; yPos = py; }
 };
 
 // Base class for fields displaying text
@@ -230,23 +257,45 @@ public:
 
 class StaticTextField : public FieldWithText
 {
-	const char *text;
+	const char * array null text;
 
 protected:
 	void PrintText() const override;
 
 public:
-	StaticTextField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char * array pt)
+	StaticTextField(PixelNumber py, PixelNumber px, PixelNumber pw, TextAlignment pa, const char * array null pt)
 		: FieldWithText(py, px, pw,pa), text(pt) {}
 
-	void SetValue(const char* array pt)
+	void SetValue(const char* array null pt)
 	{
 		text = pt;
 		changed = true;
 	}
 };
 
-class Button : public DisplayField
+class ButtonBase : public DisplayField
+{
+protected:
+	Colour borderColour, gradColour, pressedBackColour, pressedGradColour;
+	event_t evt;								// event number that is triggered by touching this field
+	bool pressed;								// putting this here instead of in SingleButton saves 4 byes per button
+
+	
+	ButtonBase(PixelNumber py, PixelNumber px, PixelNumber pw);
+
+	void DrawOutline(PixelNumber xOffset, PixelNumber yOffset, bool isPressed) const;
+	
+	static PixelNumber textMargin;
+	static PixelNumber iconMargin;
+
+public:
+	event_t GetEvent() const override { return evt; }
+	virtual const char* null GetSParam(unsigned int index) const { return nullptr; }
+	virtual int GetIParam(unsigned int index) const { return 0; }
+	virtual void Press(bool p, int index) { }
+};
+
+class SingleButton : public ButtonBase
 {
 	union
 	{
@@ -255,18 +304,11 @@ class Button : public DisplayField
 		//float fParam;
 	} param;
 
-	Colour borderColour, gradColour, pressedBackColour, pressedGradColour;
-	event_t evt;								// event number that is triggered by touching this field
-	bool pressed;
-
 protected:
-	Button(PixelNumber py, PixelNumber px, PixelNumber pw);
+	SingleButton(PixelNumber py, PixelNumber px, PixelNumber pw);
 	
 	void DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const;
 	
-	static PixelNumber textMargin;
-	static PixelNumber iconMargin;
-
 public:
 	bool IsButton() const override final { return true; }
 
@@ -274,13 +316,11 @@ public:
 	void SetEvent(event_t e, int ip ) { evt = e; param.iParam = ip; }
 	//void SetEvent(event_t e, float fp ) { evt = e; param.fParam = fp; }
 
-	event_t GetEvent() const override { return evt; }
-
-	const char* null GetSParam() const { return param.sParam; }
-	int GetIParam() const { return param.iParam; }
+	const char* null GetSParam(unsigned int index) const override { return param.sParam; }
+	int GetIParam(unsigned int index) const override { return param.iParam; }
 	//float GetFParam() const { return param.fParam; }
 
-	void Press(bool p)
+	void Press(bool p, int index) override
 	{
 		if (p != pressed)
 		{
@@ -293,7 +333,7 @@ public:
 	static void SetIconMargin(PixelNumber p) { iconMargin = p; }
 };
 
-class ButtonWithText : public Button
+class ButtonWithText : public SingleButton
 {
 	LcdFont font;
 	
@@ -304,43 +344,74 @@ protected:
 
 public:
 	ButtonWithText(PixelNumber py, PixelNumber px, PixelNumber pw)
-		: Button(py, px, pw), font(DisplayField::defaultFont) {}
+		: SingleButton(py, px, pw), font(DisplayField::defaultFont) {}
 
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;	
 };
 
+// Character button. The character on the button is the same as the integer event parameter.
 class CharButton : public ButtonWithText
 {
-	LcdFont font;
-	char c;
+protected:
+	void PrintText() const override;
 
 public:
 	CharButton(PixelNumber py, PixelNumber px, PixelNumber pw, char pc, event_t e);
+};
 
-protected:	
-	void PrintText() const override;
+class ButtonRow : public ButtonBase
+{
+	unsigned int numButtons;
+	int whichPressed;
+	PixelNumber step;
+	
+public:
+	ButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, unsigned int nb, event_t e);
+};
+
+class ButtonRowWithText : public ButtonRow
+{
+	LcdFont font;
+
+protected:
+	virtual void PrintText(unsigned int n) const { }
+
+public:
+	ButtonRowWithText(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, unsigned int nb, event_t e);
+
+	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;
+};
+
+class CharButtonRow : public ButtonRowWithText
+{
+	const char * array text;
+
+protected:
+	void PrintText(unsigned int n) const override;
+
+public:
+	CharButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, const char * array s, event_t e);
 };
 
 class TextButton : public ButtonWithText
 {
-	const char *text;
+	const char * array null text;
 	
 protected:
 	void PrintText() const override;
 
 public:
-	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt);
-	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt, event_t e, int param);
-	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt, event_t e, const char * array param);
+	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array null pt, event_t e, int param = 0);
+	TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array null pt, event_t e, const char * array param);
 
-	void SetText(const char* array pt)
+	void SetText(const char* array null pt)
 	{
 		text = pt;
 		changed = true;
 	}
 };
 
-class IconButton : public Button
+class IconButton : public SingleButton
 {
 	Icon icon;
 	
@@ -348,8 +419,7 @@ protected:
 	PixelNumber GetHeight() const override { return GetIconHeight(icon) + 2 * iconMargin + 2; }
 
 public:
-	IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic)
-		: Button(py, px, pw), icon(ic) {}
+	IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic, event_t e, int param = 0);
 
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;
 };
@@ -364,7 +434,7 @@ protected:
 	void PrintText() const override;
 
 public:
-	IntegerButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pl = NULL, const char * array pt = NULL)
+	IntegerButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pl = nullptr, const char * array pt = nullptr)
 		: ButtonWithText(py, px, pw), label(pl), units(pt), val(0) {}
 
 	int GetValue() const { return val; }
@@ -392,7 +462,7 @@ protected:
 	void PrintText() const override;
 
 public:
-	FloatButton(PixelNumber py, PixelNumber px, PixelNumber pw, uint8_t pd, const char * array pt = NULL)
+	FloatButton(PixelNumber py, PixelNumber px, PixelNumber pw, uint8_t pd, const char * array pt = nullptr)
 		: ButtonWithText(py, px, pw), units(pt), val(0.0), numDecimals(pd) {}
 
 	float GetValue() const { return val; }

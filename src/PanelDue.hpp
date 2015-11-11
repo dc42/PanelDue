@@ -20,7 +20,7 @@ extern void EndReceivedMessage();
 
 // Global data in PanelDue.cpp that is used elsewhere
 extern UTFT lcd;
-extern DisplayManager mgr;
+extern MainWindow mgr;
 extern RequestTimer filesListTimer, macroListTimer;
 
 #endif /* PANELDUE_H_ */

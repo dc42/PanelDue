@@ -53,27 +53,27 @@ void DisplayField::Show(bool v)
 }
 	
 // Find the best match to a touch event in a list of fields
-DisplayField * null DisplayField::FindEvent(int x, int y, DisplayField * null p)
+ButtonPress DisplayField::FindEvent(PixelNumber x, PixelNumber y, DisplayField * null p)
 {	
 	const int maxXerror = 8, maxYerror = 8;		// set these to how close we need to be
 	int bestError = maxXerror + maxYerror;
-	DisplayField * null best = NULL;
+	ButtonPress best;;
 	while (p != NULL)
 	{
 		if (p->visible && p->GetEvent() != nullEvent)
 		{
-			int xError = (x < (int)p->GetMinX()) ? (int)p->GetMinX() - x
-									: (x > (int)p->GetMaxX()) ? x - (int)p->GetMaxX()
+			int xError = (x < p->GetMinX()) ? p->GetMinX() - x
+									: (x > p->GetMaxX()) ? x - p->GetMaxX()
 										: 0;
 			if (xError < maxXerror)
 			{
-				int yError = (y < (int)p->GetMinY()) ? (int)p->GetMinY() - y
-										: (y > (int)p->GetMaxY()) ? y - (int)p->GetMaxY()
+				int yError = (y < p->GetMinY()) ? p->GetMinY() - y
+										: (y > p->GetMaxY()) ? y - p->GetMaxY()
 											: 0;
 				if (yError < maxYerror && xError + yError < bestError)
 				{
 					bestError = xError + yError;
-					best = p;
+					best = ButtonPress(static_cast<ButtonBase*>(p), 0);
 				}
 			}
 		}
@@ -92,128 +92,157 @@ void DisplayField::SetColours(Colour pf, Colour pb)
 	}
 }
 
-DisplayManager::DisplayManager()
-	: root(NULL), popupField(NULL), backgroundColor(0)
+// ButtonPress class methods
+ButtonPress::ButtonPress() : button(nullptr), index(0) { }
+
+ButtonPress::ButtonPress(ButtonBase *b, unsigned int pi) : button(b), index(pi) { }
+
+void ButtonPress::Clear()
 {
+	button = nullptr;
+	index = 0;
 }
 
-void DisplayManager::Init(Colour bc)
+event_t ButtonPress::GetEvent() const
 {
-	backgroundColor = bc;
-	ClearAll();
+	return button->GetEvent();
 }
 
-void DisplayManager::ClearAll()
+int ButtonPress::GetIParam() const
 {
-	lcd.fillScr(backgroundColor);
+	return button->GetIParam(index);
+}
+
+const char* array ButtonPress::GetSParam() const
+{
+	return button->GetSParam(index);
+}
+
+bool ButtonPress::operator==(const ButtonPress& other) const { return button == other.button && index == other.index; }
+
+// Window class methods
+Window::Window(Colour pb)
+	: root(nullptr), next(nullptr), backgroundColour(pb)
+{
 }
 
 // Append a field to the list of displayed fields
-void DisplayManager::AddField(DisplayField *d)
+void Window::AddField(DisplayField *d)
 {
 	d->next = root;
 	root = d;
 }
 
-// Refresh all fields. If 'full' is true then we rewrite them all, else we just rewrite those that have changed.
-void DisplayManager::RefreshAll(bool full)
+bool Window::ObscuredByPopup(const DisplayField *p) const
 {
-	for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
-	{
-		if (Visible(pp))
-		{
-			pp->Refresh(full, 0, 0);
-		}		
-	}
-	if (HavePopup())
-	{
-		popupField->Refresh(full, popupX, popupY);
-	}
+	return next != nullptr
+			&& (  (   p->GetMaxY() >= next->Ypos() && p->GetMinY() < next->Ypos() + next->GetHeight() 
+				   && p->GetMaxX() >= next->Xpos() && p->GetMinX() < next->Xpos() + next->GetWidth()
+				  )
+				|| next->ObscuredByPopup(p)
+			   );
 }
 
-bool DisplayManager::ObscuredByPopup(const DisplayField *p) const
-{
-	return HavePopup()
-			&& p->GetMaxY() >= popupY && p->GetMinY() < popupY + popupField->GetHeight()
-			&& p->GetMaxX() >= popupX && p->GetMinX() < popupX + popupField->GetWidth();
-}
-
-bool DisplayManager::Visible(const DisplayField *p) const
+bool Window::Visible(const DisplayField *p) const
 {
 	return p->IsVisible() && !ObscuredByPopup(p);
 }
 
 // Get the field that has been touched, or null if we can't find one
-DisplayField * null DisplayManager::FindEvent(PixelNumber x, PixelNumber y)
+ButtonPress Window::FindEvent(PixelNumber x, PixelNumber y)
 {
-	return (HavePopup()) ? popupField->FindEvent((int)x - (int)popupX, (int)y - (int)popupY) : DisplayField::FindEvent((int)x, (int)y, root);
+	return (x < Xpos() || y < Ypos()) ? ButtonPress()
+			: (next != nullptr) ? next->FindEvent(x, y) 
+				: DisplayField::FindEvent(x - Xpos(), y - Ypos(), root);
 }
 
 // Get the field that has been touched, but search only outside the popup
-DisplayField * null DisplayManager::FindEventOutsidePopup(PixelNumber x, PixelNumber y)
+ButtonPress Window::FindEventOutsidePopup(PixelNumber x, PixelNumber y)
 {
-	if (!HavePopup()) return NULL;
+	if (next == nullptr) return ButtonPress();
 	
-	DisplayField * null f = DisplayField::FindEvent((int)x, (int)y, root);
-	return (f != NULL && Visible(f)) ? f : NULL;
+	ButtonPress f = DisplayField::FindEvent(x, y, root);
+	return (f.IsValid() && Visible(f.GetButton())) ? f : ButtonPress();
 }
 
-void DisplayManager::SetPopup(PopupField * null p, PixelNumber px, PixelNumber py)
+void Window::SetPopup(PopupWindow * p, PixelNumber px, PixelNumber py)
 {
-	if (popupField != p)
-	{		
-		if (popupField != NULL)
-		{
-			lcd.setColor(backgroundColor);
-			lcd.fillRoundRect(popupX, popupY, popupX + popupField->GetWidth() - 1, popupY + popupField->GetHeight() - 1);
-			
-			// Re-display the background fields
-			for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
-			{
-				if (!Visible(pp) && pp->IsVisible())
-				{
-					pp->Refresh(true, 0, 0);
-				}
-			}		
-		}
-		popupField = p;
-		if (p != NULL)
-		{
-			popupX = px;
-			popupY = py;
-			p->Refresh(true, popupX, popupY);
-		}
-	}
-}
-
-void DisplayManager::AttachPopup(PopupField * pp, DisplayField *p)
-{
-	const PixelNumber margin = 10;	// don't let the popup get too close to the screen edges where touch position is less reliable
-	
-	// Work out the Y coordinate to place the popup level with the field
-	PixelNumber h = pp->GetHeight()/2;
-	PixelNumber hy = (p->GetMinY() + p->GetMaxY() + 1)/2;
-	PixelNumber y = (hy + h > lcd.getDisplayYSize() - margin) ? lcd.getDisplayYSize() - pp->GetHeight() - margin
-					: (hy - h > margin) ? hy - h 
-						: margin;
-	
-	PixelNumber x = (p->GetMaxX() + 5 + pp->GetWidth() < lcd.getDisplayXSize()) ? p->GetMaxX() + 5
-						: p->GetMinX() - pp->GetWidth() - 5;
-	SetPopup(pp, x, y);
-}
-
-// Draw an outline around a field. The field and 1 pixel around it are assumed to be visible.
-// Not sure what will happen of the field goes right up to one of the edges of the display! better avoid that situation.
-void DisplayManager::Outline(DisplayField *f, Colour c, PixelNumber numPixels)
-{
-	lcd.setColor(c);
-	for (PixelNumber i = 1; i <= numPixels; ++i)
+	p->SetPos(px, py);
+	Window *pw = this;
+	while (pw->next != nullptr)
 	{
-		lcd.drawRect(f->GetMinX() - i, f->GetMinY() - i, f->GetMaxX() + i, f->GetMaxY() + i);	
+		if (pw->next == p)
+		{
+			return;				// popup is already displayed
+		}
+		pw = pw->next;
+	}
+	p->next = nullptr;			// ensure no nested popup
+	pw->next = p;
+	p->Refresh(true);
+}
+
+void Window::ClearPopup()
+{
+	if (next != nullptr)
+	{
+		// Find the penultimate window
+		Window *pw = this;
+		while (pw->next->next != nullptr)
+		{
+			pw = pw->next;		// find the innermost popup
+		}
+		
+		// Clear the area that was occupied by the last window to the background colour of the penultimate window
+		lcd.setColor(pw->backgroundColour);
+		lcd.fillRoundRect(pw->next->Xpos(), pw->next->Ypos(), pw->next->Xpos() + pw->next->GetWidth() - 1, pw->next->Ypos() + pw->next->GetHeight() - 1);
+		
+		// Detach the last window
+		pw->next = nullptr;
+			
+		// Re-display the fields of the penultimate window that were obscured
+		for (DisplayField * null pp = pw->root; pp != nullptr; pp = pp->next)
+		{
+			if (pp->IsVisible())
+			{
+				pp->Refresh(true, pw->Xpos(), pw->Ypos());
+			}
+		}
 	}
 }
 
-void DisplayManager::Show(DisplayField *f, bool v)
+// Redraw the specified field
+void Window::Redraw(DisplayField *f)
+{
+	for (DisplayField * null p = root; p != nullptr; p = p->next)
+	{
+		if (p == f)
+		{
+			// The field belongs to this window
+			if (!ObscuredByPopup(p))
+			{
+				if (p->IsVisible())
+				{
+					p->Refresh(true, Xpos(), Ypos());
+				}
+				else
+				{
+					lcd.setColor(backgroundColour);
+					lcd.fillRect(p->GetMinX() + Xpos(), p->GetMinY() + Ypos(), p->GetMaxX() + Xpos(), p->GetMaxY() + Ypos());
+				}
+			}
+			return;
+		}
+	}
+	
+	// Else we didn't find the field in our window, so look in nested windows
+	if (next != nullptr)
+	{
+		next->Redraw(f);
+	}
+}
+
+void Window::Show(DisplayField *f, bool v)
 {
 	if (f->IsVisible() != v)
 	{
@@ -230,11 +259,11 @@ void DisplayManager::Show(DisplayField *f, bool v)
 				}
 				else if (v)
 				{
-					f->Refresh(true, 0, 0);
+					f->Refresh(true, Xpos(), Ypos());
 				}
 				else
 				{
-					lcd.setColor(backgroundColor);
+					lcd.setColor(backgroundColour);
 					lcd.fillRect(f->GetMinX(), f->GetMinY(), f->GetMaxX(), f->GetMaxY());
 				}
 				return;
@@ -242,40 +271,84 @@ void DisplayManager::Show(DisplayField *f, bool v)
 		}
 		
 		// Else we didn't find it, so maybe it is in a popup field
-		if (popupField != nullptr)
+		if (next != nullptr)
 		{
-			popupField->Redraw(f, popupX, popupY);
+			next->Redraw(f);
 		}
 	}
 }
 
-void DisplayManager::Press(Button *f, bool v)
+// Show the button as pressed or not
+void Window::Press(ButtonPress bp, bool v)
 {
-	f->Press(v);
-
-	if (f->IsVisible())		// need to check this in case we are releasing the button and it has gone invisible since we pressed it
+	bp.GetButton()->Press(v, bp.GetIndex());
+	if (bp.GetButton()->IsVisible())		// need to check this in case we are releasing the button and it has gone invisible since we pressed it
 	{
-		if (HavePopup())
-		{
-			for (DisplayField *p = popupField->GetRoot(); p != NULL; p = p->next)
-			{
-				if (p == f)
-				{
-					f->Refresh(true, popupX, popupY);
-					return;
-				}
-			}
-		}
+		Redraw(bp.GetButton());
+	}
+}
 
-		if (!ObscuredByPopup(f))
+MainWindow::MainWindow() : Window(black)
+{
+}
+
+void MainWindow::Init(Colour bc)
+{
+	backgroundColour = bc;
+	ClearAll();
+}
+
+void MainWindow::ClearAll()
+{
+	lcd.fillScr(backgroundColour);
+}
+
+// Refresh all fields. If 'full' is true then we rewrite them all, else we just rewrite those that have changed.
+void MainWindow::Refresh(bool full)
+{
+	for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
+	{
+		if (Visible(pp))
 		{
-			for (DisplayField *p = root; p != NULL; p = p->next)
-			if (p == f)
-			{
-				f->Refresh(true, 0, 0);
-				return;
-			}
+			pp->Refresh(full, 0, 0);
 		}
+	}
+	if (next != nullptr)
+	{
+		next->Refresh(full);
+	}
+}
+
+PopupWindow::PopupWindow(PixelNumber ph, PixelNumber pw, Colour pb)
+	: Window(pb), height(ph), width(pw)
+{
+}
+
+void PopupWindow::Refresh(bool full)
+{
+	if (full)
+	{
+		// Draw a rectangle inside the border
+		lcd.setColor(backgroundColour);
+		lcd.fillRoundRect(xPos + 1, yPos + 2, xPos + width - 2, yPos + height - 3);
+
+		// Draw a double black border
+		lcd.setColor(black);
+		lcd.drawRoundRect(xPos, yPos, xPos + width - 1, yPos + height - 1);
+		lcd.drawRoundRect(xPos + 1, yPos + 1, xPos + width - 2, yPos + height - 2);
+	}
+	
+	for (DisplayField * null p = root; p != NULL; p = p->next)
+	{
+		if (p->IsVisible() && (full || !ObscuredByPopup(p)))
+		{
+			p->Refresh(full, xPos, yPos);
+		}
+	}
+	
+	if (next != nullptr)
+	{
+		next->Refresh(full);
 	}
 }
 
@@ -345,29 +418,41 @@ void IntegerField::PrintText() const
 
 void StaticTextField::PrintText() const
 {
-	lcd.print(text);
+	if (text != nullptr)
+	{
+		lcd.print(text);
+	}
 }
 
-Button::Button(PixelNumber py, PixelNumber px, PixelNumber pw)
-	: DisplayField(py, px, pw), borderColour(defaultButtonBorderColour), gradColour(defaultGradColour),
-	  pressedBackColour(defaultPressedBackColour), pressedGradColour(defaultPressedGradColour), evt(nullEvent),
-	  pressed(false)
-{
-	param.sParam = NULL;
+ButtonBase::ButtonBase(PixelNumber py, PixelNumber px, PixelNumber pw)
+	: DisplayField(py, px, pw),
+	  borderColour(defaultButtonBorderColour), gradColour(defaultGradColour),
+	  pressedBackColour(defaultPressedBackColour), pressedGradColour(defaultPressedGradColour), evt(nullEvent), pressed(false)
+{	
 }
 
-PixelNumber Button::textMargin = 1;
-PixelNumber Button::iconMargin = 1;
+PixelNumber ButtonBase::textMargin = 1;
+PixelNumber ButtonBase::iconMargin = 1;
 
-void Button::DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const
+void ButtonBase::DrawOutline(PixelNumber xOffset, PixelNumber yOffset, bool isPressed) const
 {
-	lcd.setColor((pressed) ? pressedBackColour : bcolour);
+	lcd.setColor((isPressed) ? pressedBackColour : bcolour);
 	// Note that we draw the filled rounded rectangle with the full width but 2 pixels less height than the border.
 	// This means that we start with the requested colour inside the border.
-	lcd.fillRoundRect(x + xOffset, y + yOffset + 1, x + xOffset + width - 1, y + yOffset + GetHeight() - 2,
-	(pressed) ? pressedGradColour : gradColour, buttonGradStep);
+	lcd.fillRoundRect(x + xOffset, y + yOffset + 1, x + xOffset + width - 1, y + yOffset + GetHeight() - 2, (isPressed) ? pressedGradColour : gradColour, buttonGradStep);
 	lcd.setColor(borderColour);
-	lcd.drawRoundRect(x + xOffset, y + yOffset, x + xOffset + width - 1, y + yOffset + GetHeight() - 1);	
+	lcd.drawRoundRect(x + xOffset, y + yOffset, x + xOffset + width - 1, y + yOffset + GetHeight() - 1);
+}
+
+SingleButton::SingleButton(PixelNumber py, PixelNumber px, PixelNumber pw)
+	: ButtonBase(py, px, pw)
+{
+	param.sParam = nullptr;
+}
+
+void SingleButton::DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const
+{
+	ButtonBase::DrawOutline(xOffset, yOffset, pressed);
 }
 
 void ButtonWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
@@ -389,28 +474,23 @@ void ButtonWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset
 }
 
 CharButton::CharButton(PixelNumber py, PixelNumber px, PixelNumber pw, char pc, event_t e)
-	: ButtonWithText(py, px, pw), c(pc)
+	: ButtonWithText(py, px, pw)
 {
 	SetEvent(e, (int)pc);
 }
 
 void CharButton::PrintText() const
 {
-	lcd.write(c);
+	lcd.write((char)GetIParam(0));
 }
 
-TextButton::TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt)
-	: ButtonWithText(py, px, pw), text(pt)
-{
-}
-
-TextButton::TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt, event_t e, int param)
+TextButton::TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array null pt, event_t e, int param)
 	: ButtonWithText(py, px, pw), text(pt)
 {
 	SetEvent(e, param);
 }
 
-TextButton::TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array pt, event_t e, const char * array param)
+TextButton::TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const char * array null pt, event_t e, const char * array param)
 	: ButtonWithText(py, px, pw), text(pt)
 {
 	SetEvent(e, param);
@@ -418,7 +498,16 @@ TextButton::TextButton(PixelNumber py, PixelNumber px, PixelNumber pw, const cha
 
 void TextButton::PrintText() const
 {
-	lcd.print(text);
+	if (text != nullptr)
+	{
+		lcd.print(text);
+	}
+}
+
+IconButton::IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic, event_t e, int param)
+	: SingleButton(py, px, pw), icon(ic)
+{
+	SetEvent(e, param);
 }
 
 void IconButton::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
@@ -428,7 +517,7 @@ void IconButton::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 		DrawOutline(xOffset, yOffset);
 		const uint16_t sx = GetIconWidth(icon), sy = GetIconHeight(icon);
 		lcd.setTransparentBackground(true);
-		lcd.drawBitmap(x + (width - sx)/2, y + iconMargin + 1, sx, sy, GetIconData(icon));
+		lcd.drawBitmap(xOffset + x + (width - sx)/2, yOffset + y + iconMargin + 1, sx, sy, GetIconData(icon));
 		lcd.setTransparentBackground(false);
 		changed = false;
 	}
@@ -454,6 +543,34 @@ void FloatButton::PrintText() const
 	{
 		lcd.print(units);
 	}
+}
+
+ButtonRow::ButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, unsigned int nb, event_t e)
+	: ButtonBase(py, px, pw), numButtons(nb), whichPressed(-1), step(ps)
+{
+	evt = e;
+}
+
+ButtonRowWithText::ButtonRowWithText(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, unsigned int nb, event_t e)
+	: ButtonRow(py, px, pw, ps, nb, e)
+{
+	
+}
+
+void ButtonRowWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
+{
+	
+}
+
+void CharButtonRow::PrintText(unsigned int n) const
+{
+	
+}
+
+CharButtonRow::CharButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, const char * array s, event_t e)
+	: ButtonRowWithText(py, px, pw, ps, strlen(s), e)
+{
+	
 }
 
 void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
@@ -487,65 +604,6 @@ void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 		}
 		changed = false;
 		lastNumPixelsSet = pixelsSet;
-	}
-}
-
-PopupField::PopupField(PixelNumber ph, PixelNumber pw, Colour pb)
-	: root(NULL), height(ph), width(pw), backgroundColour(pb)
-{
-}
-
-void PopupField::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
-{
-	if (full)
-	{
-		// Draw a rectangle inside the border
-		lcd.setColor(backgroundColour);
-		lcd.fillRoundRect(xOffset + 1, yOffset + 2, xOffset + width - 2, yOffset + height - 3);
-
-		// Draw a double black border
-		lcd.setColor(black);
-		lcd.drawRoundRect(xOffset, yOffset, xOffset + width - 1, yOffset + height - 1);
-		lcd.drawRoundRect(xOffset + 1, yOffset + 1, xOffset + width - 2, yOffset + height - 2);
-	}
-	
-	for (DisplayField * null p = root; p != NULL; p = p->next)
-	{
-		if (p->IsVisible())
-		{
-			p->Refresh(full, xOffset, yOffset);
-		}
-	}
-}
-
-void PopupField::AddField(DisplayField *p)
-{
-	p->next = root;
-	root = p;	
-}
-
-DisplayField *PopupField::FindEvent(int px, int py)
-{
-	return DisplayField::FindEvent(px, py, root);
-}
-
-void PopupField::Redraw(DisplayField *f, PixelNumber xOffset, PixelNumber yOffset)
-{
-	for (DisplayField * null p = root; p != nullptr; p = p->next)
-	{
-		if (p == f)
-		{
-			if (p->IsVisible())
-			{
-				p->Refresh(true, xOffset, yOffset);
-			}
-			else
-			{
-				lcd.setColor(backgroundColour);
-				lcd.fillRect(p->GetMinX() + xOffset, p->GetMinY() + yOffset, p->GetMaxX() + xOffset, p->GetMaxY() + yOffset);			
-			}
-			break;
-		}
 	}
 }
 

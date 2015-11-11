@@ -48,7 +48,7 @@ const unsigned int maxMessageChars = 100;
 UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
 
 UTouch touch(23, 24, 22, 21, 20);
-DisplayManager mgr;
+MainWindow mgr;
 
 const char* array null currentFile;					// file whose info is displayed in the file info popup
 
@@ -272,15 +272,15 @@ bool OkToSend()
 	return status == psIdle || status == psPrinting || status == psPaused;
 }
 
-void ChangeTab(Button *newTab)
+void ChangeTab(ButtonBase *newTab)
 {
 	if (newTab != currentTab)
 	{
 		if (currentTab != NULL)
 		{
-			currentTab->Press(false);
+			currentTab->Press(false, 0);
 		}
-		newTab->Press(true);
+		newTab->Press(true, 0);
 		currentTab = newTab;
 		switch(newTab->GetEvent())
 		{
@@ -302,18 +302,18 @@ void ChangeTab(Button *newTab)
 		}
 		mgr.ClearAll();
 	}
-	if (currentButton == newTab)
+	if (currentButton.GetButton() == newTab)
 	{
-		currentButton = NULL;			// to prevent it being released
+		currentButton.Clear();			// to prevent it being released
 	}
-	mgr.RefreshAll(true);
+	mgr.Refresh(true);
 }
 
 void InitLcd(DisplayOrientation dor, uint8_t language)
 {
 	lcd.InitLCD(dor);					// set up the LCD
 	Fields::CreateFields(language);		// create all the fields
-	mgr.RefreshAll(true);				// redraw everything
+	mgr.Refresh(true);					// redraw everything
 
 	currentTab = NULL;
 }
@@ -378,7 +378,7 @@ void CalibrateTouch()
 	touchCalibInstruction->SetValue("Touch the spot");				// in case the user didn't need to press the reset button last time
 	mgr.SetRoot(touchCalibInstruction);
 	mgr.ClearAll();
-	mgr.RefreshAll(true);
+	mgr.Refresh(true);
 
 	touch.init(DisplayX, DisplayY, DefaultTouchOrientAdjust);				// initialize the driver and clear any existing calibration
 
@@ -404,7 +404,7 @@ void CalibrateTouch()
 	
 	mgr.SetRoot(oldRoot);
 	mgr.ClearAll();
-	mgr.RefreshAll(true);
+	mgr.Refresh(true);
 }
 
 void CheckSettingsAreSaved()
@@ -447,40 +447,41 @@ void PopupRestart()
 	PopupAreYouSure(evRestart, "Restart required", "Restart now?");
 }
 
-void Adjusting(Button *f)
+void Adjusting(ButtonPress bp)
 {
-	fieldBeingAdjusted = f;
-	if (f == currentButton)
+	fieldBeingAdjusted = bp;
+	if (bp == currentButton)
 	{
-		currentButton = NULL;		// to stop it being released
+		currentButton.Clear();		// to stop it being released
 	}
-//	mgr.Outline(f, outlineColour, outlinePixels);
 }
 
 void StopAdjusting()
 {
-	if (fieldBeingAdjusted != NULL)
+	if (fieldBeingAdjusted.IsValid())
 	{
 		mgr.Press(fieldBeingAdjusted, false);
-//		mgr.RemoveOutline(fieldBeingAdjusted, outlinePixels);
-		fieldBeingAdjusted = NULL;
+		fieldBeingAdjusted.Clear();
 	}
 }
 
 void CurrentButtonReleased()
 {
-	mgr.Press(currentButton, false);
-	currentButton = NULL;
+	if (currentButton.IsValid())
+	{
+		mgr.Press(currentButton, false);
+		currentButton.Clear();	
+	}
 }
 
 // Process a touch event
-void ProcessTouch(DisplayField *df)
+void ProcessTouch(ButtonPress bp)
 {
-	if (df->IsButton())
+	if (bp.IsValid())
 	{
-		Button *f = static_cast<Button*>(df);
-		currentButton = f;
-		mgr.Press(f, true);
+		ButtonBase *f = bp.GetButton();
+		currentButton = bp;
+		mgr.Press(bp, true);
 		Event ev = (Event)(f->GetEvent());
 		switch(ev)
 		{
@@ -498,25 +499,25 @@ void ProcessTouch(DisplayField *df)
 			{
 				static_cast<IntegerButton*>(f)->SetValue(0);
 			}
-			Adjusting(f);
+			Adjusting(bp);
 			mgr.SetPopup(setTempPopup, tempPopupX, popupY);
 			break;
 
 		case evAdjustSpeed:
 		case evExtrusionFactor:
-			Adjusting(f);
+			Adjusting(bp);
 			mgr.SetPopup(setTempPopup, tempPopupX, popupY);
 			break;
 
 		case evSetInt:
-			if (fieldBeingAdjusted != NULL)
+			if (fieldBeingAdjusted.IsValid())
 			{
-				int val = static_cast<const IntegerButton*>(fieldBeingAdjusted)->GetValue();
-				switch(fieldBeingAdjusted->GetEvent())
+				int val = static_cast<const IntegerButton*>(fieldBeingAdjusted.GetButton())->GetValue();
+				switch(fieldBeingAdjusted.GetEvent())
 				{
 				case evAdjustActiveTemp:
 					{
-						int heater = fieldBeingAdjusted->GetIParam();
+						int heater = fieldBeingAdjusted.GetIParam();
 						if (heater == 0)
 						{
 							SerialIo::SendString("M140 S");
@@ -536,7 +537,7 @@ void ProcessTouch(DisplayField *df)
 					
 				case evAdjustStandbyTemp:
 					{
-						int heater = fieldBeingAdjusted->GetIParam();
+						int heater = fieldBeingAdjusted.GetIParam();
 						if (heater > 0)
 						{
 							SerialIo::SendString("G10 P");
@@ -550,7 +551,7 @@ void ProcessTouch(DisplayField *df)
 				
 				case evExtrusionFactor:
 					{
-						int heater = fieldBeingAdjusted->GetIParam();
+						int heater = fieldBeingAdjusted.GetIParam();
 						SerialIo::SendString("M221 P");
 						SerialIo::SendInt(heater);
 						SerialIo::SendString(" S");
@@ -561,7 +562,7 @@ void ProcessTouch(DisplayField *df)
 					
 				default:
 					{
-						const char* null cmd = fieldBeingAdjusted->GetSParam();
+						const char* null cmd = fieldBeingAdjusted.GetSParam();
 						if (cmd != NULL)
 						{
 							SerialIo::SendString(cmd);
@@ -571,15 +572,15 @@ void ProcessTouch(DisplayField *df)
 					}
 					break;
 				}
-				mgr.SetPopup(NULL);
+				mgr.ClearPopup();
 				StopAdjusting();
 			}
 			break;
 
 		case evAdjustInt:
-			if (fieldBeingAdjusted != NULL)
+			if (fieldBeingAdjusted.IsValid())
 			{
-				static_cast<IntegerButton*>(fieldBeingAdjusted)->Increment(f->GetIParam());
+				static_cast<IntegerButton*>(fieldBeingAdjusted.GetButton())->Increment(bp.GetIParam());
 				ShortenTouchDelay();
 			}
 			break;
@@ -593,7 +594,7 @@ void ProcessTouch(DisplayField *df)
 		case evMoveZ:
 			SerialIo::SendString("G91\nG1 ");
 			SerialIo::SendChar((ev == evMoveX) ? 'X' : (ev == evMoveY) ? 'Y' : 'Z');
-			SerialIo::SendString(f->GetSParam());
+			SerialIo::SendString(bp.GetSParam());
 			SerialIo::SendString(" F6000\nG90\n");
 			break;
 
@@ -628,7 +629,7 @@ void ProcessTouch(DisplayField *df)
 
 		case evSelectHead:
 			{
-				int head = f->GetIParam();
+				int head = bp.GetIParam();
 				if (head == 0)
 				{
 					// There is no command to switch the bed to standby temperature, so we always set it to the active temperature
@@ -654,7 +655,7 @@ void ProcessTouch(DisplayField *df)
 	
 		case evFile:
 			{
-				const char *fileName = f->GetSParam();
+				const char *fileName = bp.GetSParam();
 				if (fileName != nullptr)
 				{
 					currentFile = fileName;
@@ -680,7 +681,7 @@ void ProcessTouch(DisplayField *df)
 
 		case evMacro:
 			{
-				const char *fileName = f->GetSParam();
+				const char *fileName = bp.GetSParam();
 				if (fileName != nullptr)
 				{
 					if (fileName[0] == '*')		// if it's a directory
@@ -702,14 +703,14 @@ void ProcessTouch(DisplayField *df)
 			break;
 
 		case evPrint:
-			mgr.SetPopup(NULL);
-			if (currentFile != NULL)
+			mgr.ClearPopup();
+			if (currentFile != nullptr)
 			{
 				SerialIo::SendString("M32 ");
 				SerialIo::SendString(currentFile);
 				SerialIo::SendChar('\n');
 				printingFile.copyFrom(currentFile);
-				currentFile = NULL;							// allow the file list to be updated
+				currentFile = nullptr;							// allow the file list to be updated
 				CurrentButtonReleased();
 				ChangeTab(tabPrint);
 			}
@@ -717,8 +718,8 @@ void ProcessTouch(DisplayField *df)
 
 		case evCancelPrint:
 			CurrentButtonReleased();
-			mgr.SetPopup(NULL);
-			currentFile = NULL;								// allow the file list to be updated
+			mgr.ClearPopup();
+			currentFile = nullptr;								// allow the file list to be updated
 			break;
 
 		case evDeleteFile:
@@ -730,12 +731,12 @@ void ProcessTouch(DisplayField *df)
 		case evPausePrint:
 		case evResumePrint:
 		case evReset:
-			SerialIo::SendString(f->GetSParam());
+			SerialIo::SendString(bp.GetSParam());
 			SerialIo::SendChar('\n');
 			break;
 
 		case evScrollFiles:
-			FileManager::Scroll(f->GetIParam());
+			FileManager::Scroll(bp.GetIParam());
 			ShortenTouchDelay();				
 			break;
 
@@ -751,46 +752,46 @@ void ProcessTouch(DisplayField *df)
 			break;
 
 		case evSetBaudRate:
-			Adjusting(f);
+			Adjusting(bp);
 			mgr.SetPopup(baudPopup, fullWidthPopupX, popupY);
 			break;
 
 		case evAdjustBaudRate:
-			nvData.baudRate = f->GetIParam();
+			nvData.baudRate = bp.GetIParam();
 			SerialIo::Init(nvData.baudRate);
 			baudRateButton->SetValue(nvData.baudRate);
 			CheckSettingsAreSaved();
 			CurrentButtonReleased();
-			mgr.SetPopup(NULL);
+			mgr.ClearPopup();
 			StopAdjusting();
 			break;
 
 		case evSetVolume:
-			Adjusting(f);
+			Adjusting(bp);
 			mgr.SetPopup(volumePopup, fullWidthPopupX, popupY);
 			break;
 
 		case evAdjustVolume:
-			nvData.touchVolume = f->GetIParam();
+			nvData.touchVolume = bp.GetIParam();
 			volumeButton->SetValue(nvData.touchVolume);
 			TouchBeep();									// give audible feedback of the touch at the new volume level
 			CheckSettingsAreSaved();
 			break;
 
 		case evSetLanguage:
-			Adjusting(f);
+			Adjusting(bp);
 			mgr.SetPopup(languagePopup, fullWidthPopupX, popupY);
 			break;
 
 		case evAdjustLanguage:
-			nvData.language = f->GetIParam();
+			nvData.language = bp.GetIParam();
 			languageButton->SetText(longLanguageNames[nvData.language]);
 			CheckSettingsAreSaved();						// not sure we need this because we are going to reset anyway
 			break;
 
 		case evYes:
 			CurrentButtonReleased();
-			mgr.SetPopup(nullptr);
+			mgr.ClearPopup();
 			switch (eventToConfirm)
 			{
 			case evFactoryReset:
@@ -825,33 +826,46 @@ void ProcessTouch(DisplayField *df)
 
 		case evCancel:
 			eventToConfirm = evNull;
-			currentFile = NULL;
+			currentFile = nullptr;
 			CurrentButtonReleased();
-			mgr.SetPopup(NULL);
+			mgr.ClearPopup();
 			break;
 
 		case evKey:
-			if (!userCommandBuffer.full())
+			if (!userCommandBuffers[currentUserCommandBuffer].full())
 			{
-				userCommandBuffer.add((char)f->GetIParam());
+				userCommandBuffers[currentUserCommandBuffer].add((char)bp.GetIParam());
 				userCommandField->SetChanged();
 			}
 			break;
 
 		case evBackspace:
-			if (!userCommandBuffer.isEmpty())
+			if (!userCommandBuffers[currentUserCommandBuffer].isEmpty())
 			{
-				userCommandBuffer.erase(userCommandBuffer.size() - 1);
+				userCommandBuffers[currentUserCommandBuffer].erase(userCommandBuffers[currentUserCommandBuffer].size() - 1);
 				userCommandField->SetChanged();
 				ShortenTouchDelay();
 			}
 			break;
 
+		case evUp:
+			currentUserCommandBuffer = (currentUserCommandBuffer == 0) ? numUserCommandBuffers - 1 : currentUserCommandBuffer - 1;
+			userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());
+			break;
+
+		case evDown:
+			currentUserCommandBuffer = (currentUserCommandBuffer + 1) % numUserCommandBuffers;
+			userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());
+			break;
+
 		case evSendKeyboardCommand:
-			if (userCommandBuffer.size() != 0)
+			if (userCommandBuffers[currentUserCommandBuffer].size() != 0)
 			{
-				SerialIo::SendString(userCommandBuffer.c_str());
+				SerialIo::SendString(userCommandBuffers[currentUserCommandBuffer].c_str());
 				SerialIo::SendChar('\n');
+				currentUserCommandBuffer = (currentUserCommandBuffer + 1) % numUserCommandBuffers;
+				userCommandBuffers[currentUserCommandBuffer].clear();
+				userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());
 			}
 			break;
 
@@ -864,7 +878,7 @@ void ProcessTouch(DisplayField *df)
 // Process a touch event outside the popup on the field being adjusted
 void ProcessTouchOutsidePopup()
 {
-	switch(fieldBeingAdjusted->GetEvent())
+	switch(fieldBeingAdjusted.GetEvent())
 	{
 	case evAdjustActiveTemp:
 	case evAdjustStandbyTemp:
@@ -872,12 +886,12 @@ void ProcessTouchOutsidePopup()
 	case evSetVolume:
 	case evAdjustSpeed:
 	case evExtrusionFactor:
-		mgr.SetPopup(nullptr);
+		mgr.ClearPopup();
 		StopAdjusting();
 		break;
 
 	case evSetLanguage:
-		mgr.SetPopup(nullptr);
+		mgr.ClearPopup();
 		StopAdjusting();
 		if (nvData.language != savedNvData.language)
 		{
@@ -894,7 +908,7 @@ void ProcessTouchOutsidePopup()
 // Update an integer field, provided it isn't the one being adjusted
 void UpdateField(IntegerButton *f, int val)
 {
-	if (f != fieldBeingAdjusted)
+	if (f != fieldBeingAdjusted.GetButton())
 	{
 		f->SetValue(val);
 	}
@@ -954,15 +968,17 @@ void UpdateMessages(bool all)
 		{
 			messageTextFields[i]->SetValue(m->msg);		
 		}
-		index = (index == numMessageRows) ? 0 : index + 1;
+		index = (index + 1) % (numMessageRows + 1);
 	}
 }
 
+// Add a message to the end of the list. It will be just off the visible part until we scroll it in.
 void AppendMessage(const char* data)
 {
-	newMessageStartRow = (messageStartRow == 0) ? numMessageRows : messageStartRow - 1;
-	safeStrncpy(messages[newMessageStartRow].msg, data, maxMessageChars);
-	messages[newMessageStartRow].receivedTime = SystemTick::GetTickCount();
+	newMessageStartRow = (messageStartRow + 1) % (numMessageRows + 1);
+	size_t msgRow = (newMessageStartRow + numMessageRows - 1) % (numMessageRows + 1);
+	safeStrncpy(messages[msgRow].msg, data, maxMessageChars);
+	messages[msgRow].receivedTime = SystemTick::GetTickCount();
 }
 
 void DisplayNewMessage()
@@ -1617,20 +1633,20 @@ int main(void)
 			{
 				touchX->SetValue((int)x);	//debug
 				touchY->SetValue((int)y);	//debug
-				DisplayField * null f = mgr.FindEvent(x, y);
-				if (f != NULL)
+				ButtonPress bp = mgr.FindEvent(x, y);
+				if (bp.IsValid())
 				{
 					DelayTouchLong();		// by default, ignore further touches for a long time
-					if (f->GetEvent() != evAdjustVolume)
+					if (bp.GetEvent() != evAdjustVolume)
 					{
 						TouchBeep();		// give audible feedback of the touch, unless adjusting the volume	
 					}
-					ProcessTouch(f);
+					ProcessTouch(bp);
 				}
 				else
 				{
-					f = mgr.FindEventOutsidePopup(x, y);
-					if (f != nullptr && f == fieldBeingAdjusted)
+					bp = mgr.FindEventOutsidePopup(x, y);
+					if (bp.IsValid() && bp == fieldBeingAdjusted)
 					{
 						DelayTouchLong();	// by default, ignore further touches for a long time
 						TouchBeep();
@@ -1638,7 +1654,7 @@ int main(void)
 					}
 				}
 			}
-			else if (currentButton != NULL)
+			else if (currentButton.IsValid())
 			{
 				CurrentButtonReleased();
 			}
@@ -1646,7 +1662,7 @@ int main(void)
 		
 		// 4. Refresh the display
 		UpdateDebugInfo();
-		mgr.RefreshAll(false);
+		mgr.Refresh(false);
 		
 		// 5. Generate a beep if asked to
 		if (beepFrequency != 0 && beepLength != 0)
