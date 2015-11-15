@@ -37,7 +37,7 @@ TextButton *bedCompButton;
 StaticTextField *nameField, *statusField, *touchCalibInstruction, *filePopupTitleField;
 StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
 StaticTextField *fwVersionField, *settingsNotSavedField, *areYouSureTextField, *areYouSureQueryField;
-TextButton *filesButtonField, *pauseButtonField, *resumeButtonField, *resetButtonField;
+ButtonBase *filesButtonField, *pauseButtonField, *resumeButtonField, *resetButtonField;
 TextField *timeLeftField;
 DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
 ButtonBase * null currentTab = NULL;
@@ -60,20 +60,26 @@ static_assert(sizeof(longLanguageNames)/sizeof(longLanguageNames[0]) == numLangu
 
 #if DISPLAY_X == 480
 const Icon heaterIcons[maxHeaters] = { IconBed_21h, IconNozzle1_21h, IconNozzle2_21h, IconNozzle3_21h, IconNozzle4_21h };
+#define IconOk			IconOk_21h
 #define IconCancel		IconCancel_21h
 #define IconEnter		IconEnter_21h
 #define IconBackspace	IconBackspace_21h
 #define IconUp			IconUp_21h
 #define IconDown		IconDown_21h
+#define IconFiles		IconFiles_21h
+#define IconKeyboard	IconKeyboard_21h
 #endif
 
 #if DISPLAY_X == 800
 const Icon heaterIcons[maxHeaters] = { IconBed_30h, IconNozzle1_30h, IconNozzle2_30h, IconNozzle3_30h, IconNozzle4_30h, IconNozzle5_30h, IconNozzle6_30h };
+#define IconOk			IconOk_30h
 #define IconCancel		IconCancel_30h
 #define IconEnter		IconEnter_30h
 #define IconBackspace	IconBackspace_30h
 #define IconUp			IconUp_30h
 #define IconDown		IconDown_30h
+#define IconFiles		IconFiles_30h
+#define IconKeyboard	IconKeyboard_30h
 #endif
 
 namespace Fields
@@ -243,7 +249,7 @@ namespace Fields
 		fanRpm = new IntegerField(row7, columnY, DisplayX - columnY - margin, TextAlignment::Centre);
 		//mgr.AddField(fanRpm);
 
-		filesButtonField = new TextButton(row7, pauseColumn, DisplayX - pauseColumn - margin, "Files...", evListFiles);
+		filesButtonField = new IconButton(row7, pauseColumn, DisplayX - pauseColumn - margin, IconFiles, evListFiles);
 		mgr.AddField(filesButtonField);
 
 		DisplayField::SetDefaultColours(buttonTextColour, pauseButtonBackColour);
@@ -278,7 +284,7 @@ namespace Fields
 		mgr.SetRoot(baseRoot);
 		PixelNumber row = margin;			// allow a top margin for the keyboard button
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
-		mgr.AddField(new TextButton(row,  DisplayX - margin - keyboardButtonWidth, keyboardButtonWidth, "Keyboard", evKeyboard));
+		mgr.AddField(new IconButton(row,  DisplayX - margin - keyboardButtonWidth, keyboardButtonWidth, IconKeyboard, evKeyboard));
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
 		mgr.AddField(new StaticTextField(row + labelRowAdjust, margin, DisplayX - 2 * margin - keyboardButtonWidth, TextAlignment::Centre, "Messages"));
 		row += rowHeight;
@@ -437,7 +443,7 @@ namespace Fields
 		areYouSurePopup->AddField(areYouSureQueryField = new StaticTextField(popupTopMargin + rowHeight, margin, areYouSurePopupWidth - 2 * margin, TextAlignment::Centre, nullptr));
 
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
-		areYouSurePopup->AddField(new TextButton(popupTopMargin + 2 * rowHeight, popupSideMargin, areYouSurePopupWidth/2 - 2 * popupSideMargin, "Yes", evYes));
+		areYouSurePopup->AddField(new IconButton(popupTopMargin + 2 * rowHeight, popupSideMargin, areYouSurePopupWidth/2 - 2 * popupSideMargin, IconOk, evYes));
 		areYouSurePopup->AddField(new IconButton(popupTopMargin + 2 * rowHeight, areYouSurePopupWidth/2 + 10, areYouSurePopupWidth/2 - 2 * popupSideMargin, IconCancel, evCancel));
 	}
 

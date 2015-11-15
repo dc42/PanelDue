@@ -8,7 +8,7 @@
 #ifndef PANELDUE_H_
 #define PANELDUE_H_
 
-#include "UTFT.hpp"
+#include "Hardware/UTFT.hpp"
 #include "Display.hpp"
 #include "RequestTimer.hpp"
 

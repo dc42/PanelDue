@@ -24,7 +24,7 @@
 #include "Hardware/Buzzer.hpp"
 #include "Hardware/SysTick.hpp"
 #include "Hardware/Reset.hpp"
-#include "Misc.hpp"
+#include "Library/Misc.hpp"
 #include "Library/Vector.hpp"
 #include "Hardware/FlashStorage.hpp"
 #include "PanelDue.hpp"
@@ -32,6 +32,7 @@
 #include "Fields.hpp"
 #include "FileManager.hpp"
 #include "RequestTimer.hpp"
+#include "MessageLog.hpp"
 
 const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t printerResponseInterval = 1500;		// shortest time after a response that we send another poll (gives printer time to catch up)
@@ -43,7 +44,6 @@ const uint32_t errorBeepLength = 100;
 const uint32_t errorBeepFrequency = 2250;
 const uint32_t longTouchDelay = 250;				// how long we ignore new touches for after pressing Set
 const uint32_t shortTouchDelay = 100;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
-const unsigned int maxMessageChars = 100;
 
 UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
 
@@ -69,18 +69,6 @@ static unsigned int newMessageSeq = 0;
 static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
 
 static bool restartNeeded = false;
-
-struct Message
-{
-	static const size_t rttLen = 5;					// number of chars we print for the message age
-	uint32_t receivedTime;
-	char receivedTimeText[rttLen];					// 5 characters plus null terminator
-	char msg[maxMessageChars];
-};
-
-static Message messages[numMessageRows + 1];		// one extra slot for receiving new messages into
-static unsigned int messageStartRow = 0;			// the row number at the top
-static unsigned int newMessageStartRow = 0;			// the row number that we put a new message in
 
 static int timesLeft[3];
 static String<50> timesLeftText;
@@ -914,82 +902,6 @@ void UpdateField(IntegerButton *f, int val)
 	}
 }
 
-// Update the messages on the message tab. If 'all' is true we do the times and the text, else we just do the times.
-void UpdateMessages(bool all)
-{
-	size_t index = messageStartRow;
-	for (size_t i = 0; i < numMessageRows; ++i)
-	{
-		Message *m = &messages[index];
-		uint32_t tim = m->receivedTime;
-		char* p = m->receivedTimeText;
-		if (tim == 0)
-		{
-			p[0] = 0;
-		}
-		else
-		{
-			uint32_t age = (SystemTick::GetTickCount() - tim)/1000;	// age of message in seconds
-			if (age < 10 * 60)
-			{
-				snprintf(p, Message::rttLen, "%lum%02lu", age/60, age%60);
-			}
-			else
-			{
-				age /= 60;		// convert to minutes
-				if (age < 60)
-				{
-					snprintf(p, Message::rttLen, "%lum", age);
-				}
-				else if (age < 10 * 60)
-				{
-					snprintf(p, Message::rttLen, "%luh%02lu", age/60, age%60);
-				}
-				else
-				{
-					age /= 60;	// convert to hours
-					if (age < 10)
-					{
-						snprintf(p, Message::rttLen, "%luh", age);
-					}
-					else if (age < 24 + 10)
-					{
-						snprintf(p, Message::rttLen, "%lud%02lu", age/24, age%24);
-					}
-					else
-					{
-						snprintf(p, Message::rttLen, "%lud", age/24);
-					}
-				}
-			}
-			messageTimeFields[i]->SetValue(p);			
-		}
-		if (all)
-		{
-			messageTextFields[i]->SetValue(m->msg);		
-		}
-		index = (index + 1) % (numMessageRows + 1);
-	}
-}
-
-// Add a message to the end of the list. It will be just off the visible part until we scroll it in.
-void AppendMessage(const char* data)
-{
-	newMessageStartRow = (messageStartRow + 1) % (numMessageRows + 1);
-	size_t msgRow = (newMessageStartRow + numMessageRows - 1) % (numMessageRows + 1);
-	safeStrncpy(messages[msgRow].msg, data, maxMessageChars);
-	messages[msgRow].receivedTime = SystemTick::GetTickCount();
-}
-
-void DisplayNewMessage()
-{
-	if (newMessageStartRow != messageStartRow)
-	{
-		messageStartRow = newMessageStartRow;
-		UpdateMessages(true);
-	}
-}
-
 void UpdatePrintingFields()
 {
 	if (status == psPrinting)
@@ -1082,8 +994,8 @@ void SetStatus(char c)
 		
 		if (status == psConfiguring || (status == psConnecting && newStatus != psConfiguring))
 		{
-			AppendMessage("Connected");
-			DisplayNewMessage();
+			MessageLog::AppendMessage("Connected");
+			MessageLog::DisplayNewMessage();
 		}
 	
 		status = newStatus;
@@ -1185,7 +1097,7 @@ const ReceiveDataTableEntry nonArrayDataTable[] =
 void StartReceivedMessage()
 {
 	newMessageSeq = messageSeq;
-	newMessageStartRow = messageStartRow;
+	MessageLog::BeginNewMessage();
 	FileManager::BeginNewMessage();
 }
 
@@ -1193,10 +1105,10 @@ void EndReceivedMessage()
 {
 	lastResponseTime = SystemTick::GetTickCount();
 
-	if (newMessageSeq != messageSeq && newMessageStartRow != messageStartRow)
+	if (newMessageSeq != messageSeq)
 	{
 		messageSeq = newMessageSeq;
-		DisplayNewMessage();
+		MessageLog::DisplayNewMessage();
 	}	
 	FileManager::EndReceivedMessage(currentFile != nullptr);	
 }
@@ -1478,7 +1390,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvResponse:
-			AppendMessage(data);
+			MessageLog::AppendMessage(data);
 			break;
 		
 		case rcvDir:
@@ -1588,14 +1500,9 @@ int main(void)
 	SerialIo::Init(nvData.baudRate);
 	baudRateButton->SetValue(nvData.baudRate);
 	volumeButton->SetValue(nvData.touchVolume);
+	
+	MessageLog::Init();
 
-	// Clear the message log
-	for (size_t i = 0; i <= numMessageRows; ++i)	// note we have numMessageRows+1 message slots
-	{
-		messages[i].receivedTime = 0;
-		messages[i].msg[0] = 0;
-	}
-	UpdateMessages(true);
 	UpdatePrintingFields();
 
 	lastPollTime = SystemTick::GetTickCount() - printerPollInterval;	// allow a poll immediately
@@ -1622,7 +1529,7 @@ int main(void)
 		// 2. if displaying the message log, update the times
 		if (currentTab == tabMsg)
 		{
-			UpdateMessages(false);
+			MessageLog::UpdateMessages(false);
 		}
 		
 		// 3. Check for a touch on the touch panel.

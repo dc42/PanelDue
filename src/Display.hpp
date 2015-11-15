@@ -10,7 +10,7 @@
 #define DISPLAY_H_
 
 #include "ecv.h"
-#include "UTFT.hpp"
+#include "Hardware/UTFT.hpp"
 
 // Fonts are held as arrays of 8-bit data in flash.
 typedef const uint8_t * array LcdFont;
