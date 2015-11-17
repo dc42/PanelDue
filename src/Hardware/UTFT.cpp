@@ -158,20 +158,20 @@ void UTFT::LCD_Write_COM(uint8_t VL)
 
 void UTFT::LCD_Write_DATA16(uint16_t VHL)
 {
-	#ifndef DISABLE_SERIAL
+#ifndef DISABLE_SERIAL
 	if (isParallel())
-	#endif
+#endif
 	{
 		setRSHigh();
 		LCD_Write_Bus(VHL >> 8, VHL & 0xFF);
 	}
-	#ifndef DISABLE_SERIAL
+#ifndef DISABLE_SERIAL
 	else
 	{
 		LCD_Write_Bus(0x01,VHL >> 8);
-		LCD_Write_Bus(0x01,VL & 0xFF);
+		LCD_Write_Bus(0x01,VHL & 0xFF);
 	}
-	#endif
+#endif
 }
 
 void UTFT::LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num)
@@ -247,7 +247,7 @@ void UTFT::LCD_Write_COM_DATA8(uint8_t com1, uint8_t dat1)
      LCD_Write_DATA8(dat1);
 }
 
-void UTFT::InitLCD(DisplayOrientation po)
+void UTFT::InitLCD(DisplayOrientation po, bool is24bit)
 {
 	orient = po;
 	textXpos = 0;
@@ -309,7 +309,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x3b,0x0000); // P_RTN=0000, P_NW=001
 		LCD_Write_COM_DATA16(0x3c,0x00f0); // I_RTN=1111, I_NW=000
 		LCD_Write_COM_DATA16(0x3d,0x0000); // DIV=00
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x35,0x0038); // EQS=38h
 		LCD_Write_COM_DATA16(0x36,0x0078); // EQP=78h
 		LCD_Write_COM_DATA16(0x3E,0x0038); // SON=38h
@@ -319,7 +319,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		// Power Supply Setting
 		LCD_Write_COM_DATA16(0x19,0x0049); // CADJ=0100, CUADJ=100, OSD_EN=1 ,60Hz
 		LCD_Write_COM_DATA16(0x93,0x000F); // RADJ=1111, 100%
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x20,0x0040); // BT=0100
 		LCD_Write_COM_DATA16(0x1D,0x0007); // VC1=111   0007
 		LCD_Write_COM_DATA16(0x1E,0x0000); // VC3=000
@@ -328,24 +328,24 @@ void UTFT::InitLCD(DisplayOrientation po)
 		//VCOM SETTING
 		LCD_Write_COM_DATA16(0x44,0x004D); // VCM=101 0000  4D
 		LCD_Write_COM_DATA16(0x45,0x000E); // VDV=1 0001   0011
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x1C,0x0004); // AP=100
-		lib_delay_ms(2);
+		delay_ms(2);
 
 		LCD_Write_COM_DATA16(0x1B,0x0018); // GASENB=0, PON=0, DK=1, XDK=0, VLCD_TRI=0, STB=0
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x1B,0x0010); // GASENB=0, PON=1, DK=0, XDK=0, VLCD_TRI=0, STB=0
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x43,0x0080); //set VCOMG=1
-		lib_delay_ms(2);
+		delay_ms(2);
 
 		// Display ON Setting
 		LCD_Write_COM_DATA16(0x90,0x007F); // SAP=0111 1111
 		LCD_Write_COM_DATA16(0x26,0x0004); //GON=0, DTE=0, D=01
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x26,0x0024); //GON=1, DTE=0, D=01
 		LCD_Write_COM_DATA16(0x26,0x002C); //GON=1, DTE=0, D=11
-		lib_delay_ms(1);
+		delay_ms(1);
 		LCD_Write_COM_DATA16(0x26,0x003C); //GON=1, DTE=1, D=11
 
 		// INTERNAL REGISTER SETTING
@@ -476,16 +476,16 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x12, 0x0000); // VREG1OUT voltage  
 		LCD_Write_COM_DATA16(0x13, 0x0000); // VDV[4:0] for VCOM amplitude  
 		LCD_Write_COM_DATA16(0x07, 0x0001);  
-		lib_delay_ms(200); // Dis-charge capacitor power voltage  
+		delay_ms(200); // Dis-charge capacitor power voltage  
 		LCD_Write_COM_DATA16(0x10, 0x1090); // SAP, BT[3:0], AP, DSTB, SLP, STB  
 		LCD_Write_COM_DATA16(0x11, 0x0227); // Set DC1[2:0], DC0[2:0], VC[2:0]  
-		lib_delay_ms(50); // Delay 50ms  
+		delay_ms(50); // Delay 50ms  
 		LCD_Write_COM_DATA16(0x12, 0x001F); // 0012  
-		lib_delay_ms(50); // Delay 50ms  
+		delay_ms(50); // Delay 50ms  
 		LCD_Write_COM_DATA16(0x13, 0x1500); // VDV[4:0] for VCOM amplitude  
 		LCD_Write_COM_DATA16(0x29, 0x0027); // 04  VCM[5:0] for VCOMH  
 		LCD_Write_COM_DATA16(0x2B, 0x000D); // Set Frame Rate  
-		lib_delay_ms(50); // Delay 50ms  
+		delay_ms(50); // Delay 50ms  
 		LCD_Write_COM_DATA16(0x20, 0x0000); // GRAM horizontal Address  
 		LCD_Write_COM_DATA16(0x21, 0x0000); // GRAM Vertical Address  
 		// ----------- Adjust the Gamma Curve ----------//  
@@ -539,16 +539,16 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x12, 0x0000); // VREG1OUT voltage  
 		LCD_Write_COM_DATA16(0x13, 0x0000); // VDV[4:0] for VCOM amplitude  
 		LCD_Write_COM_DATA16(0x07, 0x0001);  
-		lib_delay_ms(200); // Dis-charge capacitor power voltage  
+		delay_ms(200); // Dis-charge capacitor power voltage  
 		LCD_Write_COM_DATA16(0x10, 0x1690); // SAP, BT[3:0], AP, DSTB, SLP, STB  
 		LCD_Write_COM_DATA16(0x11, 0x0227); // Set DC1[2:0], DC0[2:0], VC[2:0]  
-		lib_delay_ms(50); // Delay 50ms  
+		delay_ms(50); // Delay 50ms  
 		LCD_Write_COM_DATA16(0x12, 0x000D); // 0012  
-		delib_delay_mslay(50); // Delay 50ms  
+		delay_mslay(50); // Delay 50ms  
 		LCD_Write_COM_DATA16(0x13, 0x1200); // VDV[4:0] for VCOM amplitude  
 		LCD_Write_COM_DATA16(0x29, 0x000A); // 04  VCM[5:0] for VCOMH  
 		LCD_Write_COM_DATA16(0x2B, 0x000D); // Set Frame Rate  
-		lib_delay_ms(50); // Delay 50ms  
+		delay_ms(50); // Delay 50ms  
 		LCD_Write_COM_DATA16(0x20, 0x0000); // GRAM horizontal Address  
 		LCD_Write_COM_DATA16(0x21, 0x0000); // GRAM Vertical Address  
 		// ----------- Adjust the Gamma Curve ----------//  
@@ -586,11 +586,11 @@ void UTFT::InitLCD(DisplayOrientation po)
 #ifndef DISABLE_HX8340B
 	case HX8340B:
 		LCD_Write_COM_DATA16(0x26,0x0084); //PT=10,GON=0, DTE=0, D=0100
-		lib_delay_ms(40);
+		delay_ms(40);
 		LCD_Write_COM_DATA16(0x26,0x00B8); //PT=10,GON=1, DTE=1, D=1000
-		delib_delay_mslay(40);
+		delay_mslay(40);
 		LCD_Write_COM_DATA16(0x26,0x00BC); //PT=10,GON=1, DTE=1, D=1100
-		lib_delay_ms(20);                           //新增加的延时  080421    
+		delay_ms(20);                           //新增加的延时  080421    
 		// LCD_Write_COM_DATA(0x0001,0x0000);     // PTL='1' Enter Partail mode
 
 		//Driving ability Setting
@@ -620,7 +620,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x55,0x0007);
 		LCD_Write_COM_DATA16(0x56,0x0003);
 		LCD_Write_COM_DATA16(0x57,0x0049);
-		lib_delay_ms(20);
+		delay_ms(20);
 
 		//Power Setting
 		LCD_Write_COM_DATA16(0x1F,0x0003); //VRH=4.65V     VREG1（GAMMA） 00~1E  080421    
@@ -629,7 +629,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x25,0x0034); //VCOML(VCOM Low voltage -1.2V)    0034/4A    080421    29~3F 
 		//****VCOM offset**///
 		LCD_Write_COM_DATA16(0x23,0x002F); //VMF(no offset)                            
-		lib_delay_ms(20);
+		delay_ms(20);
 
 		//##################################################################
 		// Power Supply Setting
@@ -638,16 +638,16 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x01,0x0000); //SLP='0' out sleep
 		LCD_Write_COM_DATA16(0x1C,0x0003); //AP=011
 		LCD_Write_COM_DATA16(0x19,0x0006); // VOMG=1,PON=1, DK=0,
-		lib_delay_ms(20);
+		delay_ms(20);
 
 		//##################################################################
 		// Display ON Setting
 		LCD_Write_COM_DATA16(0x26,0x0084); //PT=10,GON=0, DTE=0, D=0100
-		lib_delay_ms(40);
+		delay_ms(40);
 		LCD_Write_COM_DATA16(0x26,0x00B8); //PT=10,GON=1, DTE=1, D=1000
-		lib_delay_ms(40);
+		delay_ms(40);
 		LCD_Write_COM_DATA16(0x26,0x00BC); //PT=10,GON=1, DTE=1, D=1100
-		lib_delay_ms(20);
+		delay_ms(20);
 
 		//SET GRAM AREA
 		LCD_Write_COM_DATA16(0x02,0x0000); 
@@ -658,7 +658,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM_DATA16(0x07,0x0000);
 		LCD_Write_COM_DATA16(0x08,0x0000);
 		LCD_Write_COM_DATA16(0x09,0x00DB);
-		lib_delay_ms(20);
+		delay_ms(20);
 		LCD_Write_COM_DATA16(0x16,0x0008);  //MV MX MY ML SET  0028横屏显示（此时LCD_Write_COM_DATA(0x0005,0x00DB);  LCD_Write_COM_DATA(0x0009,0x00AF);）
 		LCD_Write_COM_DATA16(0x17,0x0005);//COLMOD Control Register (R17h)
 		LCD_Write_COM(0x21);
@@ -689,7 +689,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_DATA8(0x10); 
 		LCD_Write_DATA8(0x00); 
 		LCD_Write_DATA8(0x06);
-		lib_delay_ms(20);
+		delay_ms(20);
 		LCD_Write_COM(0xC2); 
 		LCD_Write_DATA8(0x60);
 		LCD_Write_DATA8(0x71);
@@ -710,7 +710,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_DATA8(0x07); 
 		LCD_Write_DATA8(0x05); 
 		LCD_Write_DATA8(0x33); 
-		lib_delay_ms(10);
+		delay_ms(10);
 		LCD_Write_COM(0xB5); 
 		LCD_Write_DATA8(0x35);
 		LCD_Write_DATA8(0x20);
@@ -720,11 +720,11 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_DATA8(0x33);
 		LCD_Write_DATA8(0x25);
 		LCD_Write_DATA8(0x4c); 
-		lib_delay_ms(10);
+		delay_ms(10);
 		LCD_Write_COM(0x3a); 
 		LCD_Write_DATA8(0x05);
 		LCD_Write_COM(0x29); 
-		lib_delay_ms(10);
+		delay_ms(10);
 		LCD_Write_COM(0x2a); 
 		LCD_Write_DATA8(0x00);
 		LCD_Write_DATA8(0x00);
@@ -741,7 +741,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 #ifndef DISABLE_ST7735
 	case ST7735:
 		LCD_Write_COM(0x11);//Sleep exit 
-		lib_delay_ms(12);
+		delay_ms(12);
  
 		//ST7735R Frame Rate
 		LCD_Write_COM(0xB1); 
@@ -850,7 +850,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_COM(0x25);
 		LCD_Write_DATA8(0x40);
 		LCD_Write_COM(0x11);
-		lib_delay_ms(10);
+		delay_ms(10);
 		LCD_Write_COM(0x20);
 		LCD_Write_COM(0x38);
 		LCD_Write_COM(0x29);
@@ -1168,7 +1168,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_DATA8(0xFF);
 
 		LCD_Write_COM(0xB0);		//LCD SPECIFICATION
-		LCD_Write_DATA8(0x20);
+		LCD_Write_DATA8((is24bit) ? 0x20 : 0x00);
 		LCD_Write_DATA8(0x00);
 		LCD_Write_DATA8(0x01);		//Set HDP	479
 		LCD_Write_DATA8(0xDF);
@@ -1248,7 +1248,7 @@ void UTFT::InitLCD(DisplayOrientation po)
 		LCD_Write_DATA8(0xFF);
 
 		LCD_Write_COM(0xB0);		//LCD SPECIFICATION
-		LCD_Write_DATA8(0x24);
+		LCD_Write_DATA8((is24bit) ? 0x24 : 0x04);
 		LCD_Write_DATA8(0x00);
 		LCD_Write_DATA8(0x03);		//Set HDP	799
 		LCD_Write_DATA8(0x1F);
@@ -1287,7 +1287,6 @@ void UTFT::InitLCD(DisplayOrientation po)
 
 		LCD_Write_COM(0xF0);		//pixel data interface
 		LCD_Write_DATA8(0x03);
-
 
 		delay_ms(1);
 
@@ -1373,18 +1372,34 @@ void UTFT::setXY(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
 	{
 		swap(x1, y1);
 		swap(x2, y2);
+
+		if (orient & ReverseX)
+		{
+			y1 = disp_y_size - y1;
+			y2 = disp_y_size - y2;
+			swap(y1, y2);
+		}
+		if (orient & ReverseY)
+		{
+			x1 = disp_x_size - x1;
+			x2 = disp_x_size - x2;
+			swap(x1, x2);
+		}
 	}
-	if (orient & ReverseY)
+	else
 	{
-		y1 = disp_y_size - y1;
-		y2 = disp_y_size - y2;
-		swap(y1, y2);
-	}
-	if (orient & ReverseX)
-	{
-		x1 = disp_x_size - x1;
-		x2 = disp_x_size - x2;
-		swap(x1, x2);
+		if (orient & ReverseY)
+		{
+			y1 = disp_y_size - y1;
+			y2 = disp_y_size - y2;
+			swap(y1, y2);
+		}
+		if (orient & ReverseX)
+		{
+			x1 = disp_x_size - x1;
+			x2 = disp_x_size - x2;
+			swap(x1, x2);
+		}
 	}
 
 	switch(displayModel)

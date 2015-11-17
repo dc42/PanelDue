@@ -145,7 +145,7 @@ class UTFT : public Print
 {
 public:
 	UTFT(DisplayType model, TransferMode pMode, unsigned int RS, unsigned int WR, unsigned int CS, unsigned int RST, unsigned int SER_LATCH = 0);
-	void InitLCD(DisplayOrientation po = Landscape);
+	void InitLCD(DisplayOrientation po = Landscape, bool is24bit = true);
 	void clrScr();
 	void fillScr(Colour c);
 	void drawPixel(int x, int y);
@@ -230,7 +230,7 @@ private:
 	void clrXY();
 		
 	bool isParallel() const;
-		
+	
 	void assertCS() const
 	{
 		portCS.setLow();

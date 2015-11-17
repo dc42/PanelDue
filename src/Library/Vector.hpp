@@ -149,11 +149,18 @@ public:
 	
 	int scatf(const char *fmt, ...);
 	
+	// Compare with a C string. If the C string is too long but the part of it we could accommodate matches, return true.
+	bool similar(const char* s) const
+	{
+		return strncmp(s, this->storage, N) == 0;
+	}
+	
+	// Compare with a C string
 	bool equals(const char* s) const
 	{
 		return strcmp(s, this->storage) == 0;
 	}
-	
+
 	bool equalsIgnoreCase(const char* s) const
 	{
 		return strcasecmp(s, this->storage) == 0;

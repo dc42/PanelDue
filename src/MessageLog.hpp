@@ -9,6 +9,8 @@
 #ifndef MESSAGELOG_H_
 #define MESSAGELOG_H_
 
+#include "Display.hpp"
+
 namespace MessageLog
 {
 	void Init();
@@ -24,6 +26,9 @@ namespace MessageLog
 	
 	// This is called when we receive a new response from the host, which may or may not include a new message for the log
 	void BeginNewMessage();
+	
+	// Find where we need to split a text string so that it will fit in  a field
+	size_t FindSplitPoint(const char * array s, size_t maxChars, PixelNumber width);
 }
 
 #endif /* MESSAGELOG_H_ */

@@ -17,22 +17,34 @@
 # define DISPLAY_CONTROLLER		HX8352A
 const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
 const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(ReverseY);
+const bool is24BitLcd = true;
 # define DISPLAY_X				(400)
 # define DISPLAY_Y				(240)
 
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_43
 
 # define DISPLAY_CONTROLLER		SSD1963_480
-const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY | InvertBitmap);
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertBitmap);
 const DisplayOrientation DefaultTouchOrientAdjust = SwapXY;
+const bool is24BitLcd = true;
 # define DISPLAY_X				(480)
 # define DISPLAY_Y				(272)
 
 #elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_50
 
 # define DISPLAY_CONTROLLER		SSD1963_800
-const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertText);
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | InvertBitmap);
 const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
+const bool is24BitLcd = true;
+# define DISPLAY_X				(800)
+# define DISPLAY_Y				(480)
+
+#elif DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_70
+
+# define DISPLAY_CONTROLLER		SSD1963_800
+const DisplayOrientation DefaultDisplayOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseX | ReverseY | InvertText | InvertBitmap);
+const DisplayOrientation DefaultTouchOrientAdjust = static_cast<DisplayOrientation>(SwapXY | ReverseY);
+const bool is24BitLcd = false;
 # define DISPLAY_X				(800)
 # define DISPLAY_Y				(480)
 
@@ -55,7 +67,7 @@ const PixelNumber textButtonMargin = 1;
 const PixelNumber iconButtonMargin = 1;
 const PixelNumber outlinePixels = 2;
 const PixelNumber fieldSpacing = 6;
-const PixelNumber statusFieldWidth = 200;
+const PixelNumber statusFieldWidth = 120;
 const PixelNumber bedColumn = 114;
 
 const PixelNumber xyFieldWidth = 80;
@@ -65,6 +77,7 @@ const PixelNumber rowTextHeight = 21;	// height of the font we use
 const PixelNumber rowHeight = 28;
 const PixelNumber moveButtonRowSpacing = 12;
 const PixelNumber fileButtonRowSpacing = 8;
+const PixelNumber keyboardButtonRowSpacing = 7;		// small enough to show 2 lines of messages
 
 const PixelNumber speedTextWidth = 70;
 const PixelNumber efactorTextWidth = 30;
@@ -76,10 +89,13 @@ const PixelNumber messageTimeWidth = 60;
 const PixelNumber popupY = 192;
 const PixelNumber popupSideMargin = 10;
 const PixelNumber popupTopMargin = 10;
+const PixelNumber keyboardPopupTopMargin = 9;
 const PixelNumber popupFieldSpacing = 10;
 
 const PixelNumber axisLabelWidth = 26;
+const PixelNumber firstMessageRow = margin + rowHeight + 3;		// adjust this to get a whole number of message rows below the keyboard
 
+const PixelNumber progressBarHeight = 10;
 const PixelNumber touchCalibMargin = 15;
 
 extern uint8_t glcd19x21[];				// declare which fonts we will be using
@@ -94,7 +110,7 @@ const PixelNumber textButtonMargin = 1;
 const PixelNumber iconButtonMargin = 2;
 const PixelNumber outlinePixels = 3;
 const PixelNumber fieldSpacing = 12;
-const PixelNumber statusFieldWidth = 350;
+const PixelNumber statusFieldWidth = 200;
 const PixelNumber bedColumn = 160;
 
 const PixelNumber xyFieldWidth = 120;
@@ -104,6 +120,7 @@ const PixelNumber rowTextHeight = 32;	// height of the font we use
 const PixelNumber rowHeight = 48;
 const PixelNumber moveButtonRowSpacing = 20;
 const PixelNumber fileButtonRowSpacing = 12;
+const PixelNumber keyboardButtonRowSpacing = 12;
 
 const PixelNumber speedTextWidth = 105;
 const PixelNumber efactorTextWidth = 45;
@@ -115,10 +132,13 @@ const PixelNumber messageTimeWidth = 90;
 const PixelNumber popupY = 345;
 const PixelNumber popupSideMargin = 20;
 const PixelNumber popupTopMargin = 20;
+const PixelNumber keyboardPopupTopMargin = 10;
 const PixelNumber popupFieldSpacing = 20;
 
 const PixelNumber axisLabelWidth = 40;
+const PixelNumber firstMessageRow = margin + rowHeight;		// adjust this to get a whole number of message rows below the keyboard
 
+const PixelNumber progressBarHeight = 16;
 const PixelNumber touchCalibMargin = 22;
 
 extern uint8_t glcd28x32[];				// declare which fonts we will be using
@@ -168,8 +188,8 @@ const PixelNumber popupBarHeight = buttonHeight + (2 * popupTopMargin);
 
 const PixelNumber tempPopupBarWidth = (3 * fullPopupWidth)/4;
 const PixelNumber tempPopupX = (DisplayX - tempPopupBarWidth)/2;
-const PixelNumber filePopupWidth = fullPopupWidth - (4 * margin),
-				  filePopupHeight = (8 * rowHeight) + (2 * popupTopMargin);
+const PixelNumber fileInfoPopupWidth = fullPopupWidth - (4 * margin),
+				  fileInfoPopupHeight = (7 * rowTextHeight) + buttonHeight + (2 * popupTopMargin);
 const PixelNumber areYouSurePopupWidth = DisplayX - 80,
 				  areYouSurePopupHeight = (3 * rowHeight) + (2 * popupTopMargin);
 
@@ -182,8 +202,8 @@ const PixelNumber keyboardButtonWidth = DisplayX/5;
 const PixelNumber keyboardPopupWidth = fullPopupWidth;
 const PixelNumber keyButtonWidth = (keyboardPopupWidth - 2 * popupSideMargin)/16;
 const PixelNumber keyButtonHStep = (keyboardPopupWidth - 2 * popupSideMargin - keyButtonWidth)/11;
-const PixelNumber keyButtonVStep = buttonHeight + fileButtonRowSpacing;
-const PixelNumber keyboardPopupHeight = (6 * buttonHeight) + (4 * fileButtonRowSpacing) + (2 * popupTopMargin);
+const PixelNumber keyButtonVStep = buttonHeight + keyboardButtonRowSpacing;
+const PixelNumber keyboardPopupHeight = (5 * keyButtonVStep) + rowTextHeight + (2 * keyboardPopupTopMargin);
 const PixelNumber keyboardPopupX = fullWidthPopupX, keyboardPopupY = margin;
 
 const unsigned int numFileColumns = 2;
@@ -280,12 +300,12 @@ extern StaticTextField *touchCalibInstruction;
 extern StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
 extern StaticTextField *fwVersionField, *areYouSureTextField, *areYouSureQueryField;
 extern TextField *timeLeftField;
-extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
+extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *setupRoot;
 extern ButtonBase * null currentTab;
 extern ButtonPress fieldBeingAdjusted;
 extern ButtonPress currentButton;
 extern PopupWindow *setTempPopup, *movePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
-extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *printingField, *userCommandField;
+extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
 
 // Event numbers, used to say what we need to do when a field is touched
 // *** MUST leave value 0 free to mean "no event"
@@ -294,7 +314,7 @@ enum Event : uint8_t
 	evNull = 0,						// value must match nullEvent declared in Display.hpp
 
 	// Page selection
-	evTabControl, evTabPrint, evTabMsg, evTabInfo,
+	evTabControl, evTabPrint, evTabMsg, evTabSetup,
 
 	// Heater control
 	evSelectHead, evAdjustActiveTemp, evAdjustStandbyTemp,
@@ -321,7 +341,7 @@ enum Event : uint8_t
 	evKeyboard,
 
 	// Setup functions
-	evCalTouch, evSetBaudRate, evInvertDisplay, evAdjustBaudRate, evSetVolume, evSaveSettings, evAdjustVolume, evReset,
+	evCalTouch, evSetBaudRate, evInvertX, evInvertY, evAdjustBaudRate, evSetVolume, evSaveSettings, evAdjustVolume, evReset,
 
 	evYes,
 	evCancel,

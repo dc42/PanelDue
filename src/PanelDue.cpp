@@ -104,17 +104,17 @@ static_assert(sizeof(FlashData) <= FLASH_DATA_LENGTH, "Flash data too large");
 
 FlashData nvData, savedNvData;
 
-enum PrinterStatus
+enum class PrinterStatus
 {
-	psConnecting = 0,
-	psIdle = 1,
-	psPrinting = 2,
-	psStopped = 3,
-	psConfiguring = 4,
-	psPaused = 5,
-	psBusy = 6,
-	psPausing = 7,
-	psResuming = 8
+	connecting = 0,
+	idle = 1,
+	printing = 2,
+	stopped = 3,
+	configuring = 4,
+	paused = 5,
+	busy = 6,
+	pausing = 7,
+	resuming = 8
 };
 
 // Map of the above status codes to text. The space at the end improves the appearance.
@@ -131,7 +131,7 @@ const char *statusText[] =
 	"Resuming "
 };
 
-static PrinterStatus status = psConnecting;
+static PrinterStatus status = PrinterStatus::connecting;
 
 enum ReceivedDataEvent
 {
@@ -229,6 +229,11 @@ struct FileList
 	String<100> path;
 };
 
+bool PrintInProgress()
+{
+	return status == PrinterStatus::printing || status == PrinterStatus::paused || status == PrinterStatus::pausing || status == PrinterStatus::resuming;
+}
+
 // Search an ordered table for a matching string
 ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numElems, const char* key)
 {
@@ -257,7 +262,7 @@ ReceivedDataEvent bsearch(const ReceiveDataTableEntry array table[], size_t numE
 // We don't want to send these when the printer is busy with a previous command, because they will block normal status requests.
 bool OkToSend()
 {
-	return status == psIdle || status == psPrinting || status == psPaused;
+	return status == PrinterStatus::idle || status == PrinterStatus::printing || status == PrinterStatus::paused;
 }
 
 void ChangeTab(ButtonBase *newTab)
@@ -274,15 +279,17 @@ void ChangeTab(ButtonBase *newTab)
 		{
 		case evTabControl:
 			mgr.SetRoot(controlRoot);
+			nameField->SetValue(machineName.c_str());
 			break;
 		case evTabPrint:
 			mgr.SetRoot(printRoot);
+			nameField->SetValue(PrintInProgress() ? printingFile.c_str() : machineName.c_str());
 			break;
 		case evTabMsg:
 			mgr.SetRoot(messageRoot);
 			break;
-		case evTabInfo:
-			mgr.SetRoot(infoRoot);
+		case evTabSetup:
+			mgr.SetRoot(setupRoot);
 			break;
 		default:
 			mgr.SetRoot(commonRoot);
@@ -297,9 +304,9 @@ void ChangeTab(ButtonBase *newTab)
 	mgr.Refresh(true);
 }
 
-void InitLcd(DisplayOrientation dor, uint8_t language)
+void InitLcd(DisplayOrientation dor, bool is24bit, uint8_t language)
 {
-	lcd.InitLCD(dor);					// set up the LCD
+	lcd.InitLCD(dor, is24bit);					// set up the LCD
 	Fields::CreateFields(language);		// create all the fields
 	mgr.Refresh(true);					// redraw everything
 
@@ -334,8 +341,8 @@ void ErrorBeep()
 // The alternative X and Y locations are so that the caller can allow for the touch panel being possibly inverted.
 void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber altY, bool wantY, uint16_t& rawRslt)
 {
-	const PixelNumber touchCircleRadius = 8;
-	const PixelNumber touchCalibMaxError = 40;
+	const PixelNumber touchCircleRadius = DisplayY/32;
+	const PixelNumber touchCalibMaxError = DisplayY/6;
 	
 	lcd.setColor(touchSpotColour);
 	lcd.fillCircle(x, y, touchCircleRadius);
@@ -369,7 +376,7 @@ void CalibrateTouch()
 	mgr.Refresh(true);
 
 	touch.init(DisplayX, DisplayY, DefaultTouchOrientAdjust);				// initialize the driver and clear any existing calibration
-
+	
 	// Draw spots on the edges of the screen, one at a time, and ask the user to touch them.
 	// For the first two, we allow for the touch panel being the wrong way round.
 	DoTouchCalib(DisplayX/2, touchCalibMargin, DisplayX/2, DisplayY - 1 - touchCalibMargin, true, nvData.ymin);
@@ -475,9 +482,8 @@ void ProcessTouch(ButtonPress bp)
 		{
 		case evTabControl:
 		case evTabPrint:
-//		case evTabFiles:
 		case evTabMsg:
-		case evTabInfo:
+		case evTabSetup:
 			ChangeTab(f);
 			break;
 
@@ -493,6 +499,7 @@ void ProcessTouch(ButtonPress bp)
 
 		case evAdjustSpeed:
 		case evExtrusionFactor:
+		case evAdjustFan:
 			Adjusting(bp);
 			mgr.SetPopup(setTempPopup, tempPopupX, popupY);
 			break;
@@ -548,6 +555,12 @@ void ProcessTouch(ButtonPress bp)
 					}
 					break;
 					
+				case evAdjustFan:
+					SerialIo::SendString("M106 S");
+					SerialIo::SendInt((256 * val)/100);
+					SerialIo::SendChar('\n');
+					break;
+
 				default:
 					{
 						const char* null cmd = fieldBeingAdjusted.GetSParam();
@@ -568,7 +581,23 @@ void ProcessTouch(ButtonPress bp)
 		case evAdjustInt:
 			if (fieldBeingAdjusted.IsValid())
 			{
-				static_cast<IntegerButton*>(fieldBeingAdjusted.GetButton())->Increment(bp.GetIParam());
+				IntegerButton *ib = static_cast<IntegerButton*>(fieldBeingAdjusted.GetButton());
+				int newValue = ib->GetValue() + bp.GetIParam();
+				switch(fieldBeingAdjusted.GetEvent())
+				{
+				case evAdjustActiveTemp:
+				case evAdjustStandbyTemp:
+					newValue = max<int>(0, min<int>(300, newValue));
+					break;
+
+				case evAdjustFan:
+					newValue = max<int>(0, min<int>(100, newValue));
+					break;
+
+				default:
+					break;
+				}
+				ib->SetValue(newValue);
 				ShortenTouchDelay();
 			}
 			break;
@@ -658,7 +687,7 @@ void ProcessTouch(ButtonPress bp)
 					fpFilamentField->SetValue(0);					// would be better to make it blank
 					generatedByText.clear();
 					fpGeneratedByField->SetChanged();
-					mgr.SetPopup(filePopup, (DisplayX - filePopupWidth)/2, (DisplayY - filePopupHeight)/2);
+					mgr.SetPopup(filePopup, (DisplayX - fileInfoPopupWidth)/2, (DisplayY - fileInfoPopupHeight)/2);
 				}
 				else
 				{
@@ -691,7 +720,8 @@ void ProcessTouch(ButtonPress bp)
 			break;
 
 		case evPrint:
-			mgr.ClearPopup();
+			mgr.ClearPopup();			// clear the file info popup
+			mgr.ClearPopup();			// clear the file list popup
 			if (currentFile != nullptr)
 			{
 				SerialIo::SendString("M32 ");
@@ -732,7 +762,14 @@ void ProcessTouch(ButtonPress bp)
 			mgr.SetPopup(keyboardPopup, keyboardPopupX, keyboardPopupY);
 			break;
 
-		case evInvertDisplay:
+		case evInvertX:
+			nvData.lcdOrientation = static_cast<DisplayOrientation>(nvData.lcdOrientation ^ (ReverseX));
+			lcd.InitLCD(nvData.lcdOrientation);
+			CalibrateTouch();
+			CheckSettingsAreSaved();
+			break;
+
+		case evInvertY:
 			nvData.lcdOrientation = static_cast<DisplayOrientation>(nvData.lcdOrientation ^ (ReverseX | ReverseY | InvertText | InvertBitmap));
 			lcd.InitLCD(nvData.lcdOrientation);
 			CalibrateTouch();
@@ -904,11 +941,11 @@ void UpdateField(IntegerButton *f, int val)
 
 void UpdatePrintingFields()
 {
-	if (status == psPrinting)
+	if (status == PrinterStatus::printing)
 	{
 		Fields::ShowPauseButton();
 	}
-	else if (status == psPaused)
+	else if (status == PrinterStatus::paused)
 	{
 		Fields::ShowResumeAndCancelButtons();
 	}
@@ -917,17 +954,16 @@ void UpdatePrintingFields()
 		Fields::ShowFilesButton();
 	}
 	
-	bool showPrintProgress = (status == psPrinting || status == psPaused || status == psPausing || status == psResuming);
-	mgr.Show(printProgressBar, showPrintProgress);
-	mgr.Show(printingField, showPrintProgress);
+	mgr.Show(printProgressBar, PrintInProgress());
+//	mgr.Show(printingField, PrintInProgress());
 
 	// Don't enable the time left field when we start printing, instead this will get enabled when we receive a suitable message
-	if (!showPrintProgress)
+	if (!PrintInProgress())
 	{
 		mgr.Show(timeLeftField, false);	
 	}
 	
-	statusField->SetValue(statusText[status]);
+	statusField->SetValue(statusText[(unsigned int)status]);
 }
 
 // This is called when the status changes
@@ -937,31 +973,31 @@ void SetStatus(char c)
 	switch(c)
 	{
 	case 'A':
-		newStatus = psPaused;
+		newStatus = PrinterStatus::paused;
 		fileInfoTimer.SetPending();
 		break;
 	case 'B':
-		newStatus = psBusy;
+		newStatus = PrinterStatus::busy;
 		break;
 	case 'C':
-		newStatus = psConfiguring;
+		newStatus = PrinterStatus::configuring;
 		break;
 	case 'D':
-		newStatus = psPausing;
+		newStatus = PrinterStatus::pausing;
 		break;
 	case 'I':
-		newStatus = psIdle;
+		newStatus = PrinterStatus::idle;
 		printingFile.clear();
 		break;
 	case 'P':
-		newStatus = psPrinting;
+		newStatus = PrinterStatus::printing;
 		fileInfoTimer.SetPending();
 		break;
 	case 'R':
-		newStatus = psResuming;
+		newStatus = PrinterStatus::resuming;
 		break;
 	case 'S':
-		newStatus = psStopped;
+		newStatus = PrinterStatus::stopped;
 		break;
 	default:
 		newStatus = status;		// leave the status alone if we don't recognize it
@@ -972,27 +1008,32 @@ void SetStatus(char c)
 	{
 		switch (newStatus)
 		{
-		case psPrinting:
-			if (status != psPaused && status != psResuming)
+		case PrinterStatus::printing:
+			if (status != PrinterStatus::paused && status != PrinterStatus::resuming)
 			{
 				// Starting a new print, so clear the times
 				timesLeft[0] = timesLeft[1] = timesLeft[2] = 0;			
 			}	
 			// no break
-		case psPaused:
-		case psPausing:
-		case psResuming:
-			if (status == psConnecting)
+		case PrinterStatus::paused:
+		case PrinterStatus::pausing:
+		case PrinterStatus::resuming:
+			if (status == PrinterStatus::connecting)
 			{
 				ChangeTab(tabPrint);
+			}
+			else if (currentTab == tabPrint)
+			{
+				nameField->SetValue(printingFile.c_str());
 			}
 			break;
 			
 		default:
+			nameField->SetValue(machineName.c_str());
 			break;
 		}
 		
-		if (status == psConfiguring || (status == psConnecting && newStatus != psConfiguring))
+		if (status == PrinterStatus::configuring || (status == PrinterStatus::connecting && newStatus != PrinterStatus::configuring))
 		{
 			MessageLog::AppendMessage("Connected");
 			MessageLog::DisplayNewMessage();
@@ -1151,6 +1192,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 						mgr.Show(currentTemps[index], true);
 						mgr.Show(activeTemps[index], true);
 						mgr.Show(standbyTemps[index], true);
+						mgr.Show(extrusionFactors[index - 1], true);
 						++numHeads;
 					}
 				}
@@ -1176,16 +1218,16 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				{
 					switch(index)
 					{
-						case 0:
+					case 0:
 						xPos->SetValue(fval);
 						break;
-						case 1:
+					case 1:
 						yPos->SetValue(fval);
 						break;
-						case 2:
+					case 2:
 						zPos->SetValue(fval);
 						break;
-						default:
+					default:
 						break;
 					}
 				}
@@ -1252,7 +1294,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			{
 				int i;
 				bool b = GetInteger(data, i);
-				if (b && i >= 0 && i < 10 * 24 * 60 * 60 && (status == psPrinting || status == psPaused))
+				if (b && i >= 0 && i < 10 * 24 * 60 * 60 && PrintInProgress())
 				{
 					timesLeft[index] = i;
 					timesLeftText.copyFrom("filament ");
@@ -1290,7 +1332,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvMyName:
-			if (status != psConfiguring && status != psConnecting)
+			if (status != PrinterStatus::configuring && status != PrinterStatus::connecting)
 			{
 				machineName.copyFrom(data);
 				nameField->SetChanged();
@@ -1303,8 +1345,14 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvFilename:
-			printingFile.copyFrom(data);
-			printingField->SetChanged();
+			if (!printingFile.similar(data))
+			{
+				printingFile.copyFrom(data);
+				if (currentTab == tabPrint && PrintInProgress())
+				{
+					nameField->SetChanged();
+				}
+			}
 			fileInfoTimer.Stop();
 			break;
 		
@@ -1369,7 +1417,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvGeometry:
-			if (status != psConfiguring && status != psConnecting)
+			if (status != PrinterStatus::configuring && status != PrinterStatus::connecting)
 			{
 				isDelta = (strcasecmp(data, "delta") == 0);
 				gotGeometry = true;
@@ -1482,7 +1530,7 @@ int main(void)
 	if (nvData.Valid())
 	{
 		// The touch panel has already been calibrated
-		InitLcd(nvData.lcdOrientation, nvData.language);
+		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language);
 		touch.init(DisplayX, DisplayY, nvData.touchOrientation);
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax, touchCalibMargin);
 		savedNvData = nvData;
@@ -1491,7 +1539,7 @@ int main(void)
 	{
 		// The touch panel has not been calibrated, and we do not know which way up it is
 		nvData.SetDefaults();
-		InitLcd(nvData.lcdOrientation, nvData.language);
+		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language);
 		CalibrateTouch();					// this includes the touch driver initialization
 		SaveSettings();
 	}
@@ -1507,10 +1555,18 @@ int main(void)
 
 	lastPollTime = SystemTick::GetTickCount() - printerPollInterval;	// allow a poll immediately
 	
+	// Hide the buttons that are ot implemented yet
+	extrudeButton->Show(false);
+	fanButton->Show(false);
+	
 	// Hide the Head 2 parameters until we know we have a second head
-//	mgr.Show(t2CurrentTemp, false);
-//	mgr.Show(t2ActiveTemp, false);
-//	mgr.Show(t2StandbyTemp, false);
+	for (unsigned int i = 2; i < maxHeaters; ++i)
+	{
+		currentTemps[i]->Show(false);
+		activeTemps[i]->Show(false);
+		standbyTemps[i]->Show(false);
+		extrusionFactors[i - 1]->Show(false);
+	}
 	
 	mgr.Show(standbyTemps[0], false);		// currently, we always hide the bed standby temperature because it doesn't do anything
 	
@@ -1535,6 +1591,11 @@ int main(void)
 		// 3. Check for a touch on the touch panel.
 		if (SystemTick::GetTickCount() - lastTouchTime >= ignoreTouchTime)
 		{
+			if (currentButton.IsValid())
+			{
+				CurrentButtonReleased();
+			}
+
 			uint16_t x, y;
 			if (touch.read(x, y))
 			{
@@ -1560,10 +1621,6 @@ int main(void)
 						ProcessTouchOutsidePopup();					
 					}
 				}
-			}
-			else if (currentButton.IsValid())
-			{
-				CurrentButtonReleased();
 			}
 		}
 		

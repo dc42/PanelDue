@@ -44,6 +44,13 @@ DisplayField::DisplayField(PixelNumber py, PixelNumber px, PixelNumber pw)
 	defaultPressedGradColour = pgp;
 }
 
+/*static*/ PixelNumber DisplayField::GetTextWidth(const char* array s, PixelNumber maxWidth)
+{
+	lcd.setTextPos(0, 9999, maxWidth);
+	lcd.print(s);    // dummy print to get text width
+	return lcd.getTextX();
+}
+
 void DisplayField::Show(bool v)
 {
 	if (visible != v)

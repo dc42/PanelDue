@@ -39,12 +39,12 @@ StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessag
 StaticTextField *fwVersionField, *settingsNotSavedField, *areYouSureTextField, *areYouSureQueryField;
 ButtonBase *filesButtonField, *pauseButtonField, *resumeButtonField, *resetButtonField;
 TextField *timeLeftField;
-DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *infoRoot;
+DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *messageRoot, *setupRoot;
 ButtonBase * null currentTab = NULL;
 ButtonPress fieldBeingAdjusted;
 ButtonPress currentButton;
 PopupWindow *setTempPopup, *movePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
-TextField *zProbe, *fpNameField, *fpGeneratedByField, *printingField, *userCommandField;
+TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
 
 String<machineNameLength> machineName;
 String<printingFileLength> printingFile;
@@ -264,11 +264,11 @@ namespace Fields
 		resetButtonField = new TextButton(row7, cancelColumn, DisplayX - cancelColumn - margin, "Cancel", evReset, "M0");
 		mgr.AddField(resetButtonField);
 
-		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(printingField = new TextField(row8, margin, DisplayX, TextAlignment::Left, "printing ", printingFile.c_str()));
+//		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
+//		mgr.AddField(printingField = new TextField(row8, margin, DisplayX, TextAlignment::Left, "printing ", printingFile.c_str()));
 			
 		DisplayField::SetDefaultColours(progressBarColour, progressBarBackColour);
-		mgr.AddField(printProgressBar = new ProgressBar(row8, margin, 8, DisplayX - 2 * margin));
+		mgr.AddField(printProgressBar = new ProgressBar(row8 + (rowHeight - progressBarHeight)/2, margin, progressBarHeight, DisplayX - 2 * margin));
 		mgr.Show(printProgressBar, false);
 			
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
@@ -282,12 +282,11 @@ namespace Fields
 	void CreateMessageTabFields()
 	{
 		mgr.SetRoot(baseRoot);
-		PixelNumber row = margin;			// allow a top margin for the keyboard button
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
-		mgr.AddField(new IconButton(row,  DisplayX - margin - keyboardButtonWidth, keyboardButtonWidth, IconKeyboard, evKeyboard));
+		mgr.AddField(new IconButton(margin,  DisplayX - margin - keyboardButtonWidth, keyboardButtonWidth, IconKeyboard, evKeyboard));
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		mgr.AddField(new StaticTextField(row + labelRowAdjust, margin, DisplayX - 2 * margin - keyboardButtonWidth, TextAlignment::Centre, "Messages"));
-		row += rowHeight;
+		mgr.AddField(new StaticTextField(margin + labelRowAdjust, margin, DisplayX - 2 * margin - keyboardButtonWidth, TextAlignment::Centre, "Messages"));
+		PixelNumber row = firstMessageRow;
 		for (unsigned int r = 0; r < numMessageRows; ++r)
 		{
 			StaticTextField *t = new StaticTextField(row, margin, messageTimeWidth, TextAlignment::Left, nullptr);
@@ -321,13 +320,14 @@ namespace Fields
 		volumeButton = AddIntegerButton(row4, 1, 3, "Volume ", nullptr, evSetVolume);
 		languageButton = AddTextButton(row4, 2, 3, longLanguageNames[language], evSetLanguage, nullptr);
 		AddTextButton(row5, 0, 3, "Calibrate touch", evCalTouch, nullptr);
-		AddTextButton(row5, 1, 3, "Invert display", evInvertDisplay, nullptr);
+		AddTextButton(row5, 1, 3, "Mirror display", evInvertX, nullptr);
+		AddTextButton(row5, 2, 3, "Invert display", evInvertY, nullptr);
 		AddTextButton(row6, 0, 3, "Save settings", evSaveSettings, nullptr);
 		AddTextButton(row6, 1, 3, "Clear settings", evFactoryReset, nullptr);
 		AddTextButton(row6, 2, 3, "Save & restart", evRestart, nullptr);
 			
 		DisplayField::SetDefaultColours(labelTextColour, defaultBackColour);
-		infoRoot = mgr.GetRoot();
+		setupRoot = mgr.GetRoot();
 			
 		mgr.SetRoot(NULL);
 			
@@ -412,15 +412,15 @@ namespace Fields
 	// Create the popup window used to display the file dialog
 	void CreateFileActionPopup()
 	{
-		filePopup = new PopupWindow(filePopupHeight, filePopupWidth, popupBackColour);
+		filePopup = new PopupWindow(fileInfoPopupHeight, fileInfoPopupWidth, popupBackColour);
 		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
 
-		fpNameField = new TextField(popupTopMargin, popupSideMargin, filePopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filename: ");
-		fpSizeField = new IntegerField(popupTopMargin + rowHeight, popupSideMargin, filePopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Size: ", " bytes");
-		fpLayerHeightField = new FloatField(popupTopMargin + 2 * rowHeight, popupSideMargin, filePopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Layer height: ","mm");
-		fpHeightField = new FloatField(popupTopMargin + 3 * rowHeight, popupSideMargin, filePopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Object height: ", "mm");
-		fpFilamentField = new IntegerField(popupTopMargin + 4 * rowHeight, popupSideMargin, filePopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filament needed: ", "mm");
-		fpGeneratedByField = new TextField(popupTopMargin + 5 * rowHeight, popupSideMargin, filePopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Sliced by: ", generatedByText.c_str());
+		fpNameField = new TextField(popupTopMargin, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filename: ");
+		fpSizeField = new IntegerField(popupTopMargin + rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Size: ", " bytes");
+		fpLayerHeightField = new FloatField(popupTopMargin + 2 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Layer height: ","mm");
+		fpHeightField = new FloatField(popupTopMargin + 3 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Object height: ", "mm");
+		fpFilamentField = new IntegerField(popupTopMargin + 4 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filament needed: ", "mm");
+		fpGeneratedByField = new TextField(popupTopMargin + 5 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Sliced by: ", generatedByText.c_str());
 		filePopup->AddField(fpNameField);
 		filePopup->AddField(fpSizeField);
 		filePopup->AddField(fpLayerHeightField);
@@ -429,9 +429,9 @@ namespace Fields
 		filePopup->AddField(fpGeneratedByField);
 
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
-		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowHeight, popupSideMargin, filePopupWidth/3 - 2 * popupSideMargin, "Print", evPrint));
-		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowHeight, filePopupWidth/3 + popupSideMargin, filePopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancelPrint));
-		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowHeight, (2 * filePopupWidth)/3 + popupSideMargin, filePopupWidth/3 - 2 * popupSideMargin, "Delete", evDeleteFile));
+		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowTextHeight, popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, "Print", evPrint));
+		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowTextHeight, fileInfoPopupWidth/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancelPrint));
+		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowTextHeight, (2 * fileInfoPopupWidth)/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, "Delete", evDeleteFile));
 	}
 
 	// Create the "Are you sure?" popup
@@ -485,7 +485,7 @@ namespace Fields
 		}
 		const char* array const * array const keys = keyboards[language];
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
-		PixelNumber row = popupTopMargin;
+		PixelNumber row = keyboardPopupTopMargin;
 		for (size_t i = 0; i < 4; ++i)
 		{
 			PixelNumber column = popupSideMargin + (i * keyButtonHStep)/3;
@@ -544,7 +544,7 @@ namespace Fields
 		tabControl = AddTextButton(rowTabs, 0, 4, "Control", evTabControl, nullptr);
 		tabPrint = AddTextButton(rowTabs, 1, 4, "Print", evTabPrint, nullptr);
 		tabMsg = AddTextButton(rowTabs, 2, 4, "Console", evTabMsg, nullptr);
-		tabSetup = AddTextButton(rowTabs, 3, 4, "Setup", evTabInfo, nullptr);
+		tabSetup = AddTextButton(rowTabs, 3, 4, "Setup", evTabSetup, nullptr);
 		baseRoot = mgr.GetRoot();		// save the root of fields that we usually display
 
 		// Create the fields that are common to the Control and Print pages
