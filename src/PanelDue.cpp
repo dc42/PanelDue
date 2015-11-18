@@ -65,6 +65,7 @@ static int beepFrequency = 0, beepLength = 0;
 static unsigned int numHeads = 1;
 static unsigned int messageSeq = 0;
 static unsigned int newMessageSeq = 0;
+static int oldIntValue;
 
 static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
 
@@ -500,6 +501,7 @@ void ProcessTouch(ButtonPress bp)
 		case evAdjustSpeed:
 		case evExtrusionFactor:
 		case evAdjustFan:
+			oldIntValue = static_cast<IntegerButton*>(bp.GetButton())->GetValue();
 			Adjusting(bp);
 			mgr.SetPopup(setTempPopup, tempPopupX, popupY);
 			break;
@@ -905,12 +907,18 @@ void ProcessTouchOutsidePopup()
 {
 	switch(fieldBeingAdjusted.GetEvent())
 	{
+	case evAdjustSpeed:
+	case evExtrusionFactor:
+	case evAdjustFan:
+		static_cast<IntegerButton*>(fieldBeingAdjusted.GetButton())->SetValue(oldIntValue);
+		mgr.ClearPopup();
+		StopAdjusting();
+		break;
+
 	case evAdjustActiveTemp:
 	case evAdjustStandbyTemp:
 	case evSetBaudRate:
 	case evSetVolume:
-	case evAdjustSpeed:
-	case evExtrusionFactor:
 		mgr.ClearPopup();
 		StopAdjusting();
 		break;
