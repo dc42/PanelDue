@@ -27,13 +27,14 @@ IntegerButton *spd, *extrusionFactors[maxHeaters], *fanSpeed, *baudRateButton, *
 IntegerField *fanRpm, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField;
 ProgressBar *printProgressBar;
 SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
-SingleButton *moveButton, *extrudeButton, *fanButton, *macroButton;
+SingleButton *moveButton, *extrudeButton, *macroButton;
 
 TextButton *filenameButtons[numDisplayedFiles], *languageButton;
-SingleButton *scrollFilesLeftButton, *scrollFilesRightButton;
+SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton;
 SingleButton *homeButtons[3], *homeAllButton;
 SingleButton *heaterStates[maxHeaters];
 TextButton *bedCompButton;
+ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
 StaticTextField *nameField, *statusField, *touchCalibInstruction, *filePopupTitleField;
 StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
 StaticTextField *fwVersionField, *settingsNotSavedField, *areYouSureTextField, *areYouSureQueryField;
@@ -43,7 +44,7 @@ DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot, *mess
 ButtonBase * null currentTab = NULL;
 ButtonPress fieldBeingAdjusted;
 ButtonPress currentButton;
-PopupWindow *setTempPopup, *movePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
+PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
 TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
 
 String<machineNameLength> machineName;
@@ -68,6 +69,7 @@ const Icon heaterIcons[maxHeaters] = { IconBed_21h, IconNozzle1_21h, IconNozzle2
 #define IconDown		IconDown_21h
 #define IconFiles		IconFiles_21h
 #define IconKeyboard	IconKeyboard_21h
+#define IconTrash		IconTrash_21h
 #endif
 
 #if DISPLAY_X == 800
@@ -80,6 +82,7 @@ const Icon heaterIcons[maxHeaters] = { IconBed_30h, IconNozzle1_30h, IconNozzle2
 #define IconDown		IconDown_30h
 #define IconFiles		IconFiles_30h
 #define IconKeyboard	IconKeyboard_30h
+#define IconTrash		IconTrash_30h
 #endif
 
 namespace Fields
@@ -106,15 +109,24 @@ namespace Fields
 		return f;
 	}
 	
-	void CreateStringButtonRow(Window * pf, PixelNumber top, PixelNumber left, PixelNumber totalWidth, PixelNumber spacing, unsigned int numButtons,
-								const char* array const text[], const char* array const params[], Event evt)
+	// Create a row of test buttons.
+	// Optionally, set one to 'pressed' and return that one.
+	ButtonPress CreateStringButtonRow(Window * pf, PixelNumber top, PixelNumber left, PixelNumber totalWidth, PixelNumber spacing, unsigned int numButtons,
+								const char* array const text[], const char* array const params[], Event evt, int selected = -1)
 	{
 		const PixelNumber step = (totalWidth + spacing)/numButtons;
+		ButtonPress bp;
 		for (unsigned int i = 0; i < numButtons; ++i)
 		{
 			TextButton *tp = new TextButton(top, left + i * step, step - spacing, text[i], evt, params[i]);
 			pf->AddField(tp);
+			if ((int)i == selected)
+			{
+				tp->Press(true, 0);
+				bp = ButtonPress(tp, 0);
+			}
 		}
+		return bp;
 	}
 
 	// Create a popup bar with string parameters
@@ -203,10 +215,9 @@ namespace Fields
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
 		bedCompButton = AddTextButton(row7p7, 4, 5, "Bed comp", evSendCommand, "G32");
 
-		moveButton = AddTextButton(row8p7, 0, 4, "Move", evMove, nullptr);
-		extrudeButton = AddTextButton(row8p7, 1, 4, "Extrude", evExtrude, nullptr);
-		fanButton = AddTextButton(row8p7, 2, 4, "Fan", evFan, nullptr);
-		macroButton = AddTextButton(row8p7, 3, 4, "Macro", evListMacros, nullptr);
+		moveButton = AddTextButton(row8p7, 0, 3, "Move", evMovePopup, nullptr);
+		extrudeButton = AddTextButton(row8p7, 1, 3, "Extrude", evExtrudePopup, nullptr);
+		macroButton = AddTextButton(row8p7, 2, 3, "Macro", evListMacros, nullptr);
 
 		controlRoot = mgr.GetRoot();
 	}
@@ -345,9 +356,10 @@ namespace Fields
 	// Create the movement popup window
 	void CreateMovePopup()
 	{
-		movePopup = new PopupWindow(movePopupHeight, movePopupWidth, popupBackColour);
 		static const char * array xyJogValues[] = { "-100", "-10", "-1", "-0.1", "0.1",  "1", "10", "100" };
 		static const char * array zJogValues[] = { "-50", "-5", "-0.5", "-0.05", "0.05",  "0.5", "5", "50" };
+
+		movePopup = new PopupWindow(movePopupHeight, movePopupWidth, popupBackColour);
 		PixelNumber ypos = popupTopMargin;
 		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
 		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, movePopupWidth - 2 * popupSideMargin, TextAlignment::Centre, "Move head"));
@@ -371,13 +383,40 @@ namespace Fields
 		movePopup->AddField(new IconButton(ypos, (movePopupWidth - doneButtonWidth)/2, doneButtonWidth, IconCancel, evCancel));
 	}
 	
+	// Create the extrusion controls popup
+	void CreateExtrudePopup()
+	{
+		static const char * array extrudeAmountValues[] = { "100", "50", "20", "10", "5",  "1" };
+		static const char * array extrudeSpeedValues[] = { "50", "40", "20", "10", "5" };
+		static const char * array extrudeSpeedParams[] = { "3000", "2400", "1200", "600", "300" };
+
+		extrudePopup = new PopupWindow(extrudePopupHeight, extrudePopupWidth, popupBackColour);
+		PixelNumber ypos = popupTopMargin;
+		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
+		extrudePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, TextAlignment::Centre, "Extrusion amount (mm)"));
+		ypos += buttonHeight + extrudeButtonRowSpacing;
+		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
+		currentExtrudeAmountPress = CreateStringButtonRow(extrudePopup, ypos, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, fieldSpacing, 6, extrudeAmountValues, extrudeAmountValues, evExtrudeAmount, 3);
+		ypos += buttonHeight + extrudeButtonRowSpacing;
+		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
+		extrudePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, TextAlignment::Centre, "Speed (mm/sec)"));
+		ypos += buttonHeight + extrudeButtonRowSpacing;
+		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
+		currentExtrudeRatePress = CreateStringButtonRow(extrudePopup, ypos, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, fieldSpacing, 5, extrudeSpeedValues, extrudeSpeedParams, evExtrudeRate, 4);
+		ypos += buttonHeight + extrudeButtonRowSpacing;
+		extrudePopup->AddField(new TextButton(ypos, popupSideMargin, extrudePopupWidth/3 - 2 * popupSideMargin, "Extrude", evExtrude));
+		extrudePopup->AddField(new IconButton(ypos, extrudePopupWidth/3 + popupSideMargin, extrudePopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancel));
+		extrudePopup->AddField(new TextButton(ypos, (2 * extrudePopupWidth)/3 + popupSideMargin, extrudePopupWidth/3 - 2 * popupSideMargin, "Retract", evRetract));
+	}
+	
 	// Create the popup used to list files and macros
 	void CreateFileListPopup()
 	{
 		fileListPopup = new PopupWindow(fileListPopupHeight, fileListPopupWidth, popupBackColour);
 		const PixelNumber navButtonWidth = fileListPopupWidth/8;
 		const PixelNumber backButtonPos = fileListPopupWidth - navButtonWidth - popupSideMargin;
-		const PixelNumber rightButtonPos = backButtonPos - navButtonWidth - fieldSpacing;
+		const PixelNumber upButtonPos = backButtonPos - navButtonWidth - fieldSpacing;
+		const PixelNumber rightButtonPos = upButtonPos - navButtonWidth - fieldSpacing;
 		const PixelNumber leftButtonPos = popupSideMargin;
 		const PixelNumber textPos = popupSideMargin + navButtonWidth;
 
@@ -390,6 +429,8 @@ namespace Fields
 		fileListPopup->AddField(scrollFilesRightButton = new TextButton(popupTopMargin, rightButtonPos, navButtonWidth, ">", evScrollFiles, numFileRows));
 		scrollFilesRightButton->Show(false);
 		
+		fileListPopup->AddField(filesUpButton = new IconButton(popupTopMargin, upButtonPos, navButtonWidth, IconUp, evNull));
+		filesUpButton->Show(false);
 		fileListPopup->AddField(new IconButton(popupTopMargin, backButtonPos, navButtonWidth, IconCancel, evCancel));
 		
 		const PixelNumber fileFieldWidth = (fileListPopupWidth + fieldSpacing - (2 * popupSideMargin))/numFileColumns;
@@ -430,8 +471,8 @@ namespace Fields
 
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
 		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowTextHeight, popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, "Print", evPrint));
-		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowTextHeight, fileInfoPopupWidth/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancelPrint));
-		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowTextHeight, (2 * fileInfoPopupWidth)/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, "Delete", evDeleteFile));
+		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowTextHeight, fileInfoPopupWidth/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancel));
+		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowTextHeight, (2 * fileInfoPopupWidth)/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, IconTrash, evDeleteFile));
 	}
 
 	// Create the "Are you sure?" popup
@@ -536,6 +577,7 @@ namespace Fields
 	{
 		mgr.Init(defaultBackColour);
 		DisplayField::SetDefaultFont(DEFAULT_FONT);
+		ButtonWithText::SetFont(DEFAULT_FONT);
 		SingleButton::SetTextMargin(textButtonMargin);
 		SingleButton::SetIconMargin(iconButtonMargin);
 	
@@ -563,6 +605,7 @@ namespace Fields
 		// Create the popup fields
 		CreateIntegerAdjustPopup();
 		CreateMovePopup();
+		CreateExtrudePopup();
 		CreateFileListPopup();
 		CreateFileActionPopup();
 		CreateVolumePopup();

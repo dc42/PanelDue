@@ -7,28 +7,52 @@
 
 #include "FileManager.hpp"
 #include "PanelDue.hpp"
+#include <cctype>
 
 namespace FileManager
 {
-	typedef Vector<char, 2048> FileList;			// we use a Vector instead of a String because we store multiple null-terminated strings in it
+	typedef Vector<char, 2048> FileList;						// we use a Vector instead of a String because we store multiple null-terminated strings in it
 	typedef Vector<const char* array, 100> FileListIndex;
+
+	const char * array filesRoot = "/gcodes";
+	const char * array macrosRoot = "/macros";
+	const uint32_t FileListRequestTimeout = 8000;				// file info request timeout in milliseconds
 
 	static FileList fileLists[3];								// one for gcode file list, one for macro list, one for receiving new lists into
 	static FileListIndex fileIndices[3];						// pointers into the individual filenames in the list
 
 	static int newFileList = -1;								// which file list we received a new listing into
-	static String<100> fileDirectoryName;
-	static FileSet gcodeFilesList(evFile), macroFilesList(evMacro);
+	static Path fileDirectoryName;
+	static FileSet gcodeFilesList(evFile, evFilesUp, filesRoot, "Files on SD card");
+	static FileSet macroFilesList(evMacro, evMacrosUp, macrosRoot, "Macros");
 	static FileSet * null displayedFileSet = nullptr;
-
+	
 	// Return true if the second string is alphabetically greater then the first, case insensitive
 	static bool StringGreaterThan(const char* a, const char* b)
 	{
 		return strcasecmp(a, b) > 0;
 	}
 
-	FileSet::FileSet(Event e) : which(-1), evt(e), scrollOffset(0)
+	FileSet::FileSet(Event fe, Event fu, const char * array rootDir, const char * array title)
+		: requestedPath(rootDir), currentPath(), timer(FileListRequestTimeout, "M20 S2 P", requestedPath.c_str()), which(-1), fileEvent(fe), upEvent(fu), popupTitle(title), scrollOffset(0)
 	{
+	}
+
+	void FileSet::Display()
+	{
+		RefreshPopup();
+		filePopupTitleField->SetValue(popupTitle);
+		filesUpButton->SetEvent(upEvent, nullptr);
+		mgr.SetPopup(fileListPopup, fileListPopupX, fileListPopupY);
+		timer.SetPending();										// refresh the list of files
+	}
+
+	void FileSet::Reload(int whichList, const Path& dir)
+	{
+		SetIndex(whichList);
+		SetPath(dir.c_str());
+		RefreshPopup();
+		StopTimer();
 	}
 
 	// Refresh the list of files or macros in the Files popup window
@@ -54,6 +78,7 @@ namespace FileManager
 			// 3. Display the scroll buttons if needed
 			mgr.Show(scrollFilesLeftButton, scrollOffset != 0);
 			mgr.Show(scrollFilesRightButton, scrollOffset + (numFileRows * numFileColumns) < fileIndex.size());
+			mgr.Show(filesUpButton, IsInSubdir());
 		
 			// 4. Display the file list
 			for (size_t i = 0; i < numDisplayedFiles; ++i)
@@ -63,7 +88,7 @@ namespace FileManager
 				{
 					const char *text = fileIndex[i + scrollOffset];
 					f->SetText(text);
-					f->SetEvent(evt, text);
+					f->SetEvent(fileEvent, text);
 					mgr.Show(f, true);
 				}
 				else
@@ -85,6 +110,74 @@ namespace FileManager
 		}
 	}
 
+	void FileSet::Scroll(int amount)
+	{
+		scrollOffset += amount;
+		RefreshPopup();
+	}
+	
+	void FileSet::SetPath(const char * array pPath)
+	{
+		currentPath.copyFrom(pPath);
+	}
+	
+	// Return true if the path has more than one directory component
+	bool FileSet::IsInSubdir() const
+	{
+		// Find the start of the first component of the path
+		size_t start = (currentPath.size() >= 3 && isdigit(currentPath[0]) && currentPath[1] == ':' && currentPath[2] == '/') ? 3
+					: (currentPath.size() >= 1 && currentPath[0] == '/') ? 1
+					: 0;
+		size_t end = currentPath.size();
+		if (end != 0 && currentPath[end - 1] == '/')
+		{
+			--end;			// remove trailing '/' if there is one
+		}
+		while (end != 0 && currentPath[end] != '/')
+		{
+			--end;
+		}
+		return (end > start);
+	}
+
+	// Request the parent path
+	void FileSet::RequestParentDir()
+	{
+		size_t end = currentPath.size();
+		// Skip any trailing '/'
+		if (end != 0 && currentPath[end - 1] == '/')
+		{
+			--end;
+		}
+		// Find the last '/'
+		while (end != 0)
+		{
+			--end;
+			if (currentPath[end] == '/')
+			{
+				break;
+			}
+		}
+		requestedPath.clear();
+		for (size_t i = 0; i < end; ++i)
+		{
+			requestedPath.add(currentPath[i]);
+		}
+		timer.SetPending();
+	}
+
+	// Build a subdirectory of the current path
+	void FileSet::RequestSubdir(const char * array dir)
+	{
+		requestedPath.copyFrom(currentPath);
+		if (requestedPath.size() == 0 || requestedPath[requestedPath.size() - 1] != '/')
+		{
+			requestedPath.add('/');
+		}
+		requestedPath.catFrom(dir);
+		timer.SetPending();
+	}
+	
 	void BeginNewMessage()
 	{
 		fileDirectoryName.clear();
@@ -96,29 +189,30 @@ namespace FileManager
 		if (newFileList >= 0)
 		{
 			// We received a new file list
-			if (fileDirectoryName.isEmpty() || fileDirectoryName.equalsIgnoreCase("/gcodes") || fileDirectoryName.equalsIgnoreCase("0:/gcodes/"))
+			// Find the first component of the path
+			size_t i = (fileDirectoryName.size() >= 3 && isdigit(fileDirectoryName[0]) && fileDirectoryName[1] == ':' && fileDirectoryName[2] == '/') ? 3
+						: (fileDirectoryName.size() >= 1 && fileDirectoryName[0] == '/') ? 1
+						: 0;
+			String<10> temp;
+			while (i < fileDirectoryName.size() && fileDirectoryName[i] != '/' && !temp.full())
+			{
+				temp.add(fileDirectoryName[i++]);
+			}
+			
+			// Depending on the first component of the path, refresh the Files or Macros list
+			if (temp.size() == 0 || temp.equalsIgnoreCase("gcodes"))
 			{
 				if (!displayingFileInfo)
 				{
-					gcodeFilesList.SetIndex(newFileList);
-					gcodeFilesList.RefreshPopup();
-					filesListTimer.Stop();
+					gcodeFilesList.Reload(newFileList, fileDirectoryName);
 				}
 			}
-			else if (fileDirectoryName.equalsIgnoreCase("/macros"))
+			else if (temp.equalsIgnoreCase("macros"))
 			{
-				macroFilesList.SetIndex(newFileList);
-				macroFilesList.RefreshPopup();
-				macroListTimer.Stop();
+				macroFilesList.Reload(newFileList, fileDirectoryName);
 			}
 			newFileList = -1;
 		}
-	}
-
-	void FileSet::Scroll(int amount)
-	{
-		scrollOffset += amount;
-		RefreshPopup();
 	}
 
 	void BeginReceivingFiles()
@@ -135,7 +229,7 @@ namespace FileManager
 		fileIndices[newFileList].clear();
 	}
 
-	void ReceiveFile(const char *data)
+	void ReceiveFile(const char * array data)
 	{
 		if (newFileList >= 0)
 		{
@@ -150,37 +244,83 @@ namespace FileManager
 		}
 	}
 
-	void ReceiveDirectoryName(const char *data)
+	void ReceiveDirectoryName(const char * array data)
 	{
 		fileDirectoryName.copyFrom(data);
 	}
 
 	void DisplayFilesList()
 	{
-		gcodeFilesList.RefreshPopup();
-		filePopupTitleField->SetValue("Files on SD card");
-		mgr.SetPopup(fileListPopup, fileListPopupX, fileListPopupY);
-		filesListTimer.SetPending();								// refresh the list of files
+		gcodeFilesList.Display();
 	}
 
 	void DisplayMacrosList()
 	{
-		macroFilesList.RefreshPopup();
-		filePopupTitleField->SetValue("Macros");
-		mgr.SetPopup(fileListPopup, fileListPopupX, fileListPopupY);
-		macroListTimer.SetPending();								// refresh the list of macros
+		macroFilesList.Display();
 	}		
 
-	bool Scroll(int amount)
+	void Scroll(int amount)
 	{
 		if (displayedFileSet != nullptr)
 		{
 			displayedFileSet->Scroll(amount);
-			return true;
 		}
-		return false;
 	}
 
+	void RequestFilesSubdir(const char * array dir)
+	{
+		gcodeFilesList.RequestSubdir(dir);
+	}
+	
+	void RequestMacrosSubdir(const char * array dir)
+	{
+		macroFilesList.RequestSubdir(dir);
+	}
+
+	void RequestFilesParentDir()
+	{
+		gcodeFilesList.RequestParentDir();
+	}
+
+	void RequestMacrosParentDir()
+	{
+		macroFilesList.RequestParentDir();
+	}
+
+	void RequestFilesRootDir()
+	{
+		gcodeFilesList.RequestRootDir();
+	}
+
+	void RequestMacrosRootDir()
+	{
+		macroFilesList.RequestRootDir();
+	}
+
+	const char * array GetFilesDir()
+	{
+		return gcodeFilesList.GetPath();
+	}
+
+	const char * array GetMacrosDir()
+	{
+		return macroFilesList.GetPath();
+	}
+
+	void RefreshFilesList()
+	{
+		gcodeFilesList.SetPending();
+	}
+
+	bool ProcessTimers()
+	{
+		bool done = macroFilesList.ProcessTimer();
+		if (!done)
+		{
+			done = gcodeFilesList.ProcessTimer();
+		}
+		return done;
+	}
 }		// end namespace
 
 // End

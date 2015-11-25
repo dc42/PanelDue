@@ -134,8 +134,9 @@ public:
 	void Redraw(DisplayField *f);
 	void Show(DisplayField *f, bool v);
 	void Press(ButtonPress bp, bool v);
-	void SetPopup(PopupWindow * p, PixelNumber px = 0, PixelNumber py = 0);
-	void ClearPopup();
+	void SetPopup(PopupWindow * p, PixelNumber px = 0, PixelNumber py = 0, bool redraw = true);
+	PopupWindow * null GetPopup() const { return next; }
+	void ClearPopup(bool redraw = true);
 	bool ObscuredByPopup(const DisplayField *p) const;
 	bool Visible(const DisplayField *p) const;
 };
@@ -337,7 +338,7 @@ public:
 
 class ButtonWithText : public SingleButton
 {
-	LcdFont font;
+	static LcdFont font;
 	
 protected:
 	PixelNumber GetHeight() const override { return UTFT::GetFontHeight(font) + 2 * textMargin + 2; }
@@ -346,9 +347,11 @@ protected:
 
 public:
 	ButtonWithText(PixelNumber py, PixelNumber px, PixelNumber pw)
-		: SingleButton(py, px, pw), font(DisplayField::defaultFont) {}
+		: SingleButton(py, px, pw) {}
 
-	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;	
+	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;
+	
+	static void SetFont(LcdFont f) { font = f; }
 };
 
 // Character button. The character on the button is the same as the integer event parameter.

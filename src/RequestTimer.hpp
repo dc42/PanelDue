@@ -14,10 +14,11 @@ class RequestTimer
 	enum { stopped, running, ready } timerState;
 	uint32_t startTime;
 	uint32_t delayTime;
-	const char *command;
+	const char * array command;
+	const char * array null extra;
 	
-	public:
-	RequestTimer(uint32_t del, const char *cmd);
+public:
+	RequestTimer(uint32_t del, const char * array cmd, const char * array null ex = nullptr);
 	void SetPending() { timerState = ready; }
 	void Stop() { timerState = stopped; }
 	bool Process();

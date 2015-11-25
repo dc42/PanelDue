@@ -76,6 +76,7 @@ const PixelNumber zFieldWidth = 90;
 const PixelNumber rowTextHeight = 21;	// height of the font we use
 const PixelNumber rowHeight = 28;
 const PixelNumber moveButtonRowSpacing = 12;
+const PixelNumber extrudeButtonRowSpacing = 12;
 const PixelNumber fileButtonRowSpacing = 8;
 const PixelNumber keyboardButtonRowSpacing = 7;		// small enough to show 2 lines of messages
 
@@ -119,6 +120,7 @@ const PixelNumber zFieldWidth = 140;
 const PixelNumber rowTextHeight = 32;	// height of the font we use
 const PixelNumber rowHeight = 48;
 const PixelNumber moveButtonRowSpacing = 20;
+const PixelNumber extrudeButtonRowSpacing = 20;
 const PixelNumber fileButtonRowSpacing = 12;
 const PixelNumber keyboardButtonRowSpacing = 12;
 
@@ -197,6 +199,11 @@ const PixelNumber movePopupWidth = fullPopupWidth;
 const PixelNumber movePopupHeight = (5 * buttonHeight) + (4 * moveButtonRowSpacing) + (2 * popupTopMargin);
 const PixelNumber movePopupX = (DisplayX - movePopupWidth)/2;
 const PixelNumber movePopupY = (DisplayY - movePopupHeight)/2;
+
+const PixelNumber extrudePopupWidth = fullPopupWidth;
+const PixelNumber extrudePopupHeight = (5 * buttonHeight) + (4 * extrudeButtonRowSpacing) + (2 * popupTopMargin);
+const PixelNumber extrudePopupX = (DisplayX - extrudePopupWidth)/2;
+const PixelNumber extrudePopupY = (DisplayY - extrudePopupHeight)/2;
 
 const PixelNumber keyboardButtonWidth = DisplayX/5;
 const PixelNumber keyboardPopupWidth = fullPopupWidth;
@@ -289,11 +296,12 @@ extern IntegerButton *extrusionFactors[maxHeaters];
 extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm;
 extern ProgressBar *printProgressBar;
 extern SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
-extern SingleButton *moveButton, *extrudeButton, *fanButton, *macroButton;
+extern SingleButton *moveButton, *extrudeButton, *macroButton;
 extern TextButton *filenameButtons[numDisplayedFiles], *languageButton;
-extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton;
+extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton;
 extern SingleButton *homeButtons[3], *homeAllButton;
 extern TextButton *bedCompButton;
+extern ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
 extern StaticTextField *nameField, *statusField, *filePopupTitleField;
 extern SingleButton *heaterStates[maxHeaters];
 extern StaticTextField *touchCalibInstruction;
@@ -304,7 +312,7 @@ extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot
 extern ButtonBase * null currentTab;
 extern ButtonPress fieldBeingAdjusted;
 extern ButtonPress currentButton;
-extern PopupWindow *setTempPopup, *movePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
+extern PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
 extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
 
 // Event numbers, used to say what we need to do when a field is touched
@@ -320,8 +328,9 @@ enum Event : uint8_t
 	evSelectHead, evAdjustActiveTemp, evAdjustStandbyTemp,
 	
 	// Control functions
-	evMove, evExtrude, evFan, evListMacros,
+	evMovePopup, evExtrudePopup, evFan, evListMacros,
 	evMoveX, evMoveY, evMoveZ,
+	evExtrudeAmount, evExtrudeRate, evExtrude, evRetract,
 	
 	// Print functions
 	evExtrusionFactor,
@@ -331,12 +340,12 @@ enum Event : uint8_t
 	evListFiles,
 
 	evFile, evMacro,
-	evPrint, evCancelPrint,
+	evPrint,
 	evSendCommand,
 	evFactoryReset,
 	evAdjustSpeed,
 	
-	evScrollFiles,
+	evScrollFiles, evFilesUp, evMacrosUp,
 	
 	evKeyboard,
 

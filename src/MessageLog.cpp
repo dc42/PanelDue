@@ -102,45 +102,55 @@ namespace MessageLog
 	}
 
 	// Add a message to the end of the list. It will be just off the visible part until we scroll it in.
-	void AppendMessage(const char* data)
+	void AppendMessage(const char* array data)
 	{
-		bool split;
-		unsigned int numLines = 0;
-		do
+		// Skip any leading spaces, we don't have room on the display to waste
+		while (*data == ' ')
 		{
-			++numLines;
-			size_t msgRow = (messageStartRow + numLines + numMessageRows - 1) % (numMessageRows + 1);
-			size_t splitPoint;
+			++data;
+		}
+		
+		// Discard empty messages
+		if (*data != 0)
+		{
+			bool split;
+			unsigned int numLines = 0;
+			do
+			{
+				++numLines;
+				size_t msgRow = (messageStartRow + numLines + numMessageRows - 1) % (numMessageRows + 1);
+				size_t splitPoint;
 			
-			// See if the rest of the message will fit on one line
-			if (numLines == numMessageRows)
-			{
-				split = false;		// if we have printed the maximum number of rows, don't split any more, just truncate
-			}
-			else
-			{
-				splitPoint = FindSplitPoint(data, maxMessageChars, messageTextWidth);
-				split = data[splitPoint] != '\0';
-			}
-			
-			if (split)
-			{
-				safeStrncpy(messages[msgRow].msg, data, splitPoint + 1);
-				data += splitPoint;
-				if (data[0] == ' ')
+				// See if the rest of the message will fit on one line
+				if (numLines == numMessageRows)
 				{
-					++data;			// if we split just before a space, don't show the space
+					split = false;		// if we have printed the maximum number of rows, don't split any more, just truncate
 				}
-			}
-			else
-			{
-				safeStrncpy(messages[msgRow].msg, data, maxMessageChars + 1);
-			}
+				else
+				{
+					splitPoint = FindSplitPoint(data, maxMessageChars, messageTextWidth);
+					split = data[splitPoint] != '\0';
+				}
 			
-			messages[msgRow].receivedTime = (numLines == 1) ? SystemTick::GetTickCount() : 0;
-		} while (split && data[0] != '\0');
+				if (split)
+				{
+					safeStrncpy(messages[msgRow].msg, data, splitPoint + 1);
+					data += splitPoint;
+					if (data[0] == ' ')
+					{
+						++data;			// if we split just before a space, don't show the space
+					}
+				}
+				else
+				{
+					safeStrncpy(messages[msgRow].msg, data, maxMessageChars + 1);
+				}
+			
+				messages[msgRow].receivedTime = (numLines == 1) ? SystemTick::GetTickCount() : 0;
+			} while (split && data[0] != '\0');
 
-		newMessageStartRow = (messageStartRow + numLines) % (numMessageRows + 1);
+			newMessageStartRow = (messageStartRow + numLines) % (numMessageRows + 1);
+		}
 	}
 
 	// If there is a new message, scroll it in

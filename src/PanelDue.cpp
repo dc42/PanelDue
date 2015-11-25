@@ -38,6 +38,7 @@ const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
 const uint32_t printerResponseInterval = 1500;		// shortest time after a response that we send another poll (gives printer time to catch up)
 const uint32_t printerPollTimeout = 8000;			// poll timeout in milliseconds
 const uint32_t FileInfoRequestTimeout = 8000;		// file info request timeout in milliseconds
+const uint32_t MachineConfigRequestTimeout = 8000;	// machine configuration timeout in milliseconds
 const uint32_t touchBeepLength = 20;				// beep length in ms
 const uint32_t touchBeepFrequency = 4500;			// beep frequency in Hz. Resonant frequency of the piezo sounder is 4.5kHz.
 const uint32_t errorBeepLength = 100;
@@ -66,6 +67,7 @@ static unsigned int numHeads = 1;
 static unsigned int messageSeq = 0;
 static unsigned int newMessageSeq = 0;
 static int oldIntValue;
+static bool keyboardIsDisplayed = false;
 
 static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
 
@@ -176,12 +178,8 @@ static Event eventToConfirm = evNull;
 const size_t numHeaters = 3;
 int heaterStatus[numHeaters];
 
-bool OkToSend();		// forward declaration
-
-RequestTimer macroListTimer(FileInfoRequestTimeout, "M20 S2 P/macros");
-RequestTimer filesListTimer(FileInfoRequestTimeout, "M20 S2 P/gcodes");
 RequestTimer fileInfoTimer(FileInfoRequestTimeout, "M36");
-RequestTimer machineConfigTimer(FileInfoRequestTimeout, "M408 S1");
+RequestTimer machineConfigTimer(MachineConfigRequestTimeout, "M408 S1");
 
 bool FlashData::operator==(const FlashData& other)
 {
@@ -276,6 +274,8 @@ void ChangeTab(ButtonBase *newTab)
 		}
 		newTab->Press(true, 0);
 		currentTab = newTab;
+		mgr.ClearPopup(false);
+		mgr.ClearPopup(false);				// in case there is more than one
 		switch(newTab->GetEvent())
 		{
 		case evTabControl:
@@ -288,6 +288,10 @@ void ChangeTab(ButtonBase *newTab)
 			break;
 		case evTabMsg:
 			mgr.SetRoot(messageRoot);
+			if (keyboardIsDisplayed)
+			{
+				mgr.SetPopup(keyboardPopup, 0, 0, false);
+			}
 			break;
 		case evTabSetup:
 			mgr.SetRoot(setupRoot);
@@ -470,6 +474,26 @@ void CurrentButtonReleased()
 	}
 }
 
+// Nasty hack to work around bug in RepRapFirmware 1.09k and earlier
+// The M23 and M30 commands don't work if we send the full path, because "0:/gcodes/" gets prepended regardless.
+const char * array StripPrefix(const char * array dir)
+{
+	const size_t len = strlen(dir);
+	if (len >= 8 && memcmp(dir, "/gcodes/", 8) == 0)
+	{
+		dir += 8;
+	}
+	else if (len >= 10 && memcmp(dir, "0:/gcodes/", 10) == 0)
+	{
+		dir += 10;
+	}
+	else if (strcmp(dir, "/gcodes") == 0 || strcmp(dir, "0:/gcodes") == 0)
+	{
+		dir += len;
+	}
+	return dir;
+}
+
 // Process a touch event
 void ProcessTouch(ButtonPress bp)
 {
@@ -604,10 +628,10 @@ void ProcessTouch(ButtonPress bp)
 			}
 			break;
 
-		case evMove:
+		case evMovePopup:
 			mgr.SetPopup(movePopup, movePopupX, movePopupY);
 			break;
-		
+
 		case evMoveX:
 		case evMoveY:
 		case evMoveZ:
@@ -615,6 +639,40 @@ void ProcessTouch(ButtonPress bp)
 			SerialIo::SendChar((ev == evMoveX) ? 'X' : (ev == evMoveY) ? 'Y' : 'Z');
 			SerialIo::SendString(bp.GetSParam());
 			SerialIo::SendString(" F6000\nG90\n");
+			break;
+
+		case evExtrudePopup:
+			mgr.SetPopup(extrudePopup, extrudePopupX, extrudePopupY);
+			break;
+
+		case evExtrudeAmount:
+			mgr.Press(currentExtrudeAmountPress, false);
+			mgr.Press(bp, true);
+			currentExtrudeAmountPress = bp;
+			currentButton.Clear();						// stop it being released by the timer
+			break;
+
+		case evExtrudeRate:
+			mgr.Press(currentExtrudeRatePress, false);
+			mgr.Press(bp, true);
+			currentExtrudeRatePress = bp;
+			currentButton.Clear();						// stop it being released by the timer
+			break;
+
+		case evExtrude:
+		case evRetract:
+			if (currentExtrudeAmountPress.IsValid() && currentExtrudeRatePress.IsValid())
+			{
+				SerialIo::SendString("G92 E0\nG1 E");
+				if (ev == evRetract)
+				{
+					SerialIo::SendChar('-');
+				}
+				SerialIo::SendString(currentExtrudeAmountPress.GetSParam());
+				SerialIo::SendString(" F");
+				SerialIo::SendString(currentExtrudeRatePress.GetSParam());
+				SerialIo::SendChar('\n');
+			}
 			break;
 
 		case evListFiles:
@@ -674,28 +732,46 @@ void ProcessTouch(ButtonPress bp)
 	
 		case evFile:
 			{
-				const char *fileName = bp.GetSParam();
+				const char * array fileName = bp.GetSParam();
 				if (fileName != nullptr)
 				{
-					currentFile = fileName;
-					SerialIo::SendString("M36 /gcodes/");			// ask for the file info
-					SerialIo::SendString(currentFile);
-					SerialIo::SendChar('\n');
-					fpNameField->SetValue(currentFile);
-					// Clear out the old field values, they relate to the previous file we looked at until we process the response
-					fpSizeField->SetValue(0);						// would be better to make it blank
-					fpHeightField->SetValue(0.0);					// would be better to make it blank
-					fpLayerHeightField->SetValue(0.0);				// would be better to make it blank
-					fpFilamentField->SetValue(0);					// would be better to make it blank
-					generatedByText.clear();
-					fpGeneratedByField->SetChanged();
-					mgr.SetPopup(filePopup, (DisplayX - fileInfoPopupWidth)/2, (DisplayY - fileInfoPopupHeight)/2);
+					if (fileName[0] == '*')
+					{
+						// It's a directory
+						FileManager::RequestFilesSubdir(fileName + 1);
+						//??? need to pop up a "wait" box here
+					}
+					else
+					{
+						// It's a regular file
+						currentFile = fileName;
+						SerialIo::SendString("M36 ");			// ask for the file info
+						SerialIo::SendFilename(FileManager::GetFilesDir(), currentFile);
+						SerialIo::SendChar('\n');
+						fpNameField->SetValue(currentFile);
+						// Clear out the old field values, they relate to the previous file we looked at until we process the response
+						fpSizeField->SetValue(0);						// would be better to make it blank
+						fpHeightField->SetValue(0.0);					// would be better to make it blank
+						fpLayerHeightField->SetValue(0.0);				// would be better to make it blank
+						fpFilamentField->SetValue(0);					// would be better to make it blank
+						generatedByText.clear();
+						fpGeneratedByField->SetChanged();
+						mgr.SetPopup(filePopup, (DisplayX - fileInfoPopupWidth)/2, (DisplayY - fileInfoPopupHeight)/2);
+					}
 				}
 				else
 				{
 					ErrorBeep();
 				}
 			}
+			break;
+
+		case evFilesUp:
+			FileManager::RequestFilesParentDir();
+			break;
+
+		case evMacrosUp:
+			FileManager::RequestMacrosParentDir();
 			break;
 
 		case evMacro:
@@ -705,12 +781,13 @@ void ProcessTouch(ButtonPress bp)
 				{
 					if (fileName[0] == '*')		// if it's a directory
 					{
-					
+						FileManager::RequestMacrosSubdir(fileName + 1);
+						//??? need to pop up a "wait" box here					
 					}
 					else
 					{
-						SerialIo::SendString("M98 P/macros/");
-						SerialIo::SendString(fileName);
+						SerialIo::SendString("M98 P");
+						SerialIo::SendFilename(FileManager::GetMacrosDir(), fileName);
 						SerialIo::SendChar('\n');
 					} 
 				}
@@ -727,7 +804,7 @@ void ProcessTouch(ButtonPress bp)
 			if (currentFile != nullptr)
 			{
 				SerialIo::SendString("M32 ");
-				SerialIo::SendString(currentFile);
+				SerialIo::SendFilename(StripPrefix(FileManager::GetFilesDir()), currentFile);
 				SerialIo::SendChar('\n');
 				printingFile.copyFrom(currentFile);
 				currentFile = nullptr;							// allow the file list to be updated
@@ -736,10 +813,15 @@ void ProcessTouch(ButtonPress bp)
 			}
 			break;
 
-		case evCancelPrint:
+		case evCancel:
+			eventToConfirm = evNull;
+			currentFile = nullptr;
 			CurrentButtonReleased();
+			if (mgr.GetPopup() == keyboardPopup)
+			{
+				keyboardIsDisplayed = false;
+			}
 			mgr.ClearPopup();
-			currentFile = nullptr;								// allow the file list to be updated
 			break;
 
 		case evDeleteFile:
@@ -762,6 +844,7 @@ void ProcessTouch(ButtonPress bp)
 
 		case evKeyboard:
 			mgr.SetPopup(keyboardPopup, keyboardPopupX, keyboardPopupY);
+			keyboardIsDisplayed = true;
 			break;
 
 		case evInvertX:
@@ -818,7 +901,7 @@ void ProcessTouch(ButtonPress bp)
 
 		case evYes:
 			CurrentButtonReleased();
-			mgr.ClearPopup();
+			mgr.ClearPopup();								// clear the yes/no popup
 			switch (eventToConfirm)
 			{
 			case evFactoryReset:
@@ -828,10 +911,11 @@ void ProcessTouch(ButtonPress bp)
 			case evDeleteFile:
 				if (currentFile != nullptr)
 				{
+					mgr.ClearPopup();						// clear the file info popup
 					SerialIo::SendString("M30 ");
-					SerialIo::SendString(currentFile);
+					SerialIo::SendFilename(StripPrefix(FileManager::GetFilesDir()), currentFile);
 					SerialIo::SendChar('\n');
-					filesListTimer.SetPending();
+					FileManager::RefreshFilesList();
 					currentFile = nullptr;
 				}
 				break;
@@ -848,14 +932,7 @@ void ProcessTouch(ButtonPress bp)
 				break;
 			}
 			eventToConfirm = evNull;
-			currentFile = NULL;
-			break;
-
-		case evCancel:
-			eventToConfirm = evNull;
 			currentFile = nullptr;
-			CurrentButtonReleased();
-			mgr.ClearPopup();
 			break;
 
 		case evKey:
@@ -903,38 +980,76 @@ void ProcessTouch(ButtonPress bp)
 }
 
 // Process a touch event outside the popup on the field being adjusted
-void ProcessTouchOutsidePopup()
+void ProcessTouchOutsidePopup(ButtonPress bp)
+pre(bp.IsValid())
 {
-	switch(fieldBeingAdjusted.GetEvent())
+	if (bp == fieldBeingAdjusted)
 	{
-	case evAdjustSpeed:
-	case evExtrusionFactor:
-	case evAdjustFan:
-		static_cast<IntegerButton*>(fieldBeingAdjusted.GetButton())->SetValue(oldIntValue);
-		mgr.ClearPopup();
-		StopAdjusting();
-		break;
-
-	case evAdjustActiveTemp:
-	case evAdjustStandbyTemp:
-	case evSetBaudRate:
-	case evSetVolume:
-		mgr.ClearPopup();
-		StopAdjusting();
-		break;
-
-	case evSetLanguage:
-		mgr.ClearPopup();
-		StopAdjusting();
-		if (nvData.language != savedNvData.language)
+		DelayTouchLong();	// by default, ignore further touches for a long time
+		TouchBeep();
+		switch(fieldBeingAdjusted.GetEvent())
 		{
-			restartNeeded = true;
-			PopupRestart();
+		case evAdjustSpeed:
+		case evExtrusionFactor:
+		case evAdjustFan:
+			static_cast<IntegerButton*>(fieldBeingAdjusted.GetButton())->SetValue(oldIntValue);
+			mgr.ClearPopup();
+			StopAdjusting();
+			break;
+
+		case evAdjustActiveTemp:
+		case evAdjustStandbyTemp:
+		case evSetBaudRate:
+		case evSetVolume:
+			mgr.ClearPopup();
+			StopAdjusting();
+			break;
+
+		case evSetLanguage:
+			mgr.ClearPopup();
+			StopAdjusting();
+			if (nvData.language != savedNvData.language)
+			{
+				restartNeeded = true;
+				PopupRestart();
+			}
+			break;
 		}
-		break;
-	
-	default:
-		break;
+	}
+	else
+	{
+		switch(bp.GetEvent())
+		{
+		case evTabControl:
+		case evTabPrint:
+		case evTabMsg:
+		case evTabSetup:
+			StopAdjusting();
+			DelayTouchLong();	// by default, ignore further touches for a long time
+			TouchBeep();
+			ChangeTab(bp.GetButton());
+			break;
+
+		case evSetBaudRate:
+		case evSetVolume:
+		case evSetLanguage:
+		case evCalTouch:
+		case evInvertX:
+		case evInvertY:
+		case evSaveSettings:
+		case evFactoryReset:
+		case evRestart:
+			// On the Setup tab, we allow any other button to be pressed to exit the current popup
+			StopAdjusting();
+			DelayTouchLong();	// by default, ignore further touches for a long time
+			TouchBeep();
+			mgr.ClearPopup();
+			ProcessTouch(bp);
+			break;
+
+		default:
+			break;
+		}
 	}
 }
 
@@ -982,7 +1097,7 @@ void SetStatus(char c)
 	{
 	case 'A':
 		newStatus = PrinterStatus::paused;
-		fileInfoTimer.SetPending();
+		FileManager::RefreshFilesList();
 		break;
 	case 'B':
 		newStatus = PrinterStatus::busy;
@@ -999,7 +1114,7 @@ void SetStatus(char c)
 		break;
 	case 'P':
 		newStatus = PrinterStatus::printing;
-		fileInfoTimer.SetPending();
+		FileManager::RefreshFilesList();
 		break;
 	case 'R':
 		newStatus = PrinterStatus::resuming;
@@ -1563,11 +1678,7 @@ int main(void)
 
 	lastPollTime = SystemTick::GetTickCount() - printerPollInterval;	// allow a poll immediately
 	
-	// Hide the buttons that are ot implemented yet
-	extrudeButton->Show(false);
-	fanButton->Show(false);
-	
-	// Hide the Head 2 parameters until we know we have a second head
+	// Hide the Head 2+ parameters until we know we have a second head
 	for (unsigned int i = 2; i < maxHeaters; ++i)
 	{
 		currentTemps[i]->Show(false);
@@ -1622,11 +1733,9 @@ int main(void)
 				else
 				{
 					bp = mgr.FindEventOutsidePopup(x, y);
-					if (bp.IsValid() && bp == fieldBeingAdjusted)
+					if (bp.IsValid())
 					{
-						DelayTouchLong();	// by default, ignore further touches for a long time
-						TouchBeep();
-						ProcessTouchOutsidePopup();					
+						ProcessTouchOutsidePopup(bp);					
 					}
 				}
 			}
@@ -1660,11 +1769,7 @@ int main(void)
 				bool done = machineConfigTimer.Process();
 				if (!done)
 				{
-					done = macroListTimer.Process();
-				}
-				if (!done)
-				{
-					done = filesListTimer.Process();
+					done = FileManager::ProcessTimers();
 				}
 				if (!done)
 				{

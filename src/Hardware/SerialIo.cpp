@@ -14,6 +14,14 @@
 namespace SerialIo
 {
 	static unsigned int lineNumber = 0;
+	
+	const char* array trGrave =			"A\xC0" "E\xC8" "I\xCC"         "O\xD2" "U\xD9" "a\xE0" "e\xE8" "i\xEC" "o\xF2" "u\xF9"        ;
+	const char* array trAcute =			"A\xC1" "E\xC9" "I\xCD"         "O\xD3" "U\xDA" "a\xE1" "e\xE9" "i\xED" "o\xF3" "u\xFA" "y\xFD";
+	const char* array trCircumflex =	"A\xC2" "E\xCA" "I\xCE"         "O\xD4" "U\xDB" "a\xE2" "e\xEA" "i\xEE" "o\xF4" "u\xFB"        ;
+	const char* array trTilde =			"A\xC3"                 "N\xD1" "O\xD5"         "a\xE3"                 "o\xF5"                ;
+	const char* array trUmlaut =		"A\xC4" "E\xCB" "I\xCF"         "O\xD6" "U\xDC" "a\xE4" "e\xEB" "i\xEF" "o\xF6" "u\xFC" "y\xFF";
+	const char* array trCircle =		"A\xC5"                                         "a\xE5"                                        ;
+	const char* array trCedilla =		"C\xC7" "c\xE7";
 
 	// Initialize the serial I/O subsystem, or re-initialize it with a new baud rate
 	void Init(uint32_t baudRate)
@@ -85,12 +93,27 @@ namespace SerialIo
 		}
 	}
 	
-	void SendString(const char* array s)
+	void SendString(const char * array s)
 	{
 		while (*s != 0)
 		{
 			SendChar(*s++);
 		}
+	}
+	
+	void SendFilename(const char * array dir, const char * array name)
+	{
+		char c = '\0';
+		while (*dir != 0)
+		{
+			c = *dir++;
+			SendChar(c);
+		}
+		if (c != '/')
+		{
+			SendChar('/');
+		}
+		SendString(name);
 	}
 
 	void SendInt(int i)
@@ -151,6 +174,109 @@ namespace SerialIo
 	{
 		ProcessArrayLength(fieldId.c_str(), arrayElems);
 		arrayElems = -1;
+	}
+	
+	// Look for combining characters in the string value and conbert them if possible
+	static void ConvertUnicode()
+	{
+		unsigned int numContinuationBytesLeft = 0;
+		uint32_t charVal;
+		for (size_t i = 0; i < fieldVal.size(); )
+		{
+			const unsigned char c = fieldVal[i++];
+			if (numContinuationBytesLeft == 0)
+			{
+				if (c >= 0x80)
+				{
+					if ((c & 0xE0) == 0xC0)
+					{
+						charVal = (uint32_t)(c & 0x1F);
+						numContinuationBytesLeft = 1;
+					}
+					else if ((c & 0xF0) == 0xE0)
+					{
+						charVal = (uint32_t)(c & 0x0F);
+						numContinuationBytesLeft = 2;
+					}
+					else if ((c & 0xF8) == 0xF0)
+					{
+						charVal = (uint32_t)(c & 0x07);
+						numContinuationBytesLeft = 3;
+					}
+					else if ((c & 0xFC) == 0xF8)
+					{
+						charVal = (uint32_t)(c & 0x03);
+						numContinuationBytesLeft = 4;
+					}
+					else if ((c & 0xFE) == 0xFC)
+					{
+						charVal = (uint32_t)(c & 0x01);
+						numContinuationBytesLeft = 5;
+					}
+				}
+			}
+			else if ((c & 0xC0) == 0x80)
+			{
+				charVal = (charVal << 6) | (c & 0x3F);
+				--numContinuationBytesLeft;
+				if (numContinuationBytesLeft == 0)
+				{
+					const char* array trtab;
+					switch(charVal)
+					{
+					case 0x0300:	// grave accent
+						trtab = trGrave;
+						break;
+					case 0x0301:	// acute accent
+						trtab = trAcute;
+						break;
+					case 0x0302:	// circumflex
+						trtab = trCircumflex;
+						break;
+					case 0x0303:	// tilde
+						trtab = trTilde;
+						break;
+					case 0x0308:	// umlaut
+						trtab = trUmlaut;
+						break;
+					case 0x030A:	// small circle
+						trtab = trCircle;
+						break;
+					case 0x327:		// cedilla
+						trtab = trCedilla;
+						break;
+					default:
+						trtab = nullptr;
+						break;
+					}
+
+					// If it is a diacritical mark that we handle, try to combine it with the previous character.
+					// The diacritical marks are in the range 03xx so they are encoded as 2 UTF8 bytes.
+					if (trtab != nullptr && i > 2)
+					{
+						const char c2 = fieldVal[i - 3];
+						while (*trtab != 0 && *trtab != c2)
+						{
+							trtab += 2;
+						}
+						if (*trtab != 0)
+						{
+							// Get he translated character and encode it as 2 ITF8 bytes
+							const unsigned char c3 = trtab[1];
+							fieldVal[i - 3] = (c3 >> 6) | 0xC0;
+							fieldVal[i - 2] = (c3 & 0x3F) | 0x80;
+							fieldVal.erase(i - 1);
+							--i;
+						}
+					}
+				}
+			}
+			else
+			{
+				// Bad UTF8 state
+				numContinuationBytesLeft = 0;
+			}
+		}
 	}
 	
 	void CheckInput()
@@ -280,6 +406,7 @@ namespace SerialIo
 					switch (c)
 					{
 					case '"':
+						ConvertUnicode();
 						ProcessField();
 						state = jsEndVal;
 						break;

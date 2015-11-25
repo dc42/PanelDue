@@ -172,7 +172,7 @@ ButtonPress Window::FindEventOutsidePopup(PixelNumber x, PixelNumber y)
 	return (f.IsValid() && Visible(f.GetButton())) ? f : ButtonPress();
 }
 
-void Window::SetPopup(PopupWindow * p, PixelNumber px, PixelNumber py)
+void Window::SetPopup(PopupWindow * p, PixelNumber px, PixelNumber py, bool redraw)
 {
 	p->SetPos(px, py);
 	Window *pw = this;
@@ -186,10 +186,13 @@ void Window::SetPopup(PopupWindow * p, PixelNumber px, PixelNumber py)
 	}
 	p->next = nullptr;			// ensure no nested popup
 	pw->next = p;
-	p->Refresh(true);
+	if (redraw)
+	{
+		p->Refresh(true);
+	}
 }
 
-void Window::ClearPopup()
+void Window::ClearPopup(bool redraw)
 {
 	if (next != nullptr)
 	{
@@ -206,13 +209,16 @@ void Window::ClearPopup()
 		
 		// Detach the last window
 		pw->next = nullptr;
-			
-		// Re-display the fields of the penultimate window that were obscured
-		for (DisplayField * null pp = pw->root; pp != nullptr; pp = pp->next)
+
+		if (redraw)
 		{
-			if (pp->IsVisible())
+			// Re-display the fields of the penultimate window that were obscured
+			for (DisplayField * null pp = pw->root; pp != nullptr; pp = pp->next)
 			{
-				pp->Refresh(true, pw->Xpos(), pw->Ypos());
+				if (pp->IsVisible())
+				{
+					pp->Refresh(true, pw->Xpos(), pw->Ypos());
+				}
 			}
 		}
 	}
@@ -288,10 +294,13 @@ void Window::Show(DisplayField *f, bool v)
 // Show the button as pressed or not
 void Window::Press(ButtonPress bp, bool v)
 {
-	bp.GetButton()->Press(v, bp.GetIndex());
-	if (bp.GetButton()->IsVisible())		// need to check this in case we are releasing the button and it has gone invisible since we pressed it
+	if (bp.IsValid())
 	{
-		Redraw(bp.GetButton());
+		bp.GetButton()->Press(v, bp.GetIndex());
+		if (bp.GetButton()->IsVisible())		// need to check this in case we are releasing the button and it has gone invisible since we pressed it
+		{
+			Redraw(bp.GetButton());
+		}
 	}
 }
 
@@ -461,6 +470,8 @@ void SingleButton::DrawOutline(PixelNumber xOffset, PixelNumber yOffset) const
 {
 	ButtonBase::DrawOutline(xOffset, yOffset, pressed);
 }
+
+/*static*/ LcdFont ButtonWithText::font;
 
 void ButtonWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {

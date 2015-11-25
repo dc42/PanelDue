@@ -104,6 +104,12 @@ public:
 	{
 		this->clear();
 	}
+	
+	String(const char* array s) : Vector<char, N + 1>()
+	{
+		this->clear();
+		this->copyFrom(s);
+	}
 
 	// Redefine 'full' so as to make room for a null terminator
 	bool full() const { return this->filled == N; }
@@ -143,6 +149,11 @@ public:
 	{
 		this->clear();
 		this->catFrom(s);
+	}
+	
+	template<size_t M> void copyFrom(String<M> s)
+	{
+		copyFrom(s.c_str());
 	}
 	
 	int sprintf(const char *fmt, ...);
