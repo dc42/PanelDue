@@ -17,19 +17,21 @@
 Itead43=false;
 Itead50=false;
 Other43=false;
-Other50=true;
+Other50=false;
+Other70=true;
 
 Encoder=false;					// true if hole wanted for rotary encoder
 Lid=false;						// true if lid required
 screw=true;						// set if screw lid
 Mount=false;
+Lip=false;							// true if lip wanted for hanging off the top extrusion of a delta
 RelieveOverhang=0;				// see note 1 above
 
 // Set up the main enclosure parameters
 MWall=2.4;						// Main box MWall thickness (multiple of extrusion width)
 MBase=2;							// Main box MBase (front panel) thickness
 MRad=MWall;						// MMRadius of box edges
-Mclearance= (Lid) ? 5 : 2;		// clearance between board edge and inside of box
+Mclearance= (Lid) ? 5 : 1;		// clearance between board edge and inside of box
 MBez=1;							// This is the thickness covering the non-visible
 									// part of the LCD display (MBase thickness - recess)
 MLip=20;							// width of lip
@@ -41,14 +43,14 @@ USBclear=2;						// Clearance to leave all around USB connector
 ResetHoleSide=2;					// Side of the square reset hole
 BuzzerHoleSide=1.5;				// Side of the square buzzer holes
 
-ResetGuideInnerRadius=2;
+ResetGuideInnerRadius=1.5;
 ResetGuideOuterRadius=4.4;
 
 MountHeight=32;					// Height at which to put appjaws1's mount
 
 //************ Leave what follows alone unless you want to change the design ****************
 
-Left=Other43 || Other50;		//true if controller board to left of display
+Left=Other43 || Other50 || Other70;		//true if controller board to left of display
 Bottom=Itead43 || Itead50;		//true if controller board below the display
 Right=false;
 SmTol=0.1;						//small tolerence
@@ -67,26 +69,28 @@ Front=true;
 LCDscrn =   (Itead43) ? [0,105.6,0,67.8]
 			: (Itead50) ? [0,119,0,78.6]
 			: (Other43) ? [0,106,0,67.8]
-			:             [0,119.5,0,78.5];	// The edges of the whole LCD screen area [Left,Right,Bottom,Top]
+			: (Other50) ? [0,119.5,0,78.5]	// The edges of the whole LCD screen area [Left,Right,Bottom,Top]
+			:             [0,165.5,0,101];
 
 LCDview =   (Itead43) ? [3,103,7,64.8]
 			: (Itead50) ? [2.5,114.5,3,71.5]
 			: (Other43) ? [3,103,7,64.8]
-			:             [4.5,118,6,77];	// The edges of the visible region of the LCD screen (L,R,B,T)
+			: (Other50) ? [4.5,118,6,77]		// The edges of the visible region of the LCD screen (L,R,B,T)
+			:             [4,158.5,8.5,96];
 
 LCDmounts= (Itead43) ?
 			  [
 				[2.7,-3.1],
 				[102.3,-3.1],
 				[2.7,70.9],
-				[102.3,70.9],
+				[102.3,70.9]
 			  ]
 			: (Itead50) ?
 			  [
 				[1.5,-4.3],
 				[116.5,-4.3],
 				[1.5,83.2],
-				[116.5,83.2],
+				[116.5,83.2]
 			  ]
 			: (Other43) ? [		// Enter the relative coordinates [X,Y] of each mounting hole
 				[-3.5,0],			// You may have as many mounting holes as you like
@@ -94,29 +98,38 @@ LCDmounts= (Itead43) ?
 				[-3.5,67.8],		// so that holes do not have to be on a rectangular pitch
 				[110.5,67.8]		// ... add/remove as needed for modules with more/less mounting holes
 			  ]
-			: [
+			: (Other50) ? [
 				[-4,-0.5],
 				[124,-0.5],
 				[-4,78],
-				[124,78],
+				[124,78]
+			  ]
+			:             [
+			   [-5,-0.5],
+			   [169.5,-0.5],
+			   [-5,101.5],
+			   [169.5,101.5]
 			  ];					
 
 LCDpcb =    (Itead43) ? [-1,106,-6.1,73.6]
 			: (Itead50) ? [-1,119.2,-7.8,85.4]
 			: (Other43) ? [-7,113,-3.2,71]
-			:             [-7,126.5,-3.5,80.5];	// The edges of the LCD PCB [Left,Right,Bottom,Top]
+			: (Other50) ? [-7,126.5,-3.5,80.5]	// The edges of the LCD PCB [Left,Right,Bottom,Top]
+			:             [-8,173,-4,105];
 
 LCDheight = (Itead43) ? 5.3 
 			: (Itead50) ? 5.0 
 			: (Other43) ? 5.3 
-			: 5.3;					// Height of top surface of LCD above PCB (mount standoff height)
+			: (Other50) ? 5.3					// Height of top surface of LCD above PCB (mount standoff height)
+			:             7.45;
 
 LCDpin1=	  (Itead43) ? [28.2,-5.0] 
 			: (Itead50) ? [35.8,-5.0]
 			: (Other43) ? [110.8,10.0]
-			: [124.27,14.37];
+			: (Other50) ? [124.27,14.37]
+			:             [170,26];
 
-LCDmnthole=2.2;					// Hole to take self-tapping screw
+LCDmnthole=2.5;					// Hole to take self-tapping screw
 LCDbossDia=7;						// Diameter of boss under each mounting hole
 LCDbossD2=LCDbossDia*2;			// MBase diameter of boss supports
 LCDbossFR=(LCDbossDia-LCDmnthole)/2; // Bottom fillet MMRadius of bosses
@@ -141,7 +154,7 @@ PCBbuzzer=[37.8,50.5];			// Coordinates of buzzer
 
 PCBshaftDia=7;					// Diameter of hole for rotary encoder shaft
 PCBheight=13;						// Height controller PCB above LCD standoff
-PCBmnthole=2.2;					// Hole to take self-tapping screw
+PCBmnthole=2.5;					// Hole to take self-tapping screw
 PCBbossDia=7;						// Diameter of boss under each mounting hole
 PCBbossD2=PCBbossDia*2;			// MBase diameter of boss supports
 PCBbossFR=(PCBbossDia-PCBmnthole)/2; // Bottom fillet MMRadius of bosses
@@ -153,6 +166,7 @@ MLen= (Left) ? LCDpin1[0] - LCDpcb[0] + PCB[1] - PCBpin1[0] + 2*Mclearance
 MWid= (Bottom) ? LCDpcb[3] - LCDpin1[1] + PCB[1] - PCBpin1[0] + 2*Mclearance
 				: LCDpcb[3] - LCDpcb[2] + 2*Mclearance;		// Cavity width
 MHt=PCBheight+LCDheight+MBez+4.5;								// Cavity height
+MActualLip = (Lip) ? MLip : 0;
 
 // Set the positions & orientation of LCD and PCB within the enclosure
 // NOTE - these are offsets from center of enclosure to origin of LCD
@@ -168,7 +182,7 @@ PCBpos=[	LCDpos[0] + LCDpin1[0] - PCBpin1[(Bottom) ? 1 : 0],
 		];					// XY position of controller PCB origin from case center.
 PCBrot= (Itead43 || Itead50) ? -90 : 0;	// Degrees to rotate controller PCB within enclosure
 
-USBsize=[8,3];					// Length and height of USB connector on PCB
+USBsize=[9.5,7];					// Length and height of USB connector on PCB
 
 DuetConLen=10;
 DuetConWid=6;
@@ -208,7 +222,7 @@ mirror([Front ? 1:0,0,0])
 			RoundBox(MLen+2*MWall,MWid+2*MWall,MHt+MBase,MRad,MWall,MBase);
 			translate([0,MWid/2,0])
 				difference() {
-					RoundCube(MLen+2*MWall,2*(MLip+MWall),MBase+10,MRad);
+					RoundCube(MLen+2*MWall,2*(MActualLip+MWall),MBase+10,MRad);
 					translate([-200,-200,MLipThickness]) cube([400,400,50]);
 					translate([-200,-200,-overlap]) cube([400,200,50]);
 					translate([-50,10+MWall,-overlap]) cylinder(r=M3clear,h=20);
