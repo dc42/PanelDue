@@ -425,6 +425,7 @@ protected:
 
 public:
 	IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic, event_t e, int param = 0);
+	IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic, event_t e, const char * array param);
 
 	void Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset) override final;
 };

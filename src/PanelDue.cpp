@@ -34,8 +34,8 @@
 #include "RequestTimer.hpp"
 #include "MessageLog.hpp"
 
-const uint32_t printerPollInterval = 2000;			// poll interval in milliseconds
-const uint32_t printerResponseInterval = 1500;		// shortest time after a response that we send another poll (gives printer time to catch up)
+const uint32_t printerPollInterval = 1000;			// poll interval in milliseconds
+const uint32_t printerResponseInterval = 700;		// shortest time after a response that we send another poll (gives printer time to catch up)
 const uint32_t printerPollTimeout = 8000;			// poll timeout in milliseconds
 const uint32_t FileInfoRequestTimeout = 8000;		// file info request timeout in milliseconds
 const uint32_t MachineConfigRequestTimeout = 8000;	// machine configuration timeout in milliseconds
@@ -45,6 +45,8 @@ const uint32_t errorBeepLength = 100;
 const uint32_t errorBeepFrequency = 2250;
 const uint32_t longTouchDelay = 250;				// how long we ignore new touches for after pressing Set
 const uint32_t shortTouchDelay = 100;				// how long we ignore new touches while pressing up/down, to get a reasonable repeat rate
+const size_t maxUserCommandLength = 40;				// max length of a user gcode command
+const size_t numUserCommandBuffers = 6;				// number of command history buffers plus one
 
 UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
 
@@ -75,6 +77,8 @@ static bool restartNeeded = false;
 
 static int timesLeft[3];
 static String<50> timesLeftText;
+static String<maxUserCommandLength> userCommandBuffers[numUserCommandBuffers];
+static size_t currentUserCommandBuffer = 0, currentHistoryBuffer = 0;;
 
 struct FlashData
 {
@@ -164,7 +168,8 @@ enum ReceivedDataEvent
 	rcvSfactor,
 	rcvSize,
 	rcvStatus,
-	rcvTimesLeft
+	rcvTimesLeft,
+	rcvFanPercent
 };
 
 struct ReceiveDataTableEntry
@@ -285,6 +290,7 @@ void ChangeTab(ButtonBase *newTab)
 		case evTabPrint:
 			mgr.SetRoot(printRoot);
 			nameField->SetValue(PrintInProgress() ? printingFile.c_str() : machineName.c_str());
+			FileManager::RefreshFilesList();
 			break;
 		case evTabMsg:
 			mgr.SetRoot(messageRoot);
@@ -953,13 +959,29 @@ void ProcessTouch(ButtonPress bp)
 			break;
 
 		case evUp:
-			currentUserCommandBuffer = (currentUserCommandBuffer == 0) ? numUserCommandBuffers - 1 : currentUserCommandBuffer - 1;
-			userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());
+			currentHistoryBuffer = (currentHistoryBuffer + numUserCommandBuffers - 1) % numUserCommandBuffers;
+			if (currentHistoryBuffer == currentUserCommandBuffer)
+			{
+				userCommandBuffers[currentUserCommandBuffer].clear();
+			}
+			else
+			{
+				userCommandBuffers[currentUserCommandBuffer].copyFrom(userCommandBuffers[currentHistoryBuffer]);
+			}
+			userCommandField->SetChanged();
 			break;
 
 		case evDown:
-			currentUserCommandBuffer = (currentUserCommandBuffer + 1) % numUserCommandBuffers;
-			userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());
+			currentHistoryBuffer = (currentHistoryBuffer + 1) % numUserCommandBuffers;
+			if (currentHistoryBuffer == currentUserCommandBuffer)
+			{
+				userCommandBuffers[currentUserCommandBuffer].clear();
+			}
+			else
+			{
+				userCommandBuffers[currentUserCommandBuffer].copyFrom(userCommandBuffers[currentHistoryBuffer]);
+			}
+			userCommandField->SetChanged();
 			break;
 
 		case evSendKeyboardCommand:
@@ -967,7 +989,14 @@ void ProcessTouch(ButtonPress bp)
 			{
 				SerialIo::SendString(userCommandBuffers[currentUserCommandBuffer].c_str());
 				SerialIo::SendChar('\n');
-				currentUserCommandBuffer = (currentUserCommandBuffer + 1) % numUserCommandBuffers;
+				
+				// Add the command to the history if it was different frmo the previous command
+				size_t prevBuffer = (currentUserCommandBuffer + numUserCommandBuffers - 1) % numUserCommandBuffers;
+				if (strcmp(userCommandBuffers[currentUserCommandBuffer].c_str(), userCommandBuffers[prevBuffer].c_str()) != 0)
+				{
+					currentUserCommandBuffer = (currentUserCommandBuffer + 1) % numUserCommandBuffers;
+				}
+				currentHistoryBuffer = currentUserCommandBuffer;					
 				userCommandBuffers[currentUserCommandBuffer].clear();
 				userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());
 			}
@@ -1054,9 +1083,10 @@ pre(bp.IsValid())
 }
 
 // Update an integer field, provided it isn't the one being adjusted
+// Don't update it if the value hasn't changed, because that makes the display flicker unnecessarily
 void UpdateField(IntegerButton *f, int val)
 {
-	if (f != fieldBeingAdjusted.GetButton())
+	if (f != fieldBeingAdjusted.GetButton() && f->GetValue() != val)
 	{
 		f->SetValue(val);
 	}
@@ -1097,7 +1127,6 @@ void SetStatus(char c)
 	{
 	case 'A':
 		newStatus = PrinterStatus::paused;
-		FileManager::RefreshFilesList();
 		break;
 	case 'B':
 		newStatus = PrinterStatus::busy;
@@ -1110,11 +1139,9 @@ void SetStatus(char c)
 		break;
 	case 'I':
 		newStatus = PrinterStatus::idle;
-		printingFile.clear();
 		break;
 	case 'P':
 		newStatus = PrinterStatus::printing;
-		FileManager::RefreshFilesList();
 		break;
 	case 'R':
 		newStatus = PrinterStatus::resuming;
@@ -1151,6 +1178,10 @@ void SetStatus(char c)
 			}
 			break;
 			
+		case PrinterStatus::idle:
+			printingFile.clear();
+			break;
+
 		default:
 			nameField->SetValue(machineName.c_str());
 			break;
@@ -1228,6 +1259,7 @@ const ReceiveDataTableEntry arrayDataTable[] =
 {
 	{ rcvActive,		"active" },
 	{ rcvEfactor,		"efactor" },
+	{ rcvFanPercent,	"fanPercent" },
 	{ rcvFilament,		"filament" },
 	{ rcvFiles,			"files" },
 	{ rcvHeaters,		"heaters" },
@@ -1413,19 +1445,36 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvTimesLeft:
-			if (index < 2)			// we ignore the layer-based time because it is often wildly inaccurate
+			if (index < (int)ARRAY_SIZE(timesLeft))
 			{
 				int i;
 				bool b = GetInteger(data, i);
 				if (b && i >= 0 && i < 10 * 24 * 60 * 60 && PrintInProgress())
 				{
 					timesLeft[index] = i;
-					timesLeftText.copyFrom("filament ");
-					AppendTimeLeft(timesLeft[1]);
-					timesLeftText.catFrom(", file ");
+					timesLeftText.copyFrom("file ");
 					AppendTimeLeft(timesLeft[0]);
+					timesLeftText.catFrom(", filament ");
+					AppendTimeLeft(timesLeft[1]);
+					if (DisplayX >= 800)
+					{
+						timesLeftText.catFrom(", layer ");
+						AppendTimeLeft(timesLeft[2]);
+					}
 					timeLeftField->SetValue(timesLeftText.c_str());
 					mgr.Show(timeLeftField, true);
+				}
+			}
+			break;
+
+		case rcvFanPercent:
+			if (index == 0)			// currently we only handle one fan
+			{
+				float f;
+				bool b = GetFloat(data, f);
+				if (b && f >= 0.0 && f <= 100.0)
+				{
+					UpdateField(fanSpeed, (int)(f + 0.5));
 				}
 			}
 			break;
@@ -1552,7 +1601,6 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				{
 					mgr.Show(homeButtons[i], !isDelta);
 				}
-				bedCompButton->SetText((isDelta) ? "Auto cal" : "Bed Comp");
 			}
 			break;
 		
@@ -1688,7 +1736,9 @@ int main(void)
 	}
 	
 	mgr.Show(standbyTemps[0], false);		// currently, we always hide the bed standby temperature because it doesn't do anything
-	
+
+	userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());	// set up to display the current user command
+
 	// Display the Control tab
 	ChangeTab(tabControl);
 	lastResponseTime = SystemTick::GetTickCount();		// pretend we just received a response
@@ -1759,7 +1809,8 @@ int main(void)
 		// When the printer is executing a homing move or other file macro, it may stop responding to polling requests.
 		// Under these conditions, we slow down the rate of polling to avoid building up a large queue of them.
 		uint32_t now = SystemTick::GetTickCount();
-		if (   now - lastPollTime >= printerPollInterval			// if we haven't polled the printer too recently...
+		if (   currentTab != tabSetup								// don't poll while we are in the Setup page
+		    && now - lastPollTime >= printerPollInterval			// if we haven't polled the printer too recently...
 			&& now - lastResponseTime >= printerResponseInterval	// and we haven't had a response too recently
 		   )
 		{

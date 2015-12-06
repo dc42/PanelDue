@@ -103,15 +103,20 @@ namespace SerialIo
 	
 	void SendFilename(const char * array dir, const char * array name)
 	{
-		char c = '\0';
-		while (*dir != 0)
+		if (*dir != 0)
 		{
-			c = *dir++;
-			SendChar(c);
-		}
-		if (c != '/')
-		{
-			SendChar('/');
+			// We have a directory, so send it followed by '/' if necessary
+			char c;
+			while (*dir != 0)
+			{
+				c = *dir++;
+				SendChar(c);
+			}
+			if (c != '/')
+			{
+				SendChar('/');
+			}
+			
 		}
 		SendString(name);
 	}

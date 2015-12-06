@@ -275,8 +275,6 @@ const size_t machineNameLength = 30;
 const size_t printingFileLength = 40;
 const size_t zprobeBufLength = 12;
 const size_t generatedByTextLength = 50;
-const size_t maxUserCommandLength = 40;			// max length of a user gcode command
-const size_t numUserCommandBuffers = 6;			// number of command history buffers plus one
 
 const unsigned int numLanguages = 3;
 extern const char* const longLanguageNames[];
@@ -285,8 +283,6 @@ extern String<machineNameLength> machineName;
 extern String<printingFileLength> printingFile;
 extern String<zprobeBufLength> zprobeBuf;
 extern String<generatedByTextLength> generatedByText;
-extern String<maxUserCommandLength> userCommandBuffers[numUserCommandBuffers];
-extern size_t currentUserCommandBuffer;
 
 extern FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField;
 extern FloatField *xPos, *yPos, *zPos;
@@ -300,7 +296,6 @@ extern SingleButton *moveButton, *extrudeButton, *macroButton;
 extern TextButton *filenameButtons[numDisplayedFiles], *languageButton;
 extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton;
 extern SingleButton *homeButtons[3], *homeAllButton;
-extern TextButton *bedCompButton;
 extern ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
 extern StaticTextField *nameField, *statusField, *filePopupTitleField;
 extern SingleButton *heaterStates[maxHeaters];

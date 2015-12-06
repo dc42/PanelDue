@@ -11,14 +11,7 @@
 #include "PanelDue.hpp"
 #include "Hardware/Buzzer.hpp"
 #include "Fields.hpp"
-
-#if DISPLAY_X == 480
-#include "Icons/Icons_21h.hpp"
-#endif
-
-#if DISPLAY_X == 800
-#include "Icons/Icons_30h.hpp"
-#endif
+#include "Icons/Icons.hpp"
 
 FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField;
 FloatField *xPos, *yPos, *zPos;
@@ -31,9 +24,8 @@ SingleButton *moveButton, *extrudeButton, *macroButton;
 
 TextButton *filenameButtons[numDisplayedFiles], *languageButton;
 SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton;
-SingleButton *homeButtons[3], *homeAllButton;
+SingleButton *homeButtons[3], *homeAllButton, *bedCompButton;
 SingleButton *heaterStates[maxHeaters];
-TextButton *bedCompButton;
 ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
 StaticTextField *nameField, *statusField, *touchCalibInstruction, *filePopupTitleField;
 StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
@@ -51,38 +43,16 @@ String<machineNameLength> machineName;
 String<printingFileLength> printingFile;
 String<zprobeBufLength> zprobeBuf;
 String<generatedByTextLength> generatedByText;
-String<maxUserCommandLength> userCommandBuffers[numUserCommandBuffers];
-size_t currentUserCommandBuffer = 0;
 
 static const char* const languageNames[] = { "EN", "DE", "FR" };
 static_assert(sizeof(languageNames)/sizeof(languageNames[0]) == numLanguages, "Wrong number of languages");
 extern const char* const longLanguageNames[] = { "Keyboard EN", "Tastatur DE", "Clavier FR" };
 static_assert(sizeof(longLanguageNames)/sizeof(longLanguageNames[0]) == numLanguages, "Wrong number of long languages");
 
-#if DISPLAY_X == 480
-const Icon heaterIcons[maxHeaters] = { IconBed_21h, IconNozzle1_21h, IconNozzle2_21h, IconNozzle3_21h, IconNozzle4_21h };
-#define IconOk			IconOk_21h
-#define IconCancel		IconCancel_21h
-#define IconEnter		IconEnter_21h
-#define IconBackspace	IconBackspace_21h
-#define IconUp			IconUp_21h
-#define IconDown		IconDown_21h
-#define IconFiles		IconFiles_21h
-#define IconKeyboard	IconKeyboard_21h
-#define IconTrash		IconTrash_21h
-#endif
-
 #if DISPLAY_X == 800
-const Icon heaterIcons[maxHeaters] = { IconBed_30h, IconNozzle1_30h, IconNozzle2_30h, IconNozzle3_30h, IconNozzle4_30h, IconNozzle5_30h, IconNozzle6_30h };
-#define IconOk			IconOk_30h
-#define IconCancel		IconCancel_30h
-#define IconEnter		IconEnter_30h
-#define IconBackspace	IconBackspace_30h
-#define IconUp			IconUp_30h
-#define IconDown		IconDown_30h
-#define IconFiles		IconFiles_30h
-#define IconKeyboard	IconKeyboard_30h
-#define IconTrash		IconTrash_30h
+const Icon heaterIcons[maxHeaters] = { IconBed, IconNozzle1, IconNozzle2, IconNozzle3, IconNozzle4, IconNozzle5, IconNozzle6 };
+#else
+const Icon heaterIcons[maxHeaters] = { IconBed, IconNozzle1, IconNozzle2, IconNozzle3, IconNozzle4 };
 #endif
 
 namespace Fields
@@ -109,6 +79,16 @@ namespace Fields
 		return f;
 	}
 	
+	// Add an icon button with a string parameter
+	IconButton *AddIconButton(PixelNumber row, unsigned int col, unsigned int numCols, Icon icon, Event evt, const char* param)
+	{
+		PixelNumber width = (DisplayX - 2 * margin + fieldSpacing)/numCols - fieldSpacing;
+		PixelNumber xpos = col * (width + fieldSpacing) + margin;
+		IconButton *f = new IconButton(row - 2, xpos, width, icon, evt, param);
+		mgr.AddField(f);
+		return f;
+	}
+
 	// Create a row of test buttons.
 	// Optionally, set one to 'pressed' and return that one.
 	ButtonPress CreateStringButtonRow(Window * pf, PixelNumber top, PixelNumber left, PixelNumber totalWidth, PixelNumber spacing, unsigned int numButtons,
@@ -207,13 +187,13 @@ namespace Fields
 		mgr.AddField(zProbe = new TextField(row6p3 + labelRowAdjust, columnProbe, probeFieldWidth, TextAlignment::Left, "Probe ", zprobeBuf.c_str()));
 
 		DisplayField::SetDefaultColours(buttonTextColour, notHomedButtonBackColour);
-		homeAllButton = AddTextButton(row7p7, 0, 5, "Home all", evSendCommand, "G28");
-		homeButtons[0] = AddTextButton(row7p7, 1, 5, "Home X", evSendCommand, "G28 X0");
-		homeButtons[1] = AddTextButton(row7p7, 2, 5, "Home Y", evSendCommand, "G28 Y0");
-		homeButtons[2] = AddTextButton(row7p7, 3, 5, "Home Z", evSendCommand, "G28 Z0");
+		homeAllButton = AddIconButton(row7p7, 0, 5, IconHomeAll, evSendCommand, "G28");
+		homeButtons[0] = AddIconButton(row7p7, 1, 5, IconHomeX, evSendCommand, "G28 X0");
+		homeButtons[1] = AddIconButton(row7p7, 2, 5, IconHomeY, evSendCommand, "G28 Y0");
+		homeButtons[2] = AddIconButton(row7p7, 3, 5, IconHomeZ, evSendCommand, "G28 Z0");
 
 		DisplayField::SetDefaultColours(buttonTextColour, buttonBackColour);
-		bedCompButton = AddTextButton(row7p7, 4, 5, "Bed comp", evSendCommand, "G32");
+		bedCompButton = AddIconButton(row7p7, 4, 5, IconBedComp, evSendCommand, "G32");
 
 		moveButton = AddTextButton(row8p7, 0, 3, "Move", evMovePopup, nullptr);
 		extrudeButton = AddTextButton(row8p7, 1, 3, "Extrude", evExtrudePopup, nullptr);
@@ -514,9 +494,9 @@ namespace Fields
 	// Create the pop-up keyboard
 	void CreateKeyboardPopup(uint32_t language)
 	{
-		static const char* array const keysGB[4] = { "1234567890-+", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM." };
-		static const char* array const keysDE[4] = { "1234567890-+", "QWERTZUIOP", "ASDFGHJKL", "YXCVBNM." };
-		static const char* array const keysFR[4] = { "1234567890-+", "AZERTWUIOP", "QSDFGHJKLM", "YXCVBN." };
+		static const char* array const keysGB[4] = { "1234567890-+", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM./" };
+		static const char* array const keysDE[4] = { "1234567890-+", "QWERTZUIOP", "ASDFGHJKL", "YXCVBNM./" };
+		static const char* array const keysFR[4] = { "1234567890-+", "AZERTWUIOP", "QSDFGHJKLM", "YXCVBN./" };
 		static const char* array const * const keyboards[numLanguages] = { keysGB, keysDE, keysFR };
 
 		keyboardPopup = new PopupWindow(keyboardPopupHeight, keyboardPopupWidth, popupBackColour);
@@ -568,7 +548,7 @@ namespace Fields
 		
 		// Add the text area in which the command is built
 		DisplayField::SetDefaultColours(popupInfoTextColour, popupInfoBackColour);
-		userCommandField = new TextField(row, popupSideMargin, keyboardPopupWidth - 2 * popupSideMargin, TextAlignment::Left, userCommandBuffers[currentUserCommandBuffer].c_str(), "_");
+		userCommandField = new TextField(row, popupSideMargin, keyboardPopupWidth - 2 * popupSideMargin, TextAlignment::Left, nullptr, "_");
 		keyboardPopup->AddField(userCommandField);
 	}
 

@@ -528,6 +528,12 @@ IconButton::IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic, 
 	SetEvent(e, param);
 }
 
+IconButton::IconButton(PixelNumber py, PixelNumber px, PixelNumber pw, Icon ic, event_t e, const char * array param)
+: SingleButton(py, px, pw), icon(ic)
+{
+	SetEvent(e, param);
+}
+
 void IconButton::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full || changed)
