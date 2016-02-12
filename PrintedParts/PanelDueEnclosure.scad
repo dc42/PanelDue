@@ -21,7 +21,7 @@
 DisplayType=3;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Alternative 4.3 inch,4:Alternative 5 inch,5:7 inch]
 
 // Which version PanelDue controller board do you have?
-BoardVersion=1.0;				// [1.0,1.1]
+BoardVersion=1.1;				// [1.0,1.1]
 
 // Do you want cutouts and mounting holes for a lid?
 Lid=0;								// [0:No,1:Yes]
@@ -78,8 +78,8 @@ Right=false;
 SmTol=0.1;						//small tolerence
 LidSep=10;						// separation between box and lid
 Tol=1;								//main tolerence
-ShowPCB=false;
-ShowLCD=false;
+ShowPCB=true;
+ShowLCD=true;
 Front=true;
 
 
@@ -356,10 +356,10 @@ module PCBshape()
 	difference() 	{
 		cube([PCB[1]-PCB[0],PCB[3]-PCB[2],1.2]);
 
-		for (Mnt=PCBmounts) {
-			translate([Mnt[0],Mnt[1],0])
-				Cross(3,100);
-		}
+//		for (Mnt=PCBmounts) {
+//			translate([Mnt[0],Mnt[1],0])
+//				Cross(3,100);
+//		}
 	}
 }
 
@@ -430,10 +430,10 @@ module LCDshape()
 			translate([LCDscrn[0],LCDscrn[2],MBez])
 				cube([LCDscrn[1]-LCDscrn[0],LCDscrn[3]-LCDscrn[2],LCDheight]);
 		}
-		for (Mnt=LCDmounts) {
-			translate([Mnt[0],Mnt[1],0])
-				Cross(3,100);
-		}
+//		for (Mnt=LCDmounts) {
+//			translate([Mnt[0],Mnt[1],0])
+//				Cross(3,100);
+//		}
 	}
 }
 // This creates the case cutout for the LCD display
