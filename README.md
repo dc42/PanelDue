@@ -3,7 +3,7 @@ PanelDue
 
 This is the source code for the firmware to run the PanelDue 3D printer user interface board.
 
-Build instructions: load file PanelDue.cppproj into Atmel Studio 6.2. For those wishing to build it under operating systems other than Windows, it should not be difficult to port it to Eclipse. The only libraries needed that are not included in this repository are the GCC toolchain libraries for the SAM3S.
+Build instructions: load file PanelDue.cppproj into Atmel Studio 7.0. For those wishing to build it under operating systems other than Windows, it should not be difficult to port it to Eclipse. The only libraries needed that are not included in this repository are the GCC toolchain libraries for the SAM3S.
 
 Static analysis: parts of the firmware are formally verified using Escher C++ Verifier, hence the design-by-contract and other annotations. File ecv.h defines macros that make these annotations invisible to compilers.
 
