@@ -180,6 +180,10 @@ void Window::SetPopup(PopupWindow * p, PixelNumber px, PixelNumber py, bool redr
 	{
 		if (pw->next == p)
 		{
+			if (redraw)
+			{
+				p->Refresh(true);
+			}
 			return;				// popup is already displayed
 		}
 		pw = pw->next;
@@ -192,7 +196,7 @@ void Window::SetPopup(PopupWindow * p, PixelNumber px, PixelNumber py, bool redr
 	}
 }
 
-void Window::ClearPopup(bool redraw)
+void Window::ClearPopup(bool redraw, PopupWindow *whichOne)
 {
 	if (next != nullptr)
 	{
@@ -200,24 +204,39 @@ void Window::ClearPopup(bool redraw)
 		Window *pw = this;
 		while (pw->next->next != nullptr)
 		{
-			pw = pw->next;		// find the innermost popup
+			pw = pw->next;		// find the penultimate window
 		}
 		
-		// Clear the area that was occupied by the last window to the background colour of the penultimate window
-		lcd.setColor(pw->backgroundColour);
-		lcd.fillRoundRect(pw->next->Xpos(), pw->next->Ypos(), pw->next->Xpos() + pw->next->GetWidth() - 1, pw->next->Ypos() + pw->next->GetHeight() - 1);
-		
-		// Detach the last window
-		pw->next = nullptr;
-
-		if (redraw)
+		if (whichOne == nullptr || whichOne == pw)
 		{
-			// Re-display the fields of the penultimate window that were obscured
-			for (DisplayField * null pp = pw->root; pp != nullptr; pp = pp->next)
+			const PixelNumber xmin = pw->next->Xpos(), xmax = xmin + pw->next->GetWidth() - 1, ymin = pw->next->Ypos(), ymax = ymin + pw->next->GetHeight() - 1;
+			bool popupWasContained = pw->Contains(xmin, ymin, xmax, ymax);
+			if (popupWasContained)
 			{
-				if (pp->IsVisible())
+				// Clear the area that was occupied by the last window to the background colour of the penultimate window
+				lcd.setColor(pw->backgroundColour);
+				lcd.fillRoundRect(xmin, ymin, xmax, ymax);
+			}
+
+			// Detach the last window
+			pw->next = nullptr;
+
+			if (redraw)
+			{
+				if (popupWasContained)
 				{
-					pp->Refresh(true, pw->Xpos(), pw->Ypos());
+					// Re-display the fields of the penultimate window that were obscured
+					for (DisplayField * null pp = pw->root; pp != nullptr; pp = pp->next)
+					{
+						if (pp->IsVisible())
+						{
+							pp->Refresh(true, pw->Xpos(), pw->Ypos());
+						}
+					}
+				}
+				else
+				{
+					Refresh(true);		// redraw everything
 				}
 			}
 		}
@@ -322,6 +341,11 @@ void MainWindow::ClearAll()
 // Refresh all fields. If 'full' is true then we rewrite them all, else we just rewrite those that have changed.
 void MainWindow::Refresh(bool full)
 {
+	if (full)
+	{
+		ClearAll();
+	}
+
 	for (DisplayField * null pp = root; pp != NULL; pp = pp->next)
 	{
 		if (Visible(pp))
@@ -332,6 +356,19 @@ void MainWindow::Refresh(bool full)
 	if (next != nullptr)
 	{
 		next->Refresh(full);
+	}
+}
+
+bool MainWindow::Contains(PixelNumber xmin, PixelNumber ymin, PixelNumber xmax, PixelNumber ymax) const
+{
+	return true;
+}
+
+void MainWindow::ClearAllPopups()
+{
+	while (next != nullptr)
+	{
+		ClearPopup(false);
 	}
 }
 
@@ -368,6 +405,11 @@ void PopupWindow::Refresh(bool full)
 	}
 }
 
+bool PopupWindow::Contains(PixelNumber xmin, PixelNumber ymin, PixelNumber xmax, PixelNumber ymax) const
+{
+	return xPos + 2 <= xmin && yPos + 2 <= ymin && xPos + width >= xmax + 3 && yPos + height >= ymax + 3;
+}
+
 void FieldWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
 	if (full || changed)
@@ -387,7 +429,23 @@ void FieldWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 			lcd.setTextPos(0, 9999, width);
 			PrintText();    // dummy print to get text width
 			PixelNumber spare = width - lcd.getTextX();
-			lcd.setTextPos(x + xOffset + ((align == TextAlignment::Centre) ? spare/2 : spare), y + yOffset, x + xOffset + width);
+			if (align == TextAlignment::Centre)
+			{
+				lcd.setTextPos(x + xOffset + spare/2, y + yOffset, x + xOffset + width);	
+			}
+			else
+			{
+				// Must be right aligned. Try to add a right margin of up to 3 pixels for better appearance.
+				if (spare <= 3)
+				{
+					spare = 0;
+				}
+				else
+				{
+					spare -= 3;
+				}
+				lcd.setTextPos(x + xOffset + spare, y + yOffset, x + xOffset + width);
+			}
 			PrintText();
 		}
 		changed = false;
@@ -569,6 +627,7 @@ void FloatButton::PrintText() const
 	}
 }
 
+#if 0	// not used yet
 ButtonRow::ButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, unsigned int nb, event_t e)
 	: ButtonBase(py, px, pw), numButtons(nb), whichPressed(-1), step(ps)
 {
@@ -578,24 +637,40 @@ ButtonRow::ButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber
 ButtonRowWithText::ButtonRowWithText(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, unsigned int nb, event_t e)
 	: ButtonRow(py, px, pw, ps, nb, e)
 {
-	
 }
 
 void ButtonRowWithText::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {
-	
+	if (full || changed)
+	{
+		for (unsigned int i = 0; i < numButtons; ++i)
+		{
+			const PixelNumber buttonXoffset = xOffset + i * step;
+			DrawOutline(buttonXoffset, yOffset, (int)i == whichPressed);
+			lcd.setTransparentBackground(true);
+			lcd.setColor(fcolour);
+			lcd.setFont(font);
+			lcd.setTextPos(0, 9999, width - 6);
+			PrintText(i);							// dummy print to get text width
+			PixelNumber spare = width - 6 - lcd.getTextX();
+			lcd.setTextPos(x + buttonXoffset + 3 + spare/2, y + yOffset + textMargin + 1, x + xOffset + width - 3);	// text is always centre-aligned
+			PrintText(i);
+			lcd.setTransparentBackground(false);
+			changed = false;
+		}
+	}
 }
 
 void CharButtonRow::PrintText(unsigned int n) const
 {
-	
+	lcd.write(text[n]);
 }
 
 CharButtonRow::CharButtonRow(PixelNumber py, PixelNumber px, PixelNumber pw, PixelNumber ps, const char * array s, event_t e)
-	: ButtonRowWithText(py, px, pw, ps, strlen(s), e)
+	: ButtonRowWithText(py, px, pw, ps, strlen(s), e), text(s)
 {
-	
 }
+#endif
 
 void ProgressBar::Refresh(bool full, PixelNumber xOffset, PixelNumber yOffset)
 {

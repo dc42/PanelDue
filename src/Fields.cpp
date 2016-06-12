@@ -38,11 +38,13 @@ ButtonPress fieldBeingAdjusted;
 ButtonPress currentButton;
 PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
 TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
+PopupWindow *alertPopup;
 
 String<machineNameLength> machineName;
 String<printingFileLength> printingFile;
 String<zprobeBufLength> zprobeBuf;
 String<generatedByTextLength> generatedByText;
+String<alertTextLength> alertText;
 
 static const char* const languageNames[] = { "EN", "DE", "FR" };
 static_assert(sizeof(languageNames)/sizeof(languageNames[0]) == numLanguages, "Wrong number of languages");
@@ -57,7 +59,20 @@ const Icon heaterIcons[maxHeaters] = { IconBed, IconNozzle1, IconNozzle2, IconNo
 
 namespace Fields
 {
-
+	// Create a standard popup window with a title and a close button at the top right
+	PopupWindow *CreatePopupWindow(PixelNumber ph, PixelNumber pw, Colour pb, Colour textColour, const char * null title)
+	{
+		PopupWindow *window = new PopupWindow(ph, pw, pb);
+		DisplayField::SetDefaultColours(textColour, pb);
+		if (title != nullptr)
+		{
+			window->AddField(new StaticTextField(popupTopMargin + labelRowAdjust, popupSideMargin + closeButtonWidth + popupFieldSpacing, pw - 2 * (popupSideMargin + closeButtonWidth + popupFieldSpacing), TextAlignment::Centre, title));
+		}
+		window->AddField(new IconButton(popupTopMargin, pw - (closeButtonWidth + 
+		popupSideMargin), closeButtonWidth, IconCancel, evCancel));	
+		return window;
+	}
+	
 	// Add a text button
 	TextButton *AddTextButton(PixelNumber row, unsigned int col, unsigned int numCols, const char* array text, Event evt, const char* param)
 	{
@@ -339,11 +354,8 @@ namespace Fields
 		static const char * array xyJogValues[] = { "-100", "-10", "-1", "-0.1", "0.1",  "1", "10", "100" };
 		static const char * array zJogValues[] = { "-50", "-5", "-0.5", "-0.05", "0.05",  "0.5", "5", "50" };
 
-		movePopup = new PopupWindow(movePopupHeight, movePopupWidth, popupBackColour);
-		PixelNumber ypos = popupTopMargin;
-		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
-		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, movePopupWidth - 2 * popupSideMargin, TextAlignment::Centre, "Move head"));
-		ypos += buttonHeight + moveButtonRowSpacing;
+		movePopup = CreatePopupWindow(movePopupHeight, movePopupWidth, popupBackColour, popupTextColour, "Move head");
+		PixelNumber ypos = popupTopMargin + buttonHeight + moveButtonRowSpacing;
 		const PixelNumber xpos = popupSideMargin + axisLabelWidth;
 		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, axisLabelWidth, TextAlignment::Left, "X"));
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
@@ -358,9 +370,6 @@ namespace Fields
 		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, axisLabelWidth, TextAlignment::Left, "Z"));
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
 		CreateStringButtonRow(movePopup, ypos, xpos, movePopupWidth - xpos - popupSideMargin, fieldSpacing, 8, zJogValues, zJogValues, evMoveZ);
-		ypos += buttonHeight + moveButtonRowSpacing;
-		PixelNumber doneButtonWidth = movePopupWidth/4;
-		movePopup->AddField(new IconButton(ypos, (movePopupWidth - doneButtonWidth)/2, doneButtonWidth, IconCancel, evCancel));
 	}
 	
 	// Create the extrusion controls popup
@@ -370,11 +379,8 @@ namespace Fields
 		static const char * array extrudeSpeedValues[] = { "50", "40", "20", "10", "5" };
 		static const char * array extrudeSpeedParams[] = { "3000", "2400", "1200", "600", "300" };
 
-		extrudePopup = new PopupWindow(extrudePopupHeight, extrudePopupWidth, popupBackColour);
-		PixelNumber ypos = popupTopMargin;
-		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
-		extrudePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, TextAlignment::Centre, "Extrusion amount (mm)"));
-		ypos += buttonHeight + extrudeButtonRowSpacing;
+		extrudePopup = CreatePopupWindow(extrudePopupHeight, extrudePopupWidth, popupBackColour, popupButtonTextColour, "Extrusion amount (mm)");
+		PixelNumber ypos = popupTopMargin + buttonHeight + extrudeButtonRowSpacing;
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
 		currentExtrudeAmountPress = CreateStringButtonRow(extrudePopup, ypos, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, fieldSpacing, 6, extrudeAmountValues, extrudeAmountValues, evExtrudeAmount, 3);
 		ypos += buttonHeight + extrudeButtonRowSpacing;
@@ -385,17 +391,16 @@ namespace Fields
 		currentExtrudeRatePress = CreateStringButtonRow(extrudePopup, ypos, popupSideMargin, extrudePopupWidth - 2 * popupSideMargin, fieldSpacing, 5, extrudeSpeedValues, extrudeSpeedParams, evExtrudeRate, 4);
 		ypos += buttonHeight + extrudeButtonRowSpacing;
 		extrudePopup->AddField(new TextButton(ypos, popupSideMargin, extrudePopupWidth/3 - 2 * popupSideMargin, "Extrude", evExtrude));
-		extrudePopup->AddField(new IconButton(ypos, extrudePopupWidth/3 + popupSideMargin, extrudePopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancel));
 		extrudePopup->AddField(new TextButton(ypos, (2 * extrudePopupWidth)/3 + popupSideMargin, extrudePopupWidth/3 - 2 * popupSideMargin, "Retract", evRetract));
 	}
 	
 	// Create the popup used to list files and macros
 	void CreateFileListPopup()
 	{
-		fileListPopup = new PopupWindow(fileListPopupHeight, fileListPopupWidth, popupBackColour);
-		const PixelNumber navButtonWidth = fileListPopupWidth/8;
-		const PixelNumber backButtonPos = fileListPopupWidth - navButtonWidth - popupSideMargin;
-		const PixelNumber upButtonPos = backButtonPos - navButtonWidth - fieldSpacing;
+		fileListPopup = CreatePopupWindow(fileListPopupHeight, fileListPopupWidth, popupBackColour, popupTextColour, nullptr);
+		const PixelNumber closeButtonPos = fileListPopupWidth - closeButtonWidth - popupSideMargin;
+		const PixelNumber navButtonWidth = (closeButtonPos - popupSideMargin)/7;
+		const PixelNumber upButtonPos = closeButtonPos - navButtonWidth - fieldSpacing;
 		const PixelNumber rightButtonPos = upButtonPos - navButtonWidth - fieldSpacing;
 		const PixelNumber leftButtonPos = popupSideMargin;
 		const PixelNumber textPos = popupSideMargin + navButtonWidth;
@@ -411,7 +416,6 @@ namespace Fields
 		
 		fileListPopup->AddField(filesUpButton = new IconButton(popupTopMargin, upButtonPos, navButtonWidth, IconUp, evNull));
 		filesUpButton->Show(false);
-		fileListPopup->AddField(new IconButton(popupTopMargin, backButtonPos, navButtonWidth, IconCancel, evCancel));
 		
 		const PixelNumber fileFieldWidth = (fileListPopupWidth + fieldSpacing - (2 * popupSideMargin))/numFileColumns;
 		unsigned int fileNum = 0;
@@ -433,15 +437,19 @@ namespace Fields
 	// Create the popup window used to display the file dialog
 	void CreateFileActionPopup()
 	{
-		filePopup = new PopupWindow(fileInfoPopupHeight, fileInfoPopupWidth, popupBackColour);
-		DisplayField::SetDefaultColours(popupTextColour, popupBackColour);
-
-		fpNameField = new TextField(popupTopMargin, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filename: ");
-		fpSizeField = new IntegerField(popupTopMargin + rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Size: ", " bytes");
-		fpLayerHeightField = new FloatField(popupTopMargin + 2 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Layer height: ","mm");
-		fpHeightField = new FloatField(popupTopMargin + 3 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Object height: ", "mm");
-		fpFilamentField = new IntegerField(popupTopMargin + 4 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filament needed: ", "mm");
-		fpGeneratedByField = new TextField(popupTopMargin + 5 * rowTextHeight, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Sliced by: ", generatedByText.c_str());
+		filePopup = CreatePopupWindow(fileInfoPopupHeight, fileInfoPopupWidth, popupBackColour, popupTextColour, "File information");
+		PixelNumber ypos = popupTopMargin + rowTextHeight;
+		fpNameField = new TextField(ypos, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filename: ");
+		ypos += rowTextHeight;
+		fpSizeField = new IntegerField(ypos, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Size: ", " bytes");
+		ypos += rowTextHeight;
+		fpLayerHeightField = new FloatField(ypos, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, 2, "Layer height: ","mm");
+		ypos += rowTextHeight;
+		fpHeightField = new FloatField(ypos, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, 1, "Object height: ", "mm");
+		ypos += rowTextHeight;
+		fpFilamentField = new IntegerField(ypos, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Filament needed: ", "mm");
+		ypos += rowTextHeight;
+		fpGeneratedByField = new TextField(ypos, popupSideMargin, fileInfoPopupWidth - 2 * popupSideMargin, TextAlignment::Left, "Sliced by: ", generatedByText.c_str());
 		filePopup->AddField(fpNameField);
 		filePopup->AddField(fpSizeField);
 		filePopup->AddField(fpLayerHeightField);
@@ -451,7 +459,6 @@ namespace Fields
 
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
 		filePopup->AddField(new TextButton(popupTopMargin + 7 * rowTextHeight, popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, "Print", evPrint));
-		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowTextHeight, fileInfoPopupWidth/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, IconCancel, evCancel));
 		filePopup->AddField(new IconButton(popupTopMargin + 7 * rowTextHeight, (2 * fileInfoPopupWidth)/3 + popupSideMargin, fileInfoPopupWidth/3 - 2 * popupSideMargin, IconTrash, evDeleteFile));
 	}
 
@@ -494,19 +501,25 @@ namespace Fields
 	// Create the pop-up keyboard
 	void CreateKeyboardPopup(uint32_t language)
 	{
-		static const char* array const keysGB[4] = { "1234567890-+", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM./" };
-		static const char* array const keysDE[4] = { "1234567890-+", "QWERTZUIOP", "ASDFGHJKL", "YXCVBNM./" };
-		static const char* array const keysFR[4] = { "1234567890-+", "AZERTWUIOP", "QSDFGHJKLM", "YXCVBN./" };
+		static const char* array const keysGB[4] = { "1234567890-+", "QWERTYUIOP", "ASDFGHJKL:", "ZXCVBNM./" };
+		static const char* array const keysDE[4] = { "1234567890-+", "QWERTZUIOP", "ASDFGHJKL:", "YXCVBNM./" };
+		static const char* array const keysFR[4] = { "1234567890-+", "AZERTWUIOP", "QSDFGHJKLM", "YXCVBN.:/" };
 		static const char* array const * const keyboards[numLanguages] = { keysGB, keysDE, keysFR };
 
-		keyboardPopup = new PopupWindow(keyboardPopupHeight, keyboardPopupWidth, popupBackColour);
+		keyboardPopup = CreatePopupWindow(keyboardPopupHeight, keyboardPopupWidth, popupBackColour, popupInfoTextColour, nullptr);
+		
+		// Add the text area in which the command is built
+		DisplayField::SetDefaultColours(popupInfoTextColour, popupInfoBackColour);		// need a different background colour
+		userCommandField = new TextField(popupTopMargin + labelRowAdjust, popupSideMargin, keyboardPopupWidth - 2 * popupSideMargin - closeButtonWidth - popupFieldSpacing, TextAlignment::Left, nullptr, "_");
+		keyboardPopup->AddField(userCommandField);
+
 		if (language >= numLanguages)
 		{
 			language = 0;
 		}
 		const char* array const * array const keys = keyboards[language];
 		DisplayField::SetDefaultColours(popupButtonTextColour, popupButtonBackColour);
-		PixelNumber row = keyboardPopupTopMargin;
+		PixelNumber row = popupTopMargin + keyButtonVStep;
 		for (size_t i = 0; i < 4; ++i)
 		{
 			PixelNumber column = popupSideMargin + (i * keyButtonHStep)/3;
@@ -540,16 +553,16 @@ namespace Fields
 		// Add the cancel, space and enter keys
 		const PixelNumber keyButtonHSpace = keyButtonHStep - keyButtonWidth;
 		const PixelNumber wideKeyButtonWidth = (keyboardPopupWidth - 2 * popupSideMargin - 2 * keyButtonHSpace)/4;
-		keyboardPopup->AddField(new IconButton(row, popupSideMargin, wideKeyButtonWidth, IconCancel, evCancel));		
 		keyboardPopup->AddField(new TextButton(row, popupSideMargin + wideKeyButtonWidth + keyButtonHSpace, 2 * wideKeyButtonWidth, nullptr, evKey, (int)' '));	
 		keyboardPopup->AddField(new IconButton(row, popupSideMargin + 3 * wideKeyButtonWidth + 2 * keyButtonHSpace, wideKeyButtonWidth, IconEnter, evSendKeyboardCommand));
-		
-		row += keyButtonVStep;
-		
-		// Add the text area in which the command is built
-		DisplayField::SetDefaultColours(popupInfoTextColour, popupInfoBackColour);
-		userCommandField = new TextField(row, popupSideMargin, keyboardPopupWidth - 2 * popupSideMargin, TextAlignment::Left, nullptr, "_");
-		keyboardPopup->AddField(userCommandField);
+	}
+	
+	// Create the message popup window
+	void CreateMessagePopup()
+	{
+		alertPopup = CreatePopupWindow(alertPopupHeight, alertPopupWidth, alertPopupBackColour, alertPopupTextColour, "Message");
+		alertPopup->AddField(new StaticTextField(popupTopMargin + 2 * rowTextHeight, popupSideMargin, alertPopupWidth - 2 * popupSideMargin, TextAlignment::Centre,
+								 alertText.c_str()));
 	}
 
 	// Create all the fields we ever display
@@ -593,6 +606,7 @@ namespace Fields
 		CreateAreYouSurePopup();
 		CreateKeyboardPopup(language);
 		CreateLanguagePopup();
+		CreateMessagePopup();
 
 		// Set initial values
 		for (unsigned int i = 0; i < maxHeaters; ++i)

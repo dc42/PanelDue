@@ -67,7 +67,7 @@ const PixelNumber textButtonMargin = 1;
 const PixelNumber iconButtonMargin = 1;
 const PixelNumber outlinePixels = 2;
 const PixelNumber fieldSpacing = 6;
-const PixelNumber statusFieldWidth = 120;
+const PixelNumber statusFieldWidth = 156;
 const PixelNumber bedColumn = 114;
 
 const PixelNumber xyFieldWidth = 80;
@@ -90,13 +90,14 @@ const PixelNumber messageTimeWidth = 60;
 const PixelNumber popupY = 192;
 const PixelNumber popupSideMargin = 10;
 const PixelNumber popupTopMargin = 10;
-const PixelNumber keyboardPopupTopMargin = 9;
 const PixelNumber popupFieldSpacing = 10;
 
 const PixelNumber axisLabelWidth = 26;
 const PixelNumber firstMessageRow = margin + rowHeight + 3;		// adjust this to get a whole number of message rows below the keyboard
 
 const PixelNumber progressBarHeight = 10;
+const PixelNumber closeButtonWidth = 40;
+
 const PixelNumber touchCalibMargin = 15;
 
 extern uint8_t glcd19x21[];				// declare which fonts we will be using
@@ -111,7 +112,7 @@ const PixelNumber textButtonMargin = 1;
 const PixelNumber iconButtonMargin = 2;
 const PixelNumber outlinePixels = 3;
 const PixelNumber fieldSpacing = 12;
-const PixelNumber statusFieldWidth = 200;
+const PixelNumber statusFieldWidth = 228;
 const PixelNumber bedColumn = 160;
 
 const PixelNumber xyFieldWidth = 120;
@@ -134,13 +135,14 @@ const PixelNumber messageTimeWidth = 90;
 const PixelNumber popupY = 345;
 const PixelNumber popupSideMargin = 20;
 const PixelNumber popupTopMargin = 20;
-const PixelNumber keyboardPopupTopMargin = 10;
 const PixelNumber popupFieldSpacing = 20;
 
 const PixelNumber axisLabelWidth = 40;
 const PixelNumber firstMessageRow = margin + rowHeight;		// adjust this to get a whole number of message rows below the keyboard
 
 const PixelNumber progressBarHeight = 16;
+const PixelNumber closeButtonWidth = 66;
+
 const PixelNumber touchCalibMargin = 22;
 
 extern uint8_t glcd28x32[];				// declare which fonts we will be using
@@ -191,12 +193,12 @@ const PixelNumber popupBarHeight = buttonHeight + (2 * popupTopMargin);
 const PixelNumber tempPopupBarWidth = (3 * fullPopupWidth)/4;
 const PixelNumber tempPopupX = (DisplayX - tempPopupBarWidth)/2;
 const PixelNumber fileInfoPopupWidth = fullPopupWidth - (4 * margin),
-				  fileInfoPopupHeight = (7 * rowTextHeight) + buttonHeight + (2 * popupTopMargin);
+				  fileInfoPopupHeight = (8 * rowTextHeight) + buttonHeight + (2 * popupTopMargin);
 const PixelNumber areYouSurePopupWidth = DisplayX - 80,
 				  areYouSurePopupHeight = (3 * rowHeight) + (2 * popupTopMargin);
 
 const PixelNumber movePopupWidth = fullPopupWidth;
-const PixelNumber movePopupHeight = (5 * buttonHeight) + (4 * moveButtonRowSpacing) + (2 * popupTopMargin);
+const PixelNumber movePopupHeight = (4 * buttonHeight) + (3 * moveButtonRowSpacing) + (2 * popupTopMargin);
 const PixelNumber movePopupX = (DisplayX - movePopupWidth)/2;
 const PixelNumber movePopupY = (DisplayY - movePopupHeight)/2;
 
@@ -210,7 +212,7 @@ const PixelNumber keyboardPopupWidth = fullPopupWidth;
 const PixelNumber keyButtonWidth = (keyboardPopupWidth - 2 * popupSideMargin)/16;
 const PixelNumber keyButtonHStep = (keyboardPopupWidth - 2 * popupSideMargin - keyButtonWidth)/11;
 const PixelNumber keyButtonVStep = buttonHeight + keyboardButtonRowSpacing;
-const PixelNumber keyboardPopupHeight = (5 * keyButtonVStep) + rowTextHeight + (2 * keyboardPopupTopMargin);
+const PixelNumber keyboardPopupHeight = (6 * keyButtonVStep) + (2 * popupTopMargin);
 const PixelNumber keyboardPopupX = fullWidthPopupX, keyboardPopupY = margin;
 
 const unsigned int numFileColumns = 2;
@@ -220,6 +222,9 @@ const PixelNumber fileListPopupWidth = fullPopupWidth;
 const PixelNumber fileListPopupHeight = ((numFileRows + 1) * buttonHeight) + (numFileRows * fileButtonRowSpacing) + (2 * popupTopMargin);
 const PixelNumber fileListPopupX = (DisplayX - fileListPopupWidth)/2;
 const PixelNumber fileListPopupY = (DisplayY - fileListPopupHeight)/2;
+
+const PixelNumber alertPopupWidth = fullPopupWidth - 6 * margin;
+const PixelNumber alertPopupHeight = 3 * rowTextHeight + 2 * popupTopMargin;
 
 const uint32_t numMessageRows = (rowTabs - margin - rowHeight)/rowTextHeight;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
@@ -243,6 +248,9 @@ const Colour popupButtonTextColour = black;
 const Colour popupButtonBackColour = white;
 const Colour popupInfoTextColour = black;
 const Colour popupInfoBackColour = white;
+
+const Colour alertPopupBackColour = UTFT::fromRGB(192, 255, 192);		// light green
+const Colour alertPopupTextColour = black;
 
 const Colour buttonTextColour = black;
 const Colour buttonPressedTextColour = black;
@@ -275,6 +283,7 @@ const size_t machineNameLength = 30;
 const size_t printingFileLength = 40;
 const size_t zprobeBufLength = 12;
 const size_t generatedByTextLength = 50;
+const size_t alertTextLength = 80;
 
 const unsigned int numLanguages = 3;
 extern const char* const longLanguageNames[];
@@ -283,6 +292,7 @@ extern String<machineNameLength> machineName;
 extern String<printingFileLength> printingFile;
 extern String<zprobeBufLength> zprobeBuf;
 extern String<generatedByTextLength> generatedByText;
+extern String<alertTextLength>alertText;
 
 extern FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField;
 extern FloatField *xPos, *yPos, *zPos;
@@ -309,6 +319,7 @@ extern ButtonPress fieldBeingAdjusted;
 extern ButtonPress currentButton;
 extern PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
 extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
+extern PopupWindow *alertPopup;
 
 // Event numbers, used to say what we need to do when a field is touched
 // *** MUST leave value 0 free to mean "no event"

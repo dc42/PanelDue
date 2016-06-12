@@ -15,7 +15,7 @@
 // 3) If "Front" is set to true then parameters are interpreted as being viewed
 //    from the front of the LCD, otherwise they are viewed from the back
 
-/* [Global] */
+/* [Size] */
 
 // Which display panel do you have?
 DisplayType=3;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Alternative 4.3 inch,4:Alternative 5 inch,5:7 inch]
@@ -23,13 +23,10 @@ DisplayType=3;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Alternative 4.3 i
 // Which version PanelDue controller board do you have?
 BoardVersion=1.1;				// [1.0,1.1]
 
+/* [Options] */
+
 // Do you want cutouts and mounting holes for a lid?
 Lid=0;								// [0:No,1:Yes]
-
-/*
-// Do you want a ball-and-socket mount?
-Mount=0;							// [0:No,1:Yes]
-*/
 
 // Do you want a lip at the top for hanging the enclosure from a top horizontal extrusion?
 Lip=0;								// [0:No,1:Yes]
@@ -38,6 +35,11 @@ Lip=0;								// [0:No,1:Yes]
 RelieveOverhang=10;				// [0:30]
 
 /* [Hidden] */
+
+/*
+// Do you want a ball-and-socket mount?
+Mount=0;							// [0:No,1:Yes]
+*/
 
 screw=true;						// set if screw lid
 Encoder=false;					// true if hole wanted for rotary encoder
