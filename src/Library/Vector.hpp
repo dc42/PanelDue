@@ -108,7 +108,7 @@ public:
 	String(const char* array s) : Vector<char, N + 1>()
 	{
 		this->clear();
-		this->copyFrom(s);
+		this->copy(s);
 	}
 
 	// Redefine 'full' so as to make room for a null terminator
@@ -145,20 +145,20 @@ public:
 		this->storage[this->filled] = '\0';
 	}
 	
-	void copyFrom(const char* s)
+	void copy(const char* s)
 	{
 		this->clear();
 		this->catFrom(s);
 	}
 	
-	template<size_t M> void copyFrom(String<M> s)
+	template<size_t M> void copy(String<M> s)
 	{
-		copyFrom(s.c_str());
+		copy(s.c_str());
 	}
 	
-	int sprintf(const char *fmt, ...);
+	int printf(const char *fmt, ...);
 	
-	int scatf(const char *fmt, ...);
+	int catf(const char *fmt, ...);
 	
 	// Compare with a C string. If the C string is too long but the part of it we could accommodate matches, return true.
 	bool similar(const char* s) const
@@ -178,7 +178,7 @@ public:
 	}
 };
 
-template<size_t N> int String<N>::sprintf(const char *fmt, ...)
+template<size_t N> int String<N>::printf(const char *fmt, ...)
 {
 	va_list vargs;
 	va_start(vargs, fmt);
@@ -190,7 +190,7 @@ template<size_t N> int String<N>::sprintf(const char *fmt, ...)
 		this->filled = 0;
 		this->storage[0] = 0;
 	}
-	else if (ret < N)
+	else if (ret >= 0 && (size_t)ret < N)
 	{
 		this->filled = ret;
 	}
@@ -201,7 +201,7 @@ template<size_t N> int String<N>::sprintf(const char *fmt, ...)
 	return ret;
 }
 
-template<size_t N> int String<N>::scatf(const char *fmt, ...)
+template<size_t N> int String<N>::catf(const char *fmt, ...)
 {
 	va_list vargs;
 	va_start(vargs, fmt);

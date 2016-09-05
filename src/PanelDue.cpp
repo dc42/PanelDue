@@ -7,10 +7,15 @@
 // 3. No pure virtual functions. This is because in release builds, having pure virtual functions causes huge amounts of the C++ library to be linked in
 //    (possibly because it wants to print a message if a pure virtual function is called).
 
+// Include definitions for verification using Escher C/C++ verifier
 #include "ecv.h"
+
+// We have to temporarily allow 'array' and 'result' to be used as ordinary identifiers when including the ASF
 #undef array
 #undef result
 #include "asf.h"
+
+// Reinstate the eCv definitions of 'array' and 'result'
 #define array _ecv_array
 #define result _ecv_result
 
@@ -34,6 +39,9 @@
 #include "RequestTimer.hpp"
 #include "MessageLog.hpp"
 
+#define DEBUG	(0)
+
+// Controlling constants
 const uint32_t printerPollInterval = 1000;			// poll interval in milliseconds
 const uint32_t printerResponseInterval = 700;		// shortest time after a response that we send another poll (gives printer time to catch up)
 const uint32_t printerPollTimeout = 8000;			// poll timeout in milliseconds
@@ -48,6 +56,7 @@ const uint32_t shortTouchDelay = 100;				// how long we ignore new touches while
 const size_t maxUserCommandLength = 40;				// max length of a user gcode command
 const size_t numUserCommandBuffers = 6;				// number of command history buffers plus one
 
+// Variables
 UTFT lcd(DISPLAY_CONTROLLER, TMode16bit, 16, 17, 18, 19);
 
 UTouch touch(23, 24, 22, 21, 20);
@@ -75,9 +84,9 @@ static bool restartNeeded = false;
 static int timesLeft[3];
 static String<50> timesLeftText;
 static String<maxUserCommandLength> userCommandBuffers[numUserCommandBuffers];
-static size_t currentUserCommandBuffer = 0, currentHistoryBuffer = 0;;
+static size_t currentUserCommandBuffer = 0, currentHistoryBuffer = 0;
 
-static OneBitPort BacklightPort(33);				// PB1 (aka port 33) controls the backlight on the prototype
+const ColourScheme *colours = &colourSchemes[0];
 
 struct FlashData
 {
@@ -94,12 +103,14 @@ struct FlashData
 	DisplayOrientation touchOrientation;
 	uint32_t touchVolume;
 	uint32_t language;
+	uint32_t colourScheme;
+	uint32_t brightness;
 	char dummy;
 	
 	FlashData() : magic(muggleVal) { }
 	bool operator==(const FlashData& other);
 	bool operator!=(const FlashData& other) { return !operator==(other); }
-	bool Valid() const { return magic == magicVal; }
+	bool IsValid() const; 
 	void SetInvalid() { magic = muggleVal; }
 	void SetDefaults();
 	void Load();
@@ -146,6 +157,7 @@ enum ReceivedDataEvent
 	rcvUnknown = 0,
 	rcvActive,
 	rcvDir,
+	rcvErr,
 	rcvEfactor,
 	rcvFilament,
 	rcvFiles,
@@ -156,6 +168,7 @@ enum ReceivedDataEvent
 	rcvStandby,
 	rcvBeepFreq,
 	rcvBeepLength,
+	rcvFanPercent,
 	rcvFilename,
 	rcvFraction,
 	rcvGeneratedBy,
@@ -171,7 +184,7 @@ enum ReceivedDataEvent
 	rcvSize,
 	rcvStatus,
 	rcvTimesLeft,
-	rcvFanPercent
+	rcvVolumes
 };
 
 struct ReceiveDataTableEntry
@@ -188,6 +201,11 @@ int heaterStatus[numHeaters];
 RequestTimer fileInfoTimer(FileInfoRequestTimeout, "M36");
 RequestTimer machineConfigTimer(MachineConfigRequestTimeout, "M408 S1");
 
+bool FlashData::IsValid() const
+{
+	return magic == magicVal && touchVolume <= Buzzer::MaxVolume && brightness <= Buzzer::MaxBrightness && language < numLanguages && colourScheme < NumColourSchemes;
+}
+
 bool FlashData::operator==(const FlashData& other)
 {
 	return magic == other.magic
@@ -199,7 +217,9 @@ bool FlashData::operator==(const FlashData& other)
 		&& lcdOrientation == other.lcdOrientation
 		&& touchOrientation == other.touchOrientation
 		&& touchVolume == other.touchVolume
-		&& language == other.language;
+		&& language == other.language
+		&& colourScheme == other.colourScheme
+		&& brightness == other.brightness;
 }
 
 void FlashData::SetDefaults()
@@ -212,7 +232,9 @@ void FlashData::SetDefaults()
 	lcdOrientation = DefaultDisplayOrientAdjust;
 	touchOrientation = DefaultTouchOrientAdjust;
 	touchVolume = Buzzer::DefaultVolume;
+	brightness = Buzzer::DefaultBrightness;
 	language = 0;
+	colourScheme = 0;
 	magic = magicVal;
 }
 
@@ -227,6 +249,14 @@ void FlashData::Save() const
 {
 	FlashStorage::write(0, &(this->magic), &(this->dummy) - (const char*)(&(this->magic)));
 }
+
+#if DEBUG
+# define STRINGIFY(x)	#x
+# define TOSTRING(x)	STRINGIFY(x)
+# define ShowLine		debugField->SetValue(TOSTRING(__LINE__)); debugField->Refresh(true, 0, 0)
+#else
+# define ShowLine		(void)0
+#endif
 
 struct FileList
 {
@@ -310,17 +340,18 @@ void ChangeTab(ButtonBase *newTab)
 
 		if (currentButton.GetButton() == newTab)
 		{
-			currentButton.Clear();			// to prevent it being released
+			currentButton.Clear();									// to prevent it being released
 		}
 		mgr.Refresh(true);
 	}
 }
 
-void InitLcd(DisplayOrientation dor, bool is24bit, uint8_t language)
+void InitLcd(DisplayOrientation dor, bool is24bit, uint32_t language, uint32_t colourScheme)
 {
-	lcd.InitLCD(dor, is24bit);					// set up the LCD
-	Fields::CreateFields(language);		// create all the fields
-	mgr.Refresh(true);					// redraw everything
+	lcd.InitLCD(dor, is24bit);										// set up the LCD
+	colours = &colourSchemes[colourScheme];
+	Fields::CreateFields(language, *colours);	// create all the fields
+	mgr.Refresh(true);												// redraw everything
 
 	currentTab = NULL;
 }
@@ -375,7 +406,7 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 		}
 	}
 	
-	lcd.setColor(defaultBackColour);
+	lcd.setColor(touchSpotBackColour);
 	lcd.fillCircle(x, y, touchCircleRadius);
 }
 
@@ -416,7 +447,7 @@ void CalibrateTouch()
 
 void CheckSettingsAreSaved()
 {
-	Fields::SettingsAreSaved(nvData == savedNvData);
+	Fields::SettingsAreSaved(nvData == savedNvData, nvData.colourScheme != savedNvData.colourScheme);
 }
 
 // Factory reset
@@ -813,7 +844,7 @@ void ProcessTouch(ButtonPress bp)
 				SerialIo::SendString("M32 ");
 				SerialIo::SendFilename(StripPrefix(FileManager::GetFilesDir()), currentFile);
 				SerialIo::SendChar('\n');
-				printingFile.copyFrom(currentFile);
+				printingFile.copy(currentFile);
 				currentFile = nullptr;							// allow the file list to be updated
 				CurrentButtonReleased();
 				ChangeTab(tabPrint);
@@ -847,6 +878,10 @@ void ProcessTouch(ButtonPress bp)
 		case evScrollFiles:
 			FileManager::Scroll(bp.GetIParam());
 			ShortenTouchDelay();				
+			break;
+
+		case evChangeCard:
+			FileManager::ChangeCard();
 			break;
 
 		case evKeyboard:
@@ -888,10 +923,36 @@ void ProcessTouch(ButtonPress bp)
 			mgr.SetPopup(volumePopup, fullWidthPopupX, popupY);
 			break;
 
+		case evSetColours:
+			Adjusting(bp);
+			mgr.SetPopup(coloursPopup, fullWidthPopupX, popupY);
+			break;
+
+		case evBrighter:
+		case evDimmer:
+			{
+				int adjust = max<int>(1, (int)(nvData.brightness/16));
+				if (ev == evDimmer)
+				{
+					adjust = -adjust;
+				}
+				nvData.brightness = min<int>(Buzzer::MaxBrightness, max<int>(Buzzer::MinBrightness, (int)nvData.brightness + adjust));
+			}
+			Buzzer::SetBacklight(nvData.brightness);
+			CheckSettingsAreSaved();
+			ShortenTouchDelay();
+			break;
+		
 		case evAdjustVolume:
 			nvData.touchVolume = bp.GetIParam();
 			volumeButton->SetValue(nvData.touchVolume);
 			TouchBeep();									// give audible feedback of the touch at the new volume level
+			CheckSettingsAreSaved();
+			break;
+
+		case evAdjustColours:
+			nvData.colourScheme = bp.GetIParam();
+			coloursButton->SetText(colourSchemes[nvData.colourScheme].name);
 			CheckSettingsAreSaved();
 			break;
 
@@ -967,7 +1028,7 @@ void ProcessTouch(ButtonPress bp)
 			}
 			else
 			{
-				userCommandBuffers[currentUserCommandBuffer].copyFrom(userCommandBuffers[currentHistoryBuffer]);
+				userCommandBuffers[currentUserCommandBuffer].copy(userCommandBuffers[currentHistoryBuffer]);
 			}
 			userCommandField->SetChanged();
 			break;
@@ -980,7 +1041,7 @@ void ProcessTouch(ButtonPress bp)
 			}
 			else
 			{
-				userCommandBuffers[currentUserCommandBuffer].copyFrom(userCommandBuffers[currentHistoryBuffer]);
+				userCommandBuffers[currentUserCommandBuffer].copy(userCommandBuffers[currentHistoryBuffer]);
 			}
 			userCommandField->SetChanged();
 			break;
@@ -1031,6 +1092,7 @@ pre(bp.IsValid())
 		case evAdjustStandbyTemp:
 		case evSetBaudRate:
 		case evSetVolume:
+		case evSetColours:
 			mgr.ClearPopup();
 			StopAdjusting();
 			break;
@@ -1062,6 +1124,7 @@ pre(bp.IsValid())
 
 		case evSetBaudRate:
 		case evSetVolume:
+		case evSetColours:
 		case evSetLanguage:
 		case evCalTouch:
 		case evInvertX:
@@ -1172,7 +1235,7 @@ void SetStatus(char c)
 		case PrinterStatus::paused:
 		case PrinterStatus::pausing:
 		case PrinterStatus::resuming:
-			if (status == PrinterStatus::connecting)
+			if (status == PrinterStatus::connecting || status == PrinterStatus::idle)
 			{
 				ChangeTab(tabPrint);
 			}
@@ -1184,6 +1247,13 @@ void SetStatus(char c)
 			
 		case PrinterStatus::idle:
 			printingFile.clear();
+			nameField->SetValue(machineName.c_str());		// if we are on the print tab then it may still be set to the file that was being printed
+			// no break
+		case PrinterStatus::configuring:
+			if (status == PrinterStatus::flashing)
+			{
+				mgr.ClearAllPopups();						// clear the firmware update message
+			}
 			break;
 
 		default:
@@ -1211,16 +1281,16 @@ void AppendTimeLeft(int t)
 	}
 	else if (t < 60)
 	{
-		timesLeftText.scatf("%ds", t);
+		timesLeftText.catf("%ds", t);
 	}
 	else if (t < 60 * 60)
 	{
-		timesLeftText.scatf("%dm %02ds", t/60, t%60);
+		timesLeftText.catf("%dm %02ds", t/60, t%60);
 	}
 	else
 	{
 		t /= 60;
-		timesLeftText.scatf("%dh %02dm", t/60, t%60);
+		timesLeftText.catf("%dh %02dm", t/60, t%60);
 	}
 }
 
@@ -1228,9 +1298,13 @@ void AppendTimeLeft(int t)
 bool GetInteger(const char s[], int &rslt)
 {
 	if (s[0] == 0) return false;			// empty string
+
 	char* endptr;
 	rslt = (int) strtol(s, &endptr, 10);
 	if (*endptr == 0) return true;			// we parsed an integer
+
+	if (strlen(s) > 10) return false;		// avoid strtod buggy behaviour on long input strings
+
 	double d = strtod(s, &endptr);			// try parsing a floating point number
 	if (*endptr == 0)
 	{
@@ -1246,19 +1320,24 @@ bool GetUnsignedInteger(const char s[], unsigned int &rslt)
 	if (s[0] == 0) return false;			// empty string
 	char* endptr;
 	rslt = (int) strtoul(s, &endptr, 10);
-	return (*endptr == 0);
+	return *endptr == 0;
 }
 
 // Try to get a floating point value from a string. if it is actually a floating point value, round it.
 bool GetFloat(const char s[], float &rslt)
 {
 	if (s[0] == 0) return false;			// empty string
+
+	// GNU strtod is buggy, it's very slow for some long inputs, and some versions have a buffer overflow bug.
+	// We presume strtof may be buggy too. Tame it by rejecting any strings that much longer than we expect to receive.
+	if (strlen(s) > 10) return false;
+
 	char* endptr;
-	rslt = (float) strtod(s, &endptr);
-	return *endptr == 0;					// we parsed an integer
+	rslt = strtof(s, &endptr);
+	return *endptr == 0;					// we parsed a float
 }
 
-// These tables must be kept in alphabetical order
+// These tables must be kept in alphabetical order of the search string
 const ReceiveDataTableEntry arrayDataTable[] =
 {
 	{ rcvActive,		"active" },
@@ -1279,6 +1358,7 @@ const ReceiveDataTableEntry nonArrayDataTable[] =
 	{ rcvBeepFreq,		"beep_freq" },
 	{ rcvBeepLength,	"beep_length" },
 	{ rcvDir,			"dir" },
+	{ rcvErr,			"err" },
 	{ rcvFilename,		"fileName" },
 	{ rcvFraction,		"fraction_printed" },
 	{ rcvGeneratedBy,	"generatedBy" },
@@ -1292,18 +1372,22 @@ const ReceiveDataTableEntry nonArrayDataTable[] =
 	{ rcvSeq,			"seq" },
 	{ rcvSfactor,		"sfactor" },
 	{ rcvSize,			"size" },
-	{ rcvStatus,		"status" }
+	{ rcvStatus,		"status" },
+	{ rcvVolumes,		"volumes" }
 };
 
 void StartReceivedMessage()
 {
+	ShowLine;
 	newMessageSeq = messageSeq;
 	MessageLog::BeginNewMessage();
 	FileManager::BeginNewMessage();
+	ShowLine;
 }
 
 void EndReceivedMessage()
 {
+	ShowLine;
 	lastResponseTime = SystemTick::GetTickCount();
 
 	if (newMessageSeq != messageSeq)
@@ -1312,6 +1396,7 @@ void EndReceivedMessage()
 		MessageLog::DisplayNewMessage();
 	}	
 	FileManager::EndReceivedMessage(currentFile != nullptr);	
+	ShowLine;
 }
 
 // Public functions called by the SerialIo module
@@ -1319,9 +1404,11 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 {
 	if (index >= 0)			// if this is an element of an array
 	{
+		ShowLine;
 		switch(bsearch(arrayDataTable, sizeof(arrayDataTable)/sizeof(arrayDataTable[0]), id))
 		{
 		case rcvActive:
+			ShowLine;
 			{
 				int ival;
 				if (GetInteger(data, ival) && index < (int)maxHeaters)
@@ -1332,6 +1419,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 
 		case rcvStandby:
+			ShowLine;
 			{
 				int ival;
 				if (GetInteger(data, ival) && index < (int)maxHeaters && index != 0)
@@ -1342,13 +1430,16 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvHeaters:
+			ShowLine;
 			{
 				float fval;
 				if (GetFloat(data, fval) && index < (int)maxHeaters)
 				{
+					ShowLine;
 					currentTemps[index]->SetValue(fval);
 					if (index == (int)numHeads + 1)
 					{
+						ShowLine;
 						mgr.Show(currentTemps[index], true);
 						mgr.Show(activeTemps[index], true);
 						mgr.Show(standbyTemps[index], true);
@@ -1360,18 +1451,24 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 
 		case rcvHstat:
+			ShowLine;
 			{
 				int ival;
-				if (GetInteger(data, ival) && index >= 0 && index < (int)numHeaters)
+				if (GetInteger(data, ival) && index < (int)numHeaters)
 				{
 					heaterStatus[index] = ival;
-					Colour c = (ival == 1) ? standbyBackColour : (ival == 2) ? activeBackColour : (ival == 3) ? errorBackColour : defaultBackColour;
-					currentTemps[index]->SetColours(infoTextColour, c);
+					Colour c = (ival == 1) ? colours->standbyBackColour
+								: (ival == 2) ? colours->activeBackColour
+								: (ival == 3) ? colours->errorBackColour
+								: (ival == 4) ? colours->tuningBackColour
+								: colours->defaultBackColour;
+					currentTemps[index]->SetColours((ival == 3) ? colours->errorTextColour : colours->infoTextColour, c);
 				}
 			}
 			break;
 			
 		case rcvPos:
+			ShowLine;
 			{
 				float fval;
 				if (GetFloat(data, fval))
@@ -1395,6 +1492,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvEfactor:
+			ShowLine;
 			{
 				int ival;
 				if (GetInteger(data, ival) && index + 1 < (int)maxHeaters)
@@ -1405,6 +1503,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvFiles:
+			ShowLine;
 			if (index == 0)
 			{
 				FileManager::BeginReceivingFiles();
@@ -1413,6 +1512,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvFilament:
+			ShowLine;
 			{
 				static float totalFilament = 0.0;
 				if (index == 0)
@@ -1429,6 +1529,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvHomed:
+			ShowLine;
 			{
 				int ival;
 				if (index < 3 && GetInteger(data, ival) && ival >= 0 && ival < 2)
@@ -1437,12 +1538,12 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 					if (isHomed != axisHomed[index])
 					{
 						axisHomed[index] = isHomed;
-						homeButtons[index]->SetColours(buttonTextColour, (isHomed) ? homedButtonBackColour : notHomedButtonBackColour);
+						homeButtons[index]->SetColours(colours->buttonTextColour, (isHomed) ? colours->homedButtonBackColour : colours->notHomedButtonBackColour);
 						bool allHomed = axisHomed[0] && axisHomed[1] && axisHomed[2];
 						if (allHomed != allAxesHomed)
 						{
 							allAxesHomed = allHomed;
-							homeAllButton->SetColours(buttonTextColour, (allAxesHomed) ? homedButtonBackColour : notHomedButtonBackColour);
+							homeAllButton->SetColours(colours->buttonTextColour, (allAxesHomed) ? colours->homedButtonBackColour : colours->notHomedButtonBackColour);
 						}
 					}
 				}
@@ -1450,6 +1551,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvTimesLeft:
+			ShowLine;
 			if (index < (int)ARRAY_SIZE(timesLeft))
 			{
 				int i;
@@ -1457,7 +1559,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				if (b && i >= 0 && i < 10 * 24 * 60 * 60 && PrintInProgress())
 				{
 					timesLeft[index] = i;
-					timesLeftText.copyFrom("file ");
+					timesLeftText.copy("file ");
 					AppendTimeLeft(timesLeft[0]);
 					timesLeftText.catFrom(", filament ");
 					AppendTimeLeft(timesLeft[1]);
@@ -1473,6 +1575,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 
 		case rcvFanPercent:
+			ShowLine;
 			if (index == 0)			// currently we only handle one fan
 			{
 				float f;
@@ -1490,6 +1593,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 	}
 	else
 	{
+		ShowLine;
 		// Non-array values follow
 		switch(bsearch(nonArrayDataTable, sizeof(nonArrayDataTable)/sizeof(nonArrayDataTable[0]), id))
 		{
@@ -1504,14 +1608,14 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 
 		case rcvProbe:
-			zprobeBuf.copyFrom(data);
+			zprobeBuf.copy(data);
 			zProbe->SetChanged();
 			break;
 		
 		case rcvMyName:
 			if (status != PrinterStatus::configuring && status != PrinterStatus::connecting)
 			{
-				machineName.copyFrom(data);
+				machineName.copy(data);
 				nameField->SetChanged();
 				gotMachineName = true;
 				if (gotGeometry)
@@ -1524,7 +1628,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 		case rcvFilename:
 			if (!printingFile.similar(data))
 			{
-				printingFile.copyFrom(data);
+				printingFile.copy(data);
 				if (currentTab == tabPrint && PrintInProgress())
 				{
 					nameField->SetChanged();
@@ -1564,7 +1668,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		
 		case rcvGeneratedBy:
-			generatedByText.copyFrom(data);
+			generatedByText.copy(data);
 			fpGeneratedByField->SetChanged();
 			break;
 		
@@ -1628,8 +1732,28 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			}
 			else
 			{
-				alertText.copyFrom(data);
+				alertText.copy(data);
 				mgr.SetPopup(alertPopup, (DisplayX - alertPopupWidth)/2, (DisplayY - alertPopupHeight)/2);
+			}
+			break;
+
+		case rcvErr:
+			{
+				int i;
+				if (GetInteger(data, i))
+				{
+					FileManager::ReceiveErrorCode(i);
+				}
+			}
+			break;
+
+		case rcvVolumes:
+			{
+				unsigned int i;
+				if (GetUnsignedInteger(data, i))
+				{
+					FileManager::SetNumVolumes(i);
+				}
 			}
 			break;
 
@@ -1637,12 +1761,16 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			break;
 		}
 	}
+	ShowLine;
 }
 
 // Public function called when the serial I/O module finishes receiving an array of values
 void ProcessArrayLength(const char id[], int length)
 {
-	// Nothing to do here at present
+	if (length == 0 && strcmp(id, "files") == 0)
+	{
+		FileManager::BeginReceivingFiles();				// received an empty file list - need to tell the file manager about it
+	}
 }
 
 // Update those fields that display debug information
@@ -1696,7 +1824,6 @@ void SendRequest(const char *s, bool includeSeq = false)
 int main(void)
 {
     SystemInit();						// set up the clock etc.	
-	wdt_disable(WDT);					// disable watchdog for now
 	
 	matrix_set_system_io(CCFG_SYSIO_SYSIO4 | CCFG_SYSIO_SYSIO5 | CCFG_SYSIO_SYSIO6 | CCFG_SYSIO_SYSIO7);	// enable PB4-PB7 pins
 	pmc_enable_periph_clk(ID_PIOA);		// enable the PIO clock
@@ -1704,31 +1831,31 @@ int main(void)
 	pmc_enable_periph_clk(ID_PWM);		// enable the PWM clock
 	pmc_enable_periph_clk(ID_UART1);	// enable UART1 clock
 	
-	Buzzer::Init();
-	lastTouchTime = SystemTick::GetTickCount();
-	
-	SysTick_Config(SystemCoreClock / 1000);
+	Buzzer::Init();						// init the buzzer, must also call this before the backlight can be used
 
-	// On prototype boards we need to turn the backlight on
-	BacklightPort.setMode(OneBitPort::Output);
-	BacklightPort.setHigh();
+	wdt_init (WDT, WDT_MR_WDRSTEN, 1000, 1000);
+	SysTick_Config(SystemCoreClock / 1000);
+	lastTouchTime = SystemTick::GetTickCount();
+
 
 	// Read parameters from flash memory
 	nvData.Load();
-	if (nvData.Valid())
+	if (nvData.IsValid())
 	{
 		// The touch panel has already been calibrated
-		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language);
+		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language, nvData.colourScheme);
 		touch.init(DisplayX, DisplayY, nvData.touchOrientation);
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax, touchCalibMargin);
 		savedNvData = nvData;
+		Buzzer::SetBacklight(nvData.brightness);
 	}
 	else
 	{
 		// The touch panel has not been calibrated, and we do not know which way up it is
 		nvData.SetDefaults();
-		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language);
-		CalibrateTouch();					// this includes the touch driver initialization
+		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language, nvData.colourScheme);
+		Buzzer::SetBacklight(nvData.brightness);	// must be done before touch calibration
+		CalibrateTouch();							// this includes the touch driver initialization
 		SaveSettings();
 	}
 	
@@ -1736,6 +1863,7 @@ int main(void)
 	SerialIo::Init(nvData.baudRate);
 	baudRateButton->SetValue(nvData.baudRate);
 	volumeButton->SetValue(nvData.touchVolume);
+	coloursButton->SetText(colourSchemes[nvData.colourScheme].name);
 	
 	MessageLog::Init();
 
@@ -1752,27 +1880,32 @@ int main(void)
 		extrusionFactors[i - 1]->Show(false);
 	}
 	
-	mgr.Show(standbyTemps[0], false);		// currently, we always hide the bed standby temperature because it doesn't do anything
+	standbyTemps[0]->Show(false);			// currently, we always hide the bed standby temperature because it doesn't do anything
+	debugField->Show(DEBUG != 0);			// show the debug field only if debugging is enabled
 
 	userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());	// set up to display the current user command
 
-	// Display the Control tab
+	// Display the Control tab. This also refreshes the display.
 	ChangeTab(tabControl);
 	lastResponseTime = SystemTick::GetTickCount();		// pretend we just received a response
 	
 	machineConfigTimer.SetPending();		// we need to fetch the machine name and configuration
-	
+
 	for (;;)
 	{
+		ShowLine;
+
 		// 1. Check for input from the serial port and process it.
 		// This calls back into functions StartReceivedMessage, ProcessReceivedValue, ProcessArrayLength and EndReceivedMessage.
 		SerialIo::CheckInput();
+		ShowLine;
 		
 		// 2. if displaying the message log, update the times
 		if (currentTab == tabMsg)
 		{
 			MessageLog::UpdateMessages(false);
 		}
+		ShowLine;
 		
 		// 3. Check for a touch on the touch panel.
 		if (SystemTick::GetTickCount() - lastTouchTime >= ignoreTouchTime)
@@ -1785,8 +1918,10 @@ int main(void)
 			uint16_t x, y;
 			if (touch.read(x, y))
 			{
+#if DEBUG
 				touchX->SetValue((int)x);	//debug
 				touchY->SetValue((int)y);	//debug
+#endif
 				ButtonPress bp = mgr.FindEvent(x, y);
 				if (bp.IsValid())
 				{
@@ -1807,20 +1942,27 @@ int main(void)
 				}
 			}
 		}
+		ShowLine;
 		
 		// 4. Refresh the display
 		UpdateDebugInfo();
 		mgr.Refresh(false);
+		ShowLine;
 		
 		// 5. Generate a beep if asked to
 		if (beepFrequency != 0 && beepLength != 0)
 		{
 			if (beepFrequency >= 100 && beepFrequency <= 10000 && beepLength > 0)
 			{
+				if (beepLength > 20000)
+				{
+					beepLength = 20000;			// limit the beep to 20 seconds
+				}
 				Buzzer::Beep(beepFrequency, beepLength, Buzzer::MaxVolume);
 			}
 			beepFrequency = beepLength = 0;
 		}
+		ShowLine;
 
 		// 6. If it is time, poll the printer status.
 		// When the printer is executing a homing move or other file macro, it may stop responding to polling requests.
@@ -1855,6 +1997,7 @@ int main(void)
 				SendRequest("M408 S0");								// just send a normal poll message, don't ask for the last response
 			}
 		}
+		ShowLine;
 	}
 }
 

@@ -181,7 +181,7 @@ namespace SerialIo
 		arrayElems = -1;
 	}
 	
-	// Look for combining characters in the string value and conbert them if possible
+	// Look for combining characters in the string value and convert them if possible
 	static void ConvertUnicode()
 	{
 		unsigned int numContinuationBytesLeft = 0;
@@ -366,6 +366,7 @@ namespace SerialIo
 					case ' ':
 						break;
 					case '"':
+						fieldVal.clear();
 						state = jsStringVal;
 						break;
 					case '[':
@@ -390,12 +391,14 @@ namespace SerialIo
 						}
 						break;
 					case '-':
+						fieldVal.clear();
 						fieldVal.add(c);
 						state = jsNegIntVal;
 						break;
 					default:
 						if (c >= '0' && c <= '9')
 						{
+							fieldVal.clear();
 							fieldVal.add(c);
 							state = jsIntVal;
 							break;
@@ -438,6 +441,7 @@ namespace SerialIo
 						{
 						case '"':
 						case '\\':
+						case '/':
 							fieldVal.add(c);
 							break;
 						case 'n':
@@ -470,8 +474,15 @@ namespace SerialIo
 					switch(c)
 					{
 					case '.':
-						fieldVal.add(c);
-						state = jsFracVal;
+						if (fieldVal.full())
+						{
+							state = jsError;
+						}
+						else
+						{
+							fieldVal.add(c);
+							state = jsFracVal;
+						}
 						break;
 					case ',':
 						ProcessField();
@@ -511,7 +522,7 @@ namespace SerialIo
 						}
 						break;
 					default:
-						if (c >= '0' && c <= '9')
+						if (c >= '0' && c <= '9' && !fieldVal.full())
 						{
 							fieldVal.add(c);
 						}
@@ -564,7 +575,7 @@ namespace SerialIo
 						}
 						break;
 					default:
-						if (c >= '0' && c <= '9')
+						if (c >= '0' && c <= '9' && !fieldVal.full())
 						{
 							fieldVal.add(c);
 						}
@@ -583,6 +594,7 @@ namespace SerialIo
 						if (arrayElems >= 0)
 						{
 							++arrayElems;
+							fieldVal.clear();
 							state = jsVal;
 						}
 						else
@@ -619,6 +631,7 @@ namespace SerialIo
 					break;
 
 				case jsError:
+					// Ignore all characters. State will be reset to jsBegin at the start of this function when we receive a newline.
 					break;
 				}
 			}

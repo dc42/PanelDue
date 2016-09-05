@@ -7,13 +7,16 @@
  */ 
 
 #include "Print.hpp"
+#include <climits>
 
 /* default implementation: may be overridden */
 size_t Print::write(const uint8_t *buffer, size_t size)
 {
 	size_t n = 0;
-	while (size--) {
+	while (size != 0)
+	{
 		n += write(*buffer++);
+		--size;
 	}
 	return n;
 }
@@ -33,36 +36,45 @@ size_t Print::print(unsigned char b, int base)
 	return print((unsigned long) b, base);
 }
 
-size_t Print::print(int n, int base)
+size_t Print::print(int b, int base)
 {
-	return print((long) n, base);
+	return print((long) b, base);
 }
 
-size_t Print::print(unsigned int n, int base)
+size_t Print::print(unsigned int b, int base)
 {
-	return print((unsigned long) n, base);
+	return print((unsigned long) b, base);
 }
 
 size_t Print::print(long n, int base)
 {
-	if (base == 0) {
+	if (base == 0)
+	{
 		return write(n);
-		} else if (base == 10) {
-		if (n < 0) {
-			int t = print('-');
+	}
+	else if (base == 10)
+	{
+		if (n < 0)
+		{
+			const size_t t = print('-');
 			n = -n;
 			return printNumber(n, 10) + t;
 		}
 		return printNumber(n, 10);
-		} else {
+	}
+	else
+	{
 		return printNumber(n, base);
 	}
 }
 
 size_t Print::print(unsigned long n, int base)
 {
-	if (base == 0) return write(n);
-	else return printNumber(n, base);
+	if (base == 0)
+	{
+		return write(n);
+	}
+	return printNumber(n, base);
 }
 
 size_t Print::print(double n, int digits)
@@ -70,131 +82,82 @@ size_t Print::print(double n, int digits)
 	return printFloat(n, digits);
 }
 
-size_t Print::println(void)
-{
-	size_t n = print('\r');
-	n += print('\n');
-	return n;
-}
-
-size_t Print::println(const char c[])
-{
-	size_t n = print(c);
-	n += println();
-	return n;
-}
-
-size_t Print::println(char c)
-{
-	size_t n = print(c);
-	n += println();
-	return n;
-}
-
-size_t Print::println(unsigned char b, int base)
-{
-	size_t n = print(b, base);
-	n += println();
-	return n;
-}
-
-size_t Print::println(int num, int base)
-{
-	size_t n = print(num, base);
-	n += println();
-	return n;
-}
-
-size_t Print::println(unsigned int num, int base)
-{
-	size_t n = print(num, base);
-	n += println();
-	return n;
-}
-
-size_t Print::println(long num, int base)
-{
-	size_t n = print(num, base);
-	n += println();
-	return n;
-}
-
-size_t Print::println(unsigned long num, int base)
-{
-	size_t n = print(num, base);
-	n += println();
-	return n;
-}
-
-size_t Print::println(double num, int digits)
-{
-	size_t n = print(num, digits);
-	n += println();
-	return n;
-}
-
 // Private Methods /////////////////////////////////////////////////////////////
 
-size_t Print::printNumber(unsigned long n, uint8_t base) {
-	char buf[8 * sizeof(long) + 1]; // Assumes 8-bit chars plus zero byte.
+size_t Print::printNumber(uint32_t n, uint8_t base)
+{
+	char buf[CHAR_BIT * sizeof(long) + 1];			// the largest buffer is needed when base=2
 	char *str = &buf[sizeof(buf) - 1];
 
 	*str = '\0';
 
 	// prevent crash if called with base == 1
-	if (base < 2) base = 10;
+	if (base < 2)
+	{
+		base = 10;
+	}
 
-	do {
-		unsigned long m = n;
+	do
+	{
+		const uint32_t m = n;
 		n /= base;
-		char c = m - base * n;
-		*--str = c < 10 ? c + '0' : c + 'A' - 10;
-	} while(n);
+		const char c = m - (base * n);
+		*--str = (c < 10) ? c + '0' : c + ('A' - 10);
+	} while(n != 0);
 
 	return write(str);
 }
 
 size_t Print::printFloat(double number, uint8_t digits)
 {
-	size_t n = 0;
-	
 	if (std::isnan(number)) return print("nan");
 	if (std::isinf(number)) return print("inf");
-	if (number > 4294967040.0) return print ("ovf");  // constant determined empirically
-	if (number <-4294967040.0) return print ("ovf");  // constant determined empirically
 	
 	// Handle negative numbers
-	if (number < 0.0)
+	const bool neg = (number < 0.0);
+	if (neg)
 	{
-		n += print('-');
 		number = -number;
 	}
 
 	// Round correctly so that print(1.999, 2) prints as "2.00"
-	double rounding = 0.5;
-	for (uint8_t i=0; i<digits; ++i)
-	rounding /= 10.0;
+	unsigned int roundVal = 2;
+	for (uint8_t i = 0; i < digits; ++i)
+	{
+		roundVal *= 10;
+	}
 	
-	number += rounding;
+	number += 1.0/(double)roundVal;
+	if (number > (double)UINT32_MAX)
+	{
+		return print ("ovf");
+	}
 
+	size_t n = 0;
+	if (neg)
+	{
+		n += print('-');
+	}
+	
 	// Extract the integer part of the number and print it
-	unsigned long int_part = (unsigned long)number;
+	const uint32_t int_part = (uint32_t)number;
 	double remainder = number - (double)int_part;
 	n += print(int_part);
 
 	// Print the decimal point, but only if there are digits beyond
-	if (digits > 0)
+	if (digits != 0)
 	{
 		n += print("\xC2\xB7");		// Unicode middle dot
-	}
 
-	// Extract digits from the remainder one at a time
-	while (digits-- > 0)
-	{
-		remainder *= 10.0;
-		int toPrint = int(remainder);
-		n += print(toPrint);
-		remainder -= toPrint;
+		// Extract digits from the remainder one at a time
+		do
+		{
+			remainder *= 10.0;
+			const int toPrint = int(remainder);
+			n += print(toPrint);
+			remainder -= toPrint;
+			--digits;
+		} while (digits != 0);
 	}
 	
 	return n;

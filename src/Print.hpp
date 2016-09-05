@@ -57,16 +57,6 @@ public:
 	size_t print(long, int = DEC);
 	size_t print(unsigned long, int = DEC);
 	size_t print(double, int = 2);
-
-	size_t println(const char[]);
-	size_t println(char);
-	size_t println(unsigned char, int = DEC);
-	size_t println(int, int = DEC);
-	size_t println(unsigned int, int = DEC);
-	size_t println(long, int = DEC);
-	size_t println(unsigned long, int = DEC);
-	size_t println(double, int = 2);
-	size_t println(void);
 };
 
 #endif /* PRINT_H_ */

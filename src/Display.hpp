@@ -24,15 +24,6 @@ typedef const uint16_t * array Icon;
 #define DEGREE_SYMBOL	"\xC2\xB0"		// Unicode degree-symbol
 #define THIN_SPACE		"\xC2\x80"		// Unicode control character, we use it as thin space
 
-const Colour red = UTFT::fromRGB(255,0,0);
-const Colour yellow = UTFT::fromRGB(128,128,0);
-const Colour green = UTFT::fromRGB(0,255,0);
-const Colour turquoise = UTFT::fromRGB(0,128,128);
-const Colour blue = UTFT::fromRGB(0,0,255);
-const Colour magenta = UTFT::fromRGB(128,0,128);
-const Colour white = 0xFFFF;
-const Colour black = 0x0000;
-
 const uint8_t buttonGradStep = 12;
 
 typedef uint16_t PixelNumber;
@@ -159,9 +150,10 @@ class PopupWindow : public Window
 {
 private:
 	PixelNumber height, width, xPos, yPos;
+	Colour borderColour;
 	
 public:
-	PopupWindow(PixelNumber ph, PixelNumber pw, Colour pb);
+	PopupWindow(PixelNumber ph, PixelNumber pw, Colour pb, Colour pBorder);
 
 	PixelNumber GetHeight() const { return height; }
 	PixelNumber GetWidth() const { return width; }

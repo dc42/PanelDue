@@ -10,6 +10,7 @@
 #define FIELDS_H_
 
 #include "Display.hpp"
+#include "ColourSchemes.hpp"
 
 // From the display type, we determine the display controller type and touch screen orientation adjustment
 #if DISPLAY_TYPE == DISPLAY_TYPE_ITDB02_32WD
@@ -230,50 +231,13 @@ const uint32_t numMessageRows = (rowTabs - margin - rowHeight)/rowTextHeight;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
 
-// Colours
-const Colour titleBarTextColour = white;
-const Colour titleBarBackColour = red;
-const Colour labelTextColour = black;
-const Colour infoTextColour = black;
-const Colour infoBackColour = UTFT::fromRGB(224, 224, 255);
-const Colour defaultBackColour = white; //UTFT::fromRGB(220, 220, 220);
-const Colour activeBackColour = UTFT::fromRGB(255, 128, 128);			// light red
-const Colour standbyBackColour = UTFT::fromRGB(255, 255, 128);			// light yellow
-const Colour errorTextColour = white;
-const Colour errorBackColour = magenta;
-
-const Colour popupBackColour = UTFT::fromRGB(224, 224, 255);			// light blue
-const Colour popupTextColour = black;
-const Colour popupButtonTextColour = black;
-const Colour popupButtonBackColour = white;
-const Colour popupInfoTextColour = black;
-const Colour popupInfoBackColour = white;
-
-const Colour alertPopupBackColour = UTFT::fromRGB(192, 255, 192);		// light green
-const Colour alertPopupTextColour = black;
-
-const Colour buttonTextColour = black;
-const Colour buttonPressedTextColour = black;
-const Colour buttonBackColour = white;
-const Colour buttonGradColour = UTFT::fromRGB(8, 4, 8);
-const Colour buttonPressedBackColour = UTFT::fromRGB(192, 255, 192);
-const Colour buttonPressedGradColour = UTFT::fromRGB(8, 8, 8);
-const Colour buttonBorderColour = black;
-const Colour homedButtonBackColour = UTFT::fromRGB(224, 224, 255);		// light blue
-const Colour notHomedButtonBackColour = UTFT::fromRGB(255, 224, 192);	// light orange
-const Colour pauseButtonBackColour = UTFT::fromRGB(255, 224, 192);		// light orange
-const Colour resumeButtonBackColour = UTFT::fromRGB(255, 255, 128);		// light yellow
-const Colour resetButtonBackColour = UTFT::fromRGB(255, 192, 192);		// light red
-
-const Colour progressBarColour = UTFT::fromRGB(0, 160, 0);
-const Colour progressBarBackColour = white;
-
+const Colour touchSpotBackColour = white;
 const Colour touchSpotColour = black;
 
 namespace Fields
 {
-	extern void CreateFields(uint32_t language);
-	extern void SettingsAreSaved(bool areSaved);
+	extern void CreateFields(uint32_t language, const ColourScheme& colours);
+	extern void SettingsAreSaved(bool areSaved, bool needRestart);
 	extern void ShowPauseButton();
 	extern void ShowFilesButton();
 	extern void ShowResumeAndCancelButtons();
@@ -298,16 +262,17 @@ extern FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField
 extern FloatField *xPos, *yPos, *zPos;
 extern IntegerButton *activeTemps[maxHeaters], *standbyTemps[maxHeaters];
 extern IntegerButton *spd, *fanSpeed, *baudRateButton, *volumeButton;
-extern IntegerButton *extrusionFactors[maxHeaters];
-extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm;
+extern IntegerButton *extrusionFactors[maxHeaters - 1];
+extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm, *fileListErrorField;
 extern ProgressBar *printProgressBar;
 extern SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
 extern SingleButton *moveButton, *extrudeButton, *macroButton;
-extern TextButton *filenameButtons[numDisplayedFiles], *languageButton;
-extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton;
+extern TextButton *filenameButtons[numDisplayedFiles], *languageButton, *coloursButton;
+extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton, *changeCardButton;
 extern SingleButton *homeButtons[3], *homeAllButton;
 extern ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
-extern StaticTextField *nameField, *statusField, *filePopupTitleField;
+extern StaticTextField *nameField, *statusField, *macroPopupTitleField, *debugField;
+extern IntegerField *filePopupTitleField;
 extern SingleButton *heaterStates[maxHeaters];
 extern StaticTextField *touchCalibInstruction;
 extern StaticTextField *messageTextFields[numMessageRows], *messageTimeFields[numMessageRows];
@@ -317,7 +282,7 @@ extern DisplayField *baseRoot, *commonRoot, *controlRoot, *printRoot, *filesRoot
 extern ButtonBase * null currentTab;
 extern ButtonPress fieldBeingAdjusted;
 extern ButtonPress currentButton;
-extern PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup;
+extern PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup, *coloursPopup;
 extern TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
 extern PopupWindow *alertPopup;
 
@@ -351,7 +316,7 @@ enum Event : uint8_t
 	evFactoryReset,
 	evAdjustSpeed,
 	
-	evScrollFiles, evFilesUp, evMacrosUp,
+	evScrollFiles, evFilesUp, evMacrosUp, evChangeCard,
 	
 	evKeyboard,
 
@@ -367,6 +332,8 @@ enum Event : uint8_t
 	evKey, evBackspace, evSendKeyboardCommand, evUp, evDown,
 	
 	evAdjustLanguage, evSetLanguage,
+	evAdjustColours, evSetColours,
+	evBrighter, evDimmer,
 	
 	evRestart
 };

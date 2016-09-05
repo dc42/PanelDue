@@ -6,6 +6,7 @@
  */ 
 
 #include "Display.hpp"
+#include "ColourSchemes.hpp"
 #undef array
 #undef result
 #include <algorithm>
@@ -204,10 +205,10 @@ void Window::ClearPopup(bool redraw, PopupWindow *whichOne)
 		Window *pw = this;
 		while (pw->next->next != nullptr)
 		{
-			pw = pw->next;		// find the penultimate window
+			pw = pw->next;
 		}
 		
-		if (whichOne == nullptr || whichOne == pw)
+		if (whichOne == nullptr || whichOne == pw->next)
 		{
 			const PixelNumber xmin = pw->next->Xpos(), xmax = xmin + pw->next->GetWidth() - 1, ymin = pw->next->Ypos(), ymax = ymin + pw->next->GetHeight() - 1;
 			bool popupWasContained = pw->Contains(xmin, ymin, xmax, ymax);
@@ -368,12 +369,12 @@ void MainWindow::ClearAllPopups()
 {
 	while (next != nullptr)
 	{
-		ClearPopup(false);
+		ClearPopup(true);
 	}
 }
 
-PopupWindow::PopupWindow(PixelNumber ph, PixelNumber pw, Colour pb)
-	: Window(pb), height(ph), width(pw)
+PopupWindow::PopupWindow(PixelNumber ph, PixelNumber pw, Colour pb, Colour pBorder)
+	: Window(pb), height(ph), width(pw), borderColour(pBorder)
 {
 }
 
@@ -385,8 +386,8 @@ void PopupWindow::Refresh(bool full)
 		lcd.setColor(backgroundColour);
 		lcd.fillRoundRect(xPos + 1, yPos + 2, xPos + width - 2, yPos + height - 3);
 
-		// Draw a double black border
-		lcd.setColor(black);
+		// Draw a double border
+		lcd.setColor(borderColour);
 		lcd.drawRoundRect(xPos, yPos, xPos + width - 1, yPos + height - 1);
 		lcd.drawRoundRect(xPos + 1, yPos + 1, xPos + width - 2, yPos + height - 2);
 	}

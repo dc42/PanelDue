@@ -27,14 +27,15 @@ namespace FileManager
 		int which;
 		const Event fileEvent;
 		const Event upEvent;
-		const char * array const popupTitle;
 		int scrollOffset;
 		bool IsInSubdir() const;
+		const bool isFilesList;			// true for a file list, false for a macro list
+		uint8_t cardNumber;
 		
 	public:
-		FileSet(Event fe, Event fu, const char * array rootDir, const char * array title);
+		FileSet(Event fe, Event fu, const char * array rootDir, bool pIsFilesList);
 		void Display();
-		void Reload(int whichList, const Path& dir);
+		void Reload(int whichList, const Path& dir, int errCode);
 		void RefreshPopup();
 		void Scroll(int amount);
 		void SetIndex(int index) { which = index; }
@@ -48,6 +49,7 @@ namespace FileManager
 		void SetPending() { timer.SetPending(); }
 		void StopTimer() { timer.Stop(); }
 		bool ProcessTimer() { return timer.Process(); }
+		void ChangeCard();
 	};
 
 	void BeginNewMessage();
@@ -55,6 +57,7 @@ namespace FileManager
 	void BeginReceivingFiles();
 	void ReceiveFile(const char * array data);
 	void ReceiveDirectoryName(const char * array data);
+	void ReceiveErrorCode(int err);
 	
 	void DisplayFilesList();
 	void DisplayMacrosList();
@@ -71,6 +74,8 @@ namespace FileManager
 
 	void RefreshFilesList();
 	bool ProcessTimers();
+	void ChangeCard();
+	void SetNumVolumes(size_t n);
 }
 
 #endif /* FILEMANAGER_H_ */

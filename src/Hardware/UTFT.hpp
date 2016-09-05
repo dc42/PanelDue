@@ -152,7 +152,7 @@ public:
 	void drawLine(int x1, int y1, int x2, int y2);
 	void drawRect(int x1, int y1, int x2, int y2);
 	void drawRoundRect(int x1, int y1, int x2, int y2);
-	void fillRect(int x1, int y1, int x2, int y2, Colour grad = 0);
+	void fillRect(int x1, int y1, int x2, int y2, Colour grad = 0, uint8_t gradChange = 1);
 	void fillRoundRect(int x1, int y1, int x2, int y2, Colour grad = 0, uint8_t gradChange = 1);
 	void drawCircle(int x, int y, int radius);
 	void fillCircle(int x, int y, int radius);
@@ -161,7 +161,7 @@ public:
 	void setColor(Colour c) { fcolour = c; }
 	void setBackColor(Colour c) { bcolour = c; }
 	void setTransparentBackground(bool b) { transparentBackground = b; }
-	static Colour fromRGB(uint8_t r, uint8_t g, uint8_t b);
+	static constexpr Colour fromRGB(uint8_t r, uint8_t g, uint8_t b);
 		
 	// New print functions
 	// Set up translation for characters. Useful for translating fullstop into decimal point, or changing the width of spaces.
@@ -261,5 +261,10 @@ private:
 		portRS.setHigh();
 	}
 };
+
+inline constexpr uint16_t UTFT::fromRGB(uint8_t r, uint8_t g, uint8_t b)
+{
+	return ((r & 248) << 8) | ((g & 252) << 3) | (b >> 3);
+}
 
 #endif

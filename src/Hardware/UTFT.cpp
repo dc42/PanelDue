@@ -1581,7 +1581,7 @@ void UTFT::drawRoundRect(int x1, int y1, int x2, int y2)
 	}
 }
 
-void UTFT::fillRect(int x1, int y1, int x2, int y2, Colour grad)
+void UTFT::fillRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gradChange)
 {
 	if (x1>x2)
 	{
@@ -1593,12 +1593,17 @@ void UTFT::fillRect(int x1, int y1, int x2, int y2, Colour grad)
 	}
 
 	Colour fcolourSave = fcolour;
+	uint8_t gradCount = 0;
 	if (orient & SwapXY)
 	{
 		for (int i = x1; i <= x2; i++)
 		{
 			drawVLine(i, y1, y2-y1);
-			fcolour += grad;
+			if (++gradCount == gradChange)
+			{
+				gradCount = 0;
+				fcolour += grad;
+			}
 		}
 	}
 	else
@@ -1606,7 +1611,11 @@ void UTFT::fillRect(int x1, int y1, int x2, int y2, Colour grad)
 		for (int i = y1; i <= y2; i++)
 		{
 			drawHLine(x1, i, x2-x1);
-			fcolour += grad;
+			if (++gradCount == gradChange)
+			{
+				gradCount = 0;
+				fcolour += grad;
+			}
 		}
 	}
 	fcolour = fcolourSave;
@@ -1633,14 +1642,14 @@ void UTFT::fillRoundRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gr
 		if (++gradCount == gradChange)
 		{
 			gradCount = 0;
-			fcolour -= grad;
+			fcolour += grad;
 		}
 		drawHLine(x1+1, y1, x2-x1-2);
 		++y1;
 		if (++gradCount == gradChange)
 		{
 			gradCount = 0;
-			fcolour -= grad;
+			fcolour += grad;
 		}
 		while (y1 + 1 < y2)
 		{
@@ -1649,7 +1658,7 @@ void UTFT::fillRoundRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gr
 			if (++gradCount == gradChange)
 			{
 				gradCount = 0;
-				fcolour -= grad;
+				fcolour += grad;
 			}
 		}
 		drawHLine(x1+1, y1, x2-x1-2);
@@ -1657,7 +1666,7 @@ void UTFT::fillRoundRect(int x1, int y1, int x2, int y2, Colour grad, uint8_t gr
 		if (++gradCount == gradChange)
 		{
 			gradCount = 0;
-			fcolour -= grad;
+			fcolour += grad;
 		}
 		drawHLine(x1+2, y1, x2-x1-4);
 		
@@ -1761,11 +1770,6 @@ void UTFT::clrScr()
 	clrXY();
 	LCD_Write_Repeated_DATA16(0, disp_x_size+1, disp_y_size+1);
 	removeCS();
-}
-
-uint16_t UTFT::fromRGB(uint8_t r, uint8_t g, uint8_t b)
-{
-	return ((r & 248) << 8) | ((g & 252) << 3) | (b >> 3);
 }
 
 void UTFT::fillScr(Colour c)

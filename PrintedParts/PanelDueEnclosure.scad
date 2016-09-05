@@ -12,16 +12,14 @@
 // 2) Set the "ShowPCB" variable to "true" to show the PCB shapes.
 //    This is only in order to see how the PCBs will fit in the case, and should
 //    not be used when generating an STL to print
-// 3) If "Front" is set to true then parameters are interpreted as being viewed
-//    from the front of the LCD, otherwise they are viewed from the back
 
 /* [Size] */
 
 // Which display panel do you have?
-DisplayType=3;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Alternative 4.3 inch,4:Alternative 5 inch,5:7 inch]
+DisplayType=5;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Alternative 4.3 inch,4:Alternative 5 inch,5:7 inch]
 
 // Which version PanelDue controller board do you have?
-BoardVersion=1.1;				// [1.0,1.1]
+BoardVersion=2.0;				// [1.0,1.1,2.0]
 
 /* [Options] */
 
@@ -42,7 +40,7 @@ Mount=0;							// [0:No,1:Yes]
 */
 
 screw=true;						// set if screw lid
-Encoder=false;					// true if hole wanted for rotary encoder
+Encoder=false;					// true if hole wanted for rotary encoder (version 1.0 board only)
 
 // Set ONE of the following 4 variables true according to your display type
 Itead43=(DisplayType==1);
@@ -82,14 +80,12 @@ LidSep=10;						// separation between box and lid
 Tol=1;								//main tolerence
 ShowPCB=true;
 ShowLCD=true;
-Front=true;
 
 
 // LCD display module parameters
 // NOTE - use any origin position you want and reference everything to that.
 //        I have chosen the bottom left of the LCD screen as the origin, but
 //        use anything and the code will sort it out.
-//        co-ordinates are LCD display side down unless "Front" is "true".
 LCDscrn =   (Itead43) ? [0,105.6,0,67.8]
 			: (Itead50) ? [0,119,0,78.6]
 			: (Other43) ? [0,106,0,67.8]
@@ -160,11 +156,18 @@ LCDbossFR=(LCDbossDia-LCDmnthole)/2; // Bottom fillet MMRadius of bosses
 LCDsupW=1;						// Width of boss supports
 
 // Controller PCB module parameters
-// The origin for these coordinates is pin 1 of the 40-pin connector, which is assumed to be 
-// oriented with the long edge in the Y direction.
-//        co-ordinates are from back of PCB (looking into back of case) unless "Front" is true.
-PCB =[0,(BoardVersion > 1) ? 41.6 : 47.3,0,69.2];	// The edges of the controller PCB [Left,Right,Bottom,Top]
-PCBmounts=(BoardVersion > 1)
+// The 40-pin connector is assumed to be oriented with the long edge in the Y direction.
+// Coordinates are from front of PCB.
+PCB =[	0,
+		(BoardVersion >= 2) ? 66.3 : 47.3,	// version 2 board is actually 65.3, the extra 1mm is to make wiring easier
+		0,
+		(BoardVersion > 1) ? 73.0 : 69.2
+	  ];	// The edges of the controller PCB [Left,Right,Bottom,Top]
+PCBmounts=(BoardVersion >= 2)
+		 ? [						// Enter the relative coordinates [X,Y] of each mounting hole
+			[56.0, 37.8]			// You may have as many mounting holes as you like
+			]					
+		 : (BoardVersion > 1)
 		 ? [						// Enter the relative coordinates [X,Y] of each mounting hole
 			[18.1, 16.0],			// You may have as many mounting holes as you like
 			[18.1, 54.0]			// Each hole is defined separately for flexibility
@@ -174,14 +177,24 @@ PCBmounts=(BoardVersion > 1)
 			[44.1, 16.0],			// Each hole is defined separately for flexibility
 			[18.1, 54.0]
 			];
-PCBshaft=[32.1,16.0];			// XY co-ordinates of rorary encoder shaft
-PCBreset=[21.1,3.7];			// Coordinates of the reset button
-PCBerase=(BoardVersion > 1)
+//PCBshaft=[32.1,16.0];			// XY co-ordinates of rorary encoder shaft on V1.0 board
+PCBreset= (BoardVersion >= 2)
+			? [57.4,16.5]
+			: [21.1,3.7];			// Coordinates of the reset button
+PCBerase=	  (BoardVersion >= 2)
+			? [53.1,67.5]
+			: (BoardVersion > 1)
 			? [37.5,22.5]
 			: [43.5,26.5];		// Coordinates of the erase button
-PCBUSB=[PCB[1],5.6,1.2];		// Coordinates of the USB port inc. height from top surface of board
-PCBpin1=[10.0,8.4];				// Coordinates of pin 1 of the 40-pin LCD connector
-PCBbuzzer=(BoardVersion > 1)
+PCBUSB=	[PCB[1],
+			(BoardVersion >= 2) ? 68.05 : 5.6,
+			1.2];		// Coordinates of the USB port inc. height from top surface of board
+PCBpin1= (BoardVersion >= 2)
+			? [46.4,12.5]
+			: [10.0,8.4];				// Coordinates of pin 1 of the 40-pin LCD connector
+PCBbuzzer=  (BoardVersion >= 2)
+			? [57.26,26.52]
+			: (BoardVersion > 1)
 			? [35.4,50.5]
 			: [37.8,50.5];		// Coordinates of buzzer
 
@@ -246,7 +259,7 @@ $fn=50;  // 50 is good for printing, reduce to render faster while experimenting
 
 // CODE
 
-mirror([Front ? 1:0,0,0])
+mirror([1,0,0])
 {
 	difference()
 	{

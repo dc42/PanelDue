@@ -23,6 +23,7 @@ namespace SystemTick
 
 void SysTick_Handler()
 {
+	wdt_restart(WDT);
 	++SystemTick::tickCount;
 	Buzzer::Tick();
 }
