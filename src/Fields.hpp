@@ -79,7 +79,7 @@ const PixelNumber rowHeight = 28;
 const PixelNumber moveButtonRowSpacing = 12;
 const PixelNumber extrudeButtonRowSpacing = 12;
 const PixelNumber fileButtonRowSpacing = 8;
-const PixelNumber keyboardButtonRowSpacing = 7;		// small enough to show 2 lines of messages
+const PixelNumber keyboardButtonRowSpacing = 6;		// small enough to show 2 lines of messages
 
 const PixelNumber speedTextWidth = 70;
 const PixelNumber efactorTextWidth = 30;
@@ -91,6 +91,8 @@ const PixelNumber messageTimeWidth = 60;
 const PixelNumber popupY = 192;
 const PixelNumber popupSideMargin = 10;
 const PixelNumber popupTopMargin = 10;
+const PixelNumber keyboardTopMargin = 8;
+
 const PixelNumber popupFieldSpacing = 10;
 
 const PixelNumber axisLabelWidth = 26;
@@ -136,6 +138,7 @@ const PixelNumber messageTimeWidth = 90;
 const PixelNumber popupY = 345;
 const PixelNumber popupSideMargin = 20;
 const PixelNumber popupTopMargin = 20;
+const PixelNumber keyboardTopMargin = 20;
 const PixelNumber popupFieldSpacing = 20;
 
 const PixelNumber axisLabelWidth = 40;
@@ -213,7 +216,7 @@ const PixelNumber keyboardPopupWidth = fullPopupWidth;
 const PixelNumber keyButtonWidth = (keyboardPopupWidth - 2 * popupSideMargin)/16;
 const PixelNumber keyButtonHStep = (keyboardPopupWidth - 2 * popupSideMargin - keyButtonWidth)/11;
 const PixelNumber keyButtonVStep = buttonHeight + keyboardButtonRowSpacing;
-const PixelNumber keyboardPopupHeight = (6 * keyButtonVStep) + (2 * popupTopMargin);
+const PixelNumber keyboardPopupHeight = (5 * keyButtonVStep) + (2 * keyboardTopMargin) + buttonHeight;
 const PixelNumber keyboardPopupX = fullWidthPopupX, keyboardPopupY = margin;
 
 const unsigned int numFileColumns = 2;

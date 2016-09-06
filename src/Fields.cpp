@@ -64,13 +64,13 @@ const Icon heaterIcons[maxHeaters] = { IconBed, IconNozzle1, IconNozzle2, IconNo
 namespace Fields
 {
 	// Create a standard popup window with a title and a close button at the top right
-	PopupWindow *CreatePopupWindow(PixelNumber ph, PixelNumber pw, Colour pb, Colour pBorder, Colour textColour, const char * null title)
+	PopupWindow *CreatePopupWindow(PixelNumber ph, PixelNumber pw, Colour pb, Colour pBorder, Colour textColour, const char * null title, PixelNumber topMargin = popupTopMargin)
 	{
 		PopupWindow *window = new PopupWindow(ph, pw, pb, pBorder);
 		DisplayField::SetDefaultColours(textColour, pb);
 		if (title != nullptr)
 		{
-			window->AddField(new StaticTextField(popupTopMargin + labelRowAdjust, popupSideMargin + closeButtonWidth + popupFieldSpacing, pw - 2 * (popupSideMargin + closeButtonWidth + popupFieldSpacing), TextAlignment::Centre, title));
+			window->AddField(new StaticTextField(topMargin + labelRowAdjust, popupSideMargin + closeButtonWidth + popupFieldSpacing, pw - 2 * (popupSideMargin + closeButtonWidth + popupFieldSpacing), TextAlignment::Centre, title));
 		}
 		window->AddField(new IconButton(popupTopMargin, pw - (closeButtonWidth + 
 		popupSideMargin), closeButtonWidth, IconCancel, evCancel));	
@@ -537,11 +537,11 @@ namespace Fields
 		static const char* array const keysFR[4] = { "1234567890-+", "AZERTWUIOP", "QSDFGHJKLM", "YXCVBN.:/" };
 		static const char* array const * const keyboards[numLanguages] = { keysGB, keysDE, keysFR };
 
-		keyboardPopup = CreatePopupWindow(keyboardPopupHeight, keyboardPopupWidth, colours.popupBackColour, colours.popupBorderColour, colours.popupInfoTextColour, nullptr);
+		keyboardPopup = CreatePopupWindow(keyboardPopupHeight, keyboardPopupWidth, colours.popupBackColour, colours.popupBorderColour, colours.popupInfoTextColour, nullptr, keyboardTopMargin);
 		
 		// Add the text area in which the command is built
 		DisplayField::SetDefaultColours(colours.popupInfoTextColour, colours.popupInfoBackColour);		// need a different background colour
-		userCommandField = new TextField(popupTopMargin + labelRowAdjust, popupSideMargin, keyboardPopupWidth - 2 * popupSideMargin - closeButtonWidth - popupFieldSpacing, TextAlignment::Left, nullptr, "_");
+		userCommandField = new TextField(keyboardTopMargin + labelRowAdjust, popupSideMargin, keyboardPopupWidth - 2 * popupSideMargin - closeButtonWidth - popupFieldSpacing, TextAlignment::Left, nullptr, "_");
 		keyboardPopup->AddField(userCommandField);
 
 		if (language >= numLanguages)
@@ -550,7 +550,7 @@ namespace Fields
 		}
 		const char* array const * array const keys = keyboards[language];
 		DisplayField::SetDefaultColours(colours.popupButtonTextColour, colours.popupButtonBackColour);
-		PixelNumber row = popupTopMargin + keyButtonVStep;
+		PixelNumber row = keyboardTopMargin + keyButtonVStep;
 		for (size_t i = 0; i < 4; ++i)
 		{
 			PixelNumber column = popupSideMargin + (i * keyButtonHStep)/3;
