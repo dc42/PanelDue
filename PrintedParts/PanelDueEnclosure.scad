@@ -16,7 +16,7 @@
 /* [Size] */
 
 // Which display panel do you have?
-DisplayType=5;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Alternative 4.3 inch,4:Alternative 5 inch,5:7 inch]
+DisplayType=4;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Standard 4.3 inch,4:Standard 5 inch,5:7 inch]
 
 // Which version PanelDue controller board do you have?
 BoardVersion=2.0;				// [1.0,1.1,2.0]
@@ -28,6 +28,9 @@ Lid=0;								// [0:No,1:Yes]
 
 // Do you want a lip at the top for hanging the enclosure from a top horizontal extrusion?
 Lip=0;								// [0:No,1:Yes]
+
+// Do you want a slot for the SD card?
+SDcard=1;							// [0:No,1:Yes]
 
 // How much do you want to relieve the overhang of the rounded corners, to make it easier to print?
 RelieveOverhang=10;				// [0:30]
@@ -66,7 +69,8 @@ ResetHoleSide=2;					// Side of the square reset hole
 BuzzerHoleSide=1.5;				// Side of the square buzzer holes
 
 ResetGuideInnerRadius=1.5;
-ResetGuideOuterRadius=4.4;
+ResetGuideLowerRadius=4.4;
+ResetGuideUpperRadius=3.0;
 
 MountHeight=32;					// Height at which to put appjaws1's mount
 
@@ -80,7 +84,6 @@ LidSep=10;						// separation between box and lid
 Tol=1;								//main tolerence
 ShowPCB=true;
 ShowLCD=true;
-
 
 // LCD display module parameters
 // NOTE - use any origin position you want and reference everything to that.
@@ -119,10 +122,10 @@ LCDmounts= (Itead43) ?
 				[110.5,67.8]		// ... add/remove as needed for modules with more/less mounting holes
 			  ]
 			: (Other50) ? [
-				[-4,-0.5],
-				[124,-0.5],
-				[-4,78],
-				[124,78]
+				[-3.75,-0.5],
+				[123.75,-0.5],
+				[-3.75,78],
+				[123.75,78]
 			  ]
 			:             [
 			   [-5,-0.5],
@@ -230,6 +233,15 @@ PCBrot= (Itead43 || Itead50) ? -90 : 0;	// Degrees to rotate controller PCB with
 
 USBsize=[9.5,7];					// Length and height of USB connector on PCB
 
+SDsize = [26, 3.6];				// Length and width of the slot for the SD card
+
+// The following defines the position of the slot for the SD card.
+// On my 7 inch display it is at the bottom. For the other displays it is at the top.
+// This is not supported when using the ITEAD displays.
+SDpos = (Other43) ? 	[LCDscrn[0]+40.0,	LCDpcb[3], LCDheight+1.5]
+		: (Other50) ? 	[LCDscrn[0]+49.35,	LCDpcb[3], LCDheight+1.5]
+		: 					[LCDscrn[0]+2.5,		LCDpcb[2], LCDheight+1.5];
+
 DuetConLen=10;
 DuetConWid=6;
 Lidmounts=[						// Enter the relative coordinates [X,Y] of each mounting hole
@@ -284,12 +296,16 @@ mirror([1,0,0])
 		}
 		translate([PCBpos[0],PCBpos[1],0]) rotate([0,0,PCBrot]) ResetCutout();
 		translate([PCBpos[0],PCBpos[1],0]) rotate([0,0,PCBrot]) BuzzerHoles();
+		if (SDcard) {
+			#translate([LCDpos[0]+SDpos[0],LCDpos[1]+SDpos[1]-10,SDpos[2]+MBez])
+				cube([SDsize[0], 20, SDsize[1]]);
+		}
 	}
 	if (ShowLCD){
-		translate([LCDpos[0],LCDpos[1],0]) LCDshape();
+		%translate([LCDpos[0],LCDpos[1],0]) LCDshape();
 	}
 	if (ShowPCB){
-		translate([PCBpos[0],PCBpos[1],PCBheight+LCDheight+MBez]) rotate([0,0,PCBrot]) PCBshape();
+		%translate([PCBpos[0],PCBpos[1],PCBheight+LCDheight+MBez]) rotate([0,0,PCBrot]) PCBshape();
 	}
 	translate([PCBpos[0],PCBpos[1],0]) rotate([0,0,PCBrot]) ResetGuides();
 }
@@ -414,12 +430,12 @@ module ResetGuides()
 {
 	translate([PCBreset[0],PCBreset[1],MBase - overlap])
 		difference() {
-			cylinder(r=ResetGuideOuterRadius, h=ResetGuideHeight+overlap);
+			cylinder(r1=ResetGuideLowerRadius, r2=ResetGuideUpperRadius, h=ResetGuideHeight+overlap);
 			translate([0,0,-overlap]) cylinder(r=ResetGuideInnerRadius, h=ResetGuideHeight+3*overlap);
 		}
 	translate([PCBerase[0],PCBerase[1],MBase - overlap])
 		difference() {
-			cylinder(r=ResetGuideOuterRadius, h=ResetGuideHeight+overlap);
+			cylinder(r=ResetGuideLowerRadius, r2=ResetGuideUpperRadius, h=ResetGuideHeight+overlap);
 			translate([0,0,-overlap]) cylinder(r=ResetGuideInnerRadius, h=ResetGuideHeight+3*overlap);
 		}
 }
