@@ -59,9 +59,12 @@ const PixelNumber DisplayY = DISPLAY_Y;
 // Define the row and column positions. Leave a gap of at least 1 pixel from the edges of the screen, so that we can highlight
 // a field by drawing an outline.
 
+#define MIN_AXES	(3)
+
 #if DISPLAY_X == 480
 
 const unsigned int maxHeaters = 5;
+#define MAX_AXES	(4)
 
 const PixelNumber margin = 2;
 const PixelNumber textButtonMargin = 1;
@@ -109,6 +112,7 @@ extern uint8_t glcd19x21[];				// declare which fonts we will be using
 #elif DISPLAY_X == 800
 
 const unsigned int maxHeaters = 7;
+#define MAX_AXES (6)
 
 const PixelNumber margin = 4;
 const PixelNumber textButtonMargin = 1;
@@ -202,7 +206,7 @@ const PixelNumber areYouSurePopupWidth = DisplayX - 80,
 				  areYouSurePopupHeight = (3 * rowHeight) + (2 * popupTopMargin);
 
 const PixelNumber movePopupWidth = fullPopupWidth;
-const PixelNumber movePopupHeight = (4 * buttonHeight) + (3 * moveButtonRowSpacing) + (2 * popupTopMargin);
+const PixelNumber movePopupHeight = ((MAX_AXES + 1) * buttonHeight) + (MAX_AXES * moveButtonRowSpacing) + (2 * popupTopMargin);
 const PixelNumber movePopupX = (DisplayX - movePopupWidth)/2;
 const PixelNumber movePopupY = (DisplayY - movePopupHeight)/2;
 
@@ -244,6 +248,7 @@ namespace Fields
 	extern void ShowPauseButton();
 	extern void ShowFilesButton();
 	extern void ShowResumeAndCancelButtons();
+	extern void ShowAxis(size_t axis, bool b);
 }
 
 const size_t machineNameLength = 30;
@@ -272,7 +277,7 @@ extern SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
 extern SingleButton *moveButton, *extrudeButton, *macroButton;
 extern TextButton *filenameButtons[numDisplayedFiles], *languageButton, *coloursButton;
 extern SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton, *changeCardButton;
-extern SingleButton *homeButtons[3], *homeAllButton;
+extern SingleButton *homeButtons[MAX_AXES], *homeAllButton;
 extern ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
 extern StaticTextField *nameField, *statusField, *macroPopupTitleField, *debugField;
 extern IntegerField *filePopupTitleField;
@@ -303,7 +308,7 @@ enum Event : uint8_t
 	
 	// Control functions
 	evMovePopup, evExtrudePopup, evFan, evListMacros,
-	evMoveX, evMoveY, evMoveZ,
+	evMoveX, evMoveY, evMoveZ, evMoveU, evMoveV, evMoveW,	// these 6 must be contiguous and in this order
 	evExtrudeAmount, evExtrudeRate, evExtrude, evRetract,
 	
 	// Print functions

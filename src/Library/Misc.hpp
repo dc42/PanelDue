@@ -26,4 +26,9 @@ template<class T> T max(const T& a, const T& b)
 	return (a > b) ? a : b;
 }
 
+template<class T> T constrain(const T& v, const T& minVal, const T& maxVal)
+{
+	return (v < minVal) ? minVal : (v > maxVal) ? maxVal : v;
+}
+
 #endif /* MISC_H_ */

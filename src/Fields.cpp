@@ -24,7 +24,7 @@ SingleButton *moveButton, *extrudeButton, *macroButton;
 
 TextButton *filenameButtons[numDisplayedFiles], *languageButton, *coloursButton;
 SingleButton *scrollFilesLeftButton, *scrollFilesRightButton, *filesUpButton, *changeCardButton;
-SingleButton *homeButtons[3], *homeAllButton, *bedCompButton;
+SingleButton *homeButtons[MAX_AXES], *homeAllButton, *bedCompButton;
 SingleButton *heaterStates[maxHeaters];
 ButtonPress currentExtrudeRatePress, currentExtrudeAmountPress;
 StaticTextField *nameField, *statusField, *touchCalibInstruction, *macroPopupTitleField, *debugField;
@@ -40,6 +40,7 @@ ButtonPress currentButton;
 PopupWindow *setTempPopup, *movePopup, *extrudePopup, *fileListPopup, *filePopup, *baudPopup, *volumePopup, *areYouSurePopup, *keyboardPopup, *languagePopup, *coloursPopup, *brightnessPopup;
 TextField *zProbe, *fpNameField, *fpGeneratedByField, *userCommandField;
 PopupWindow *alertPopup;
+StaticTextField *moveAxisRows[MAX_AXES];
 
 String<machineNameLength> machineName;
 String<printingFileLength> printingFile;
@@ -210,13 +211,24 @@ namespace Fields
 		mgr.AddField(zProbe = new TextField(row6p3 + labelRowAdjust, columnProbe, probeFieldWidth, TextAlignment::Left, "Probe ", zprobeBuf.c_str()));
 
 		DisplayField::SetDefaultColours(colours.buttonTextColour, colours.notHomedButtonBackColour);
-		homeAllButton = AddIconButton(row7p7, 0, 5, IconHomeAll, evSendCommand, "G28");
-		homeButtons[0] = AddIconButton(row7p7, 1, 5, IconHomeX, evSendCommand, "G28 X0");
-		homeButtons[1] = AddIconButton(row7p7, 2, 5, IconHomeY, evSendCommand, "G28 Y0");
-		homeButtons[2] = AddIconButton(row7p7, 3, 5, IconHomeZ, evSendCommand, "G28 Z0");
-
+		homeAllButton = AddIconButton(row7p7, 0, MAX_AXES + 2, IconHomeAll, evSendCommand, "G28");
+		homeButtons[0] = AddIconButton(row7p7, 1, MAX_AXES + 2, IconHomeX, evSendCommand, "G28 X0");
+		homeButtons[1] = AddIconButton(row7p7, 2, MAX_AXES + 2, IconHomeY, evSendCommand, "G28 Y0");
+		homeButtons[2] = AddIconButton(row7p7, 3, MAX_AXES + 2, IconHomeZ, evSendCommand, "G28 Z0");
+#if MAX_AXES > 3
+		homeButtons[3] = AddIconButton(row7p7, 4, MAX_AXES + 2, IconHomeU, evSendCommand, "G28 U0");
+		homeButtons[3]->Show(false);
+#endif
+#if MAX_AXES > 4
+		homeButtons[4] = AddIconButton(row7p7, 5, MAX_AXES + 2, IconHomeV, evSendCommand, "G28 U0");
+		homeButtons[4]->Show(false);
+#endif
+#if MAX_AXES > 5
+		homeButtons[5] = AddIconButton(row7p7, 6, MAX_AXES + 2, IconHomeW, evSendCommand, "G28 U0");
+		homeButtons[5]->Show(false);
+#endif
 		DisplayField::SetDefaultColours(colours.buttonTextColour, colours.buttonBackColour);
-		bedCompButton = AddIconButton(row7p7, 4, 5, IconBedComp, evSendCommand, "G32");
+		bedCompButton = AddIconButton(row7p7, MAX_AXES + 1, MAX_AXES + 2, IconBedComp, evSendCommand, "G32");
 
 		filesButton = AddIconButton(row8p7, 0, 4, IconFiles, evListFiles, nullptr);
 		moveButton = AddTextButton(row8p7, 1, 4, "Move", evMovePopup, nullptr);
@@ -360,25 +372,30 @@ namespace Fields
 	// Create the movement popup window
 	void CreateMovePopup(const ColourScheme& colours)
 	{
-		static const char * array xyJogValues[] = { "-100", "-10", "-1", "-0.1", "0.1",  "1", "10", "100" };
-		static const char * array zJogValues[] = { "-50", "-5", "-0.5", "-0.05", "0.05",  "0.5", "5", "50" };
+		static const char * array const xyJogValues[] = { "-100", "-10", "-1", "-0.1", "0.1",  "1", "10", "100" };
+		static const char * array const zJogValues[] = { "-50", "-5", "-0.5", "-0.05", "0.05",  "0.5", "5", "50" };
+		static const char * array const axisNames[] = { "X", "Y", "Z", "U", "V", "W" };
 
 		movePopup = CreatePopupWindow(movePopupHeight, movePopupWidth, colours.popupBackColour, colours.popupBorderColour, colours.popupTextColour, "Move head");
 		PixelNumber ypos = popupTopMargin + buttonHeight + moveButtonRowSpacing;
 		const PixelNumber xpos = popupSideMargin + axisLabelWidth;
-		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, axisLabelWidth, TextAlignment::Left, "X"));
-		DisplayField::SetDefaultColours(colours.popupButtonTextColour, colours.popupButtonBackColour);
-		CreateStringButtonRow(movePopup, ypos, xpos, movePopupWidth - xpos - popupSideMargin, fieldSpacing, 8, xyJogValues, xyJogValues, evMoveX);
-		ypos += buttonHeight + moveButtonRowSpacing;
-		DisplayField::SetDefaultColours(colours.popupTextColour, colours.popupBackColour);
-		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, axisLabelWidth, TextAlignment::Left, "Y"));
-		DisplayField::SetDefaultColours(colours.popupButtonTextColour, colours.popupButtonBackColour);
-		CreateStringButtonRow(movePopup, ypos, xpos, movePopupWidth - xpos - popupSideMargin, fieldSpacing, 8, xyJogValues, xyJogValues, evMoveY);
-		ypos += buttonHeight + moveButtonRowSpacing;
-		DisplayField::SetDefaultColours(colours.popupTextColour, colours.popupBackColour);
-		movePopup->AddField(new StaticTextField(ypos + labelRowAdjust, popupSideMargin, axisLabelWidth, TextAlignment::Left, "Z"));
-		DisplayField::SetDefaultColours(colours.popupButtonTextColour, colours.popupButtonBackColour);
-		CreateStringButtonRow(movePopup, ypos, xpos, movePopupWidth - xpos - popupSideMargin, fieldSpacing, 8, zJogValues, zJogValues, evMoveZ);
+		Event e = evMoveX;
+		for (size_t i = 0; i < MAX_AXES; ++i)
+		{
+			DisplayField::SetDefaultColours(colours.popupButtonTextColour, colours.popupButtonBackColour);
+			const char * array const * array values = (axisNames[i][0] == 'Z') ? zJogValues : xyJogValues;
+			CreateStringButtonRow(movePopup, ypos, xpos, movePopupWidth - xpos - popupSideMargin, fieldSpacing, 8, values, values, e);
+
+			// We create the label after the button row, so that the buttons follow it in the field order, which makes it easier to hide them
+			DisplayField::SetDefaultColours(colours.popupTextColour, colours.popupBackColour);
+			StaticTextField * const tf = new StaticTextField(ypos + labelRowAdjust, popupSideMargin, axisLabelWidth, TextAlignment::Left, axisNames[i]);
+			movePopup->AddField(tf);
+			moveAxisRows[i] = tf;
+			ShowAxis(i, i < MIN_AXES);
+
+			ypos += buttonHeight + moveButtonRowSpacing;
+			e = (Event)((uint8_t)e + 1);
+		}
 	}
 	
 	// Create the extrusion controls popup
@@ -691,6 +708,18 @@ namespace Fields
 		mgr.Show(filesButton, false);
 		mgr.Show(resumeButton, true);
 		mgr.Show(resetButton, true);
+	}
+
+	// Show or hide an axis on the move button grid
+	void ShowAxis(size_t axis, bool b)
+	{
+		// The table gives us a pointer to the label field, which is followed by 8 buttons. So we need to show or hide 9 fields.
+		DisplayField *f = moveAxisRows[axis];
+		for (int i = 0; i < 9 && f != nullptr; ++i)
+		{
+			f->Show(b);
+			f = f->next;
+		}
 	}
 }
 

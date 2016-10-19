@@ -110,103 +110,30 @@ UTFT::UTFT(DisplayType model, TransferMode pmode, unsigned int RS, unsigned int 
 			break;
 	}
 
-#ifndef DISABLE_SERIAL
-	if (isParallel())
-#endif
-	{
-		_set_direction_registers();
-		portRS.setMode(OneBitPort::Output);
-		portWR.setMode(OneBitPort::Output);
-		portCS.setMode(OneBitPort::Output);
-		portRST.setMode(OneBitPort::Output);
-		if (displayTransferMode == TMode9bit)
-		{
-			portSCL.setMode(OneBitPort::Output);
-		}
-	}
-#ifndef DISABLE_SERIAL
-	else
-	{
-		portSDA.setMode(OneBitPort::Output);
-		portSCL.setMode(OneBitPort::Output);
-		portCS.setMode(OneBitPort::Output);
-		portRST.setMode(OneBitPort::Output);
-		if (displayTransferMode == TModeSerial5pin)
-		{
-			portRS.setMode(OneBitPort::Output);
-		}
-	}
-#endif
+	_set_direction_registers();
+	portRS.setMode(OneBitPort::Output);
+	portWR.setMode(OneBitPort::Output);
+	portCS.setMode(OneBitPort::Output);
+	portRST.setMode(OneBitPort::Output);
 }
 
-void UTFT::LCD_Write_COM(uint8_t VL)  
+inline void UTFT::LCD_Write_COM(uint8_t VL)  
 {   
-#ifndef DISABLE_SERIAL
-	if (isParallel())
-#endif
-	{
-		setRSLow();
-		LCD_Write_Bus(0x00,VL);
-	}
-#ifndef DISABLE_SERIAL
-	else
-	{
-		LCD_Write_Bus(0x00,VL);
-	}
-#endif
+	setRSLow();
+	LCD_Write_Bus((uint16_t)VL);
 }
 
-void UTFT::LCD_Write_DATA16(uint16_t VHL)
+inline void UTFT::LCD_Write_DATA16(uint16_t VHL)
 {
-#ifndef DISABLE_SERIAL
-	if (isParallel())
-#endif
-	{
-		setRSHigh();
-		LCD_Write_Bus(VHL >> 8, VHL & 0xFF);
-	}
-#ifndef DISABLE_SERIAL
-	else
-	{
-		LCD_Write_Bus(0x01,VHL >> 8);
-		LCD_Write_Bus(0x01,VHL & 0xFF);
-	}
-#endif
+	setRSHigh();
+	LCD_Write_Bus(VHL);
 }
 
-void UTFT::LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num)
+inline void UTFT::LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num)
 {
-#ifndef DISABLE_SERIAL
-	if (isParallel())
-#endif
-	{
-		setRSHigh();
-#ifndef DISABLE_8BIT
-		if (displayTransferMode == TMode8bit)
-		{
-			do
-			{
-				LCD_Write_Bus(VHL >> 8, VL & 0xFF);
-			} while (--num != 0);
-		}
-		else
-#endif
-		{
-			LCD_Write_Bus(VHL >> 8, VHL & 0xFF);
-			LCD_Write_Again(num - 1);
-		}
-	}
-#ifndef DISABLE_SERIAL
-	else
-	{
-		do
-		{
-			LCD_Write_Bus(0x01, VH);
-			LCD_Write_Bus(0x01, VL);
-			--num;
-		} while (num-- != 0)
-	}
-#endif
+	setRSHigh();
+	LCD_Write_Bus(VHL);
+	LCD_Write_Again(num - 1);
 }
 
 void UTFT::LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num1, uint16_t num2)
@@ -218,21 +145,12 @@ void UTFT::LCD_Write_Repeated_DATA16(uint16_t VHL, uint16_t num1, uint16_t num2)
 	}
 }
 
+// This one is deliberately not inlined to avoid bloating the initialization code.
+// Use LCD_Write_DATA16 instead where high performance is wanted.
 void UTFT::LCD_Write_DATA8(uint8_t VL)
 {
-#ifndef DISABLE_SERIAL
-	if (isParallel())
-#endif
-	{
-		setRSHigh();
-		LCD_Write_Bus(0x00, VL);
-	}
-#ifndef DISABLE_SERIAL
-	else
-	{
-		LCD_Write_Bus(0x01, VL);
-	}
-#endif
+	setRSHigh();
+	LCD_Write_Bus((uint16_t)VL);
 }
 
 void UTFT::LCD_Write_COM_DATA16(uint8_t com1, uint16_t dat1)
@@ -1499,18 +1417,15 @@ void UTFT::setXY(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
 #if !(defined(DISABLE_SSD1963_480) && defined(DISABLE_SSD1963_800))
 	case SSD1963_480:
 	case SSD1963_800:
-		swap(x1, y1);
-		swap(x2, y2);
-		LCD_Write_COM(0x2a); 
-  		LCD_Write_DATA8(x1>>8);
-  		LCD_Write_DATA8(x1);
-  		LCD_Write_DATA8(x2>>8);
-  		LCD_Write_DATA8(x2);
-		LCD_Write_COM(0x2b); 
-  		LCD_Write_DATA8(y1>>8);
-  		LCD_Write_DATA8(y1);
-  		LCD_Write_DATA8(y2>>8);
-  		LCD_Write_DATA8(y2);
+		// In the following we use LCD_WRITE_BUS to write additional data without having to write RS again.
+		LCD_Write_COM_DATA16(0x2a, y1>>8);
+  		LCD_Write_Bus(y1);
+  		LCD_Write_Bus(y2>>8);
+  		LCD_Write_Bus(y2);
+		LCD_Write_COM_DATA16(0x2b, x1>>8);
+  		LCD_Write_Bus(x1);
+  		LCD_Write_Bus(x2>>8);
+  		LCD_Write_Bus(x2);
 		LCD_Write_COM(0x2c); 
 		break;
 #endif
@@ -2199,6 +2114,52 @@ void UTFT::drawBitmap(int x, int y, int sx, int sy, uint16_t *data, int deg, int
 }
 
 #endif
+
+// Draw a compressed bitmap. Data comprises alternate (repeat count - 1, data to write) pairs, both as 16-bit values.
+void UTFT::drawCompressedBitmap(int x, int y, int sx, int sy, const uint16_t *data)
+{
+//	int curY = y;
+	uint32_t count = 0;
+	uint16_t col = 0;
+	assertCS();
+	for (int tx = 0; tx < sx; tx++)
+	{
+//		bool xySet = false;
+		for (int ty = 0; ty < sy; ty++)
+		{
+			//const int actualX = (orient & InvertBitmap) ? sx - tx - 1 : tx;
+			if (count == 0)
+			{
+				count = *data++;
+				col = *data++;
+			}
+			else
+			{
+				--count;
+			}
+#if 1
+			setXY(tx, ty, tx, ty);
+#else
+			if (!xySet)
+			{
+				if (orient & InvertBitmap)
+				{
+					setXY(x, curY, x + (sx - tx) - 1, curY);
+				}
+				else
+				{
+					setXY(x + tx, curY, x + sx - 1, curY);
+				}
+				xySet = true;
+			}
+#endif
+			LCD_Write_DATA16(col);
+		}
+//		++curY;
+	}
+	removeCS();
+	clrXY();	
+}
 
 void UTFT::lcdOff()
 {

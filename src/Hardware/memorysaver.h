@@ -29,7 +29,4 @@
 
 #define DISABLE_BITMAP_ROTATE	1
 
-#define DISABLE_SERIAL			1
-#define DISABLE_8BIT			1
-#define DISABLE_9BIT			1
-//#define DISABLE_16BIT			1
+// End

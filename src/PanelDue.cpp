@@ -39,6 +39,15 @@
 #include "RequestTimer.hpp"
 #include "MessageLog.hpp"
 
+#ifdef OEM
+// Display the splash screen
+# if DISPLAY_X == 800
+#  include "SplashScreens/OemSplashScreen_800_480.hpp"
+# else
+#  include "SplashScreens/OemSplashScreen_480_272.hpp"
+# endif
+#endif
+
 #define DEBUG	(0)
 
 // Controlling constants
@@ -71,8 +80,9 @@ static uint32_t lastResponseTime = 0;
 static bool gotMachineName = false;
 static bool isDelta = false;
 static bool gotGeometry = false;
-static bool axisHomed[3] = {false, false, false};
+static bool axisHomed[MAX_AXES] = {false, false, false};
 static bool allAxesHomed = false;
+static size_t numAxes = MIN_AXES;
 static int beepFrequency = 0, beepLength = 0;
 static unsigned int numHeads = 1;
 static unsigned int messageSeq = 0;
@@ -156,6 +166,7 @@ enum ReceivedDataEvent
 {
 	rcvUnknown = 0,
 	rcvActive,
+	rcvAxes,
 	rcvDir,
 	rcvErr,
 	rcvEfactor,
@@ -195,8 +206,7 @@ struct ReceiveDataTableEntry
 
 static Event eventToConfirm = evNull;
 
-const size_t numHeaters = 3;
-int heaterStatus[numHeaters];
+int heaterStatus[maxHeaters];
 
 RequestTimer fileInfoTimer(FileInfoRequestTimeout, "M36");
 RequestTimer machineConfigTimer(MachineConfigRequestTimeout, "M408 S1");
@@ -673,10 +683,17 @@ void ProcessTouch(ButtonPress bp)
 		case evMoveX:
 		case evMoveY:
 		case evMoveZ:
-			SerialIo::SendString("G91\nG1 ");
-			SerialIo::SendChar((ev == evMoveX) ? 'X' : (ev == evMoveY) ? 'Y' : 'Z');
-			SerialIo::SendString(bp.GetSParam());
-			SerialIo::SendString(" F6000\nG90\n");
+		case evMoveU:
+		case evMoveV:
+		case evMoveW:
+			{
+				const uint8_t axis = ev - evMoveX;
+				const char c = (axis < 3) ? 'X' + axis : ('U' - 3) + axis;
+				SerialIo::SendString("G91\nG1 ");
+				SerialIo::SendChar(c);
+				SerialIo::SendString(bp.GetSParam());
+				SerialIo::SendString(" F6000\nG90\n");
+			}
 			break;
 
 		case evExtrudePopup:
@@ -1197,12 +1214,14 @@ void SetStatus(char c)
 		break;
 	case 'C':
 		newStatus = PrinterStatus::configuring;
+		gotGeometry = false;
 		break;
 	case 'D':
 		newStatus = PrinterStatus::pausing;
 		break;
 	case 'F':
 		newStatus = PrinterStatus::flashing;
+		gotGeometry = false;
 		break;
 	case 'I':
 		newStatus = PrinterStatus::idle;
@@ -1215,6 +1234,7 @@ void SetStatus(char c)
 		break;
 	case 'S':
 		newStatus = PrinterStatus::stopped;
+		gotGeometry = false;
 		break;
 	default:
 		newStatus = status;		// leave the status alone if we don't recognize it
@@ -1355,6 +1375,7 @@ const ReceiveDataTableEntry arrayDataTable[] =
 
 const ReceiveDataTableEntry nonArrayDataTable[] =
 {
+	{ rcvAxes,			"axes" },
 	{ rcvBeepFreq,		"beep_freq" },
 	{ rcvBeepLength,	"beep_length" },
 	{ rcvDir,			"dir" },
@@ -1454,7 +1475,7 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			ShowLine;
 			{
 				int ival;
-				if (GetInteger(data, ival) && index < (int)numHeaters)
+				if (GetInteger(data, ival) && index < (int)maxHeaters)
 				{
 					heaterStatus[index] = ival;
 					Colour c = (ival == 1) ? colours->standbyBackColour
@@ -1532,14 +1553,22 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			ShowLine;
 			{
 				int ival;
-				if (index < 3 && GetInteger(data, ival) && ival >= 0 && ival < 2)
+				if (index < MAX_AXES && GetInteger(data, ival) && ival >= 0 && ival < 2)
 				{
 					bool isHomed = (ival == 1);
 					if (isHomed != axisHomed[index])
 					{
 						axisHomed[index] = isHomed;
 						homeButtons[index]->SetColours(colours->buttonTextColour, (isHomed) ? colours->homedButtonBackColour : colours->notHomedButtonBackColour);
-						bool allHomed = axisHomed[0] && axisHomed[1] && axisHomed[2];
+						bool allHomed = true;
+						for (size_t i = 0; i < numAxes; ++i)
+						{
+							if (!axisHomed[i])
+							{
+								allHomed = false;
+								break;
+							}
+						}
 						if (allHomed != allAxesHomed)
 						{
 							allAxesHomed = allHomed;
@@ -1706,13 +1735,26 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 				{
 					machineConfigTimer.Stop();
 				}
-				for (size_t i = 0; i < 3; ++i)
+				for (size_t i = 0; i < MAX_AXES; ++i)
 				{
-					mgr.Show(homeButtons[i], !isDelta);
+					mgr.Show(homeButtons[i], !isDelta && i < numAxes);
 				}
 			}
 			break;
 		
+		case rcvAxes:
+			{
+				unsigned int n;
+				GetUnsignedInteger(data, n);
+				numAxes = constrain<unsigned int>(n, MIN_AXES, MAX_AXES);
+				for (size_t i = MIN_AXES; i < MAX_AXES; ++i)
+				{
+					mgr.Show(homeButtons[i], !isDelta && i < numAxes);
+					Fields::ShowAxis(i, i < numAxes);
+				}
+			}
+			break;
+
 		case rcvSeq:
 			GetUnsignedInteger(data, newMessageSeq);
 			break;
@@ -1884,6 +1926,13 @@ int main(void)
 	debugField->Show(DEBUG != 0);			// show the debug field only if debugging is enabled
 
 	userCommandField->SetLabel(userCommandBuffers[currentUserCommandBuffer].c_str());	// set up to display the current user command
+	
+#ifdef OEM
+	// Display the splash screen
+	lcd.drawCompressedBitmap(0, 0, 800, 480, splashScreenImage);
+	const uint32_t now = SystemTick::GetTickCount();
+	while (SystemTick::GetTickCount() - now < 5000) { }		// hold it there for 5 seconds
+#endif
 
 	// Display the Control tab. This also refreshes the display.
 	ChangeTab(tabControl);

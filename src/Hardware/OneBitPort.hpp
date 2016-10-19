@@ -5,7 +5,6 @@
  *  Author: David
  */ 
 
-
 #ifndef ONEBITPORT_H_
 #define ONEBITPORT_H_
 
@@ -27,43 +26,43 @@ public:
 		
 	void setLow() const
 	{
-#if defined(SAM3S)
-		pio_clear(port, mask);
+#if 1
+		// inline for speed
+		port->PIO_CODR = mask;
 #else
-		*port &= ~mask;
+		pio_clear(port, mask);
 #endif
 	}
 		
 	void setHigh() const
 	{
-#if defined(SAM3S)
-		pio_set(port, mask);
+#if 1
+		// inline for speed
+		port->PIO_SODR = mask;
 #else
-		port |= mask;
+		pio_set(port, mask);
 #endif
 	}
 		
-	// Pulse the pin high. On the SAM3S the pulse is about 400ns wide.
+	// Pulse the pin high
 	void pulseHigh() const
 	{
 		setHigh();
+		delay(delay_100ns);
 		setLow();
 	}
 
-	// Pulse the pin high. On the SAM3S the pulse is about 400ns wide.
+	// Pulse the pin low
 	void pulseLow() const
 	{
 		setLow();
+		delay(delay_100ns);
 		setHigh();
 	}
 		
 	bool read() const
 	{
-#if defined(SAM3S)
 		return (port->PIO_PDSR & mask) != 0;
-#else
-		return (port & mask) != 0;
-#endif		
 	}
 	
 	static void delay(uint8_t del);
@@ -73,14 +72,8 @@ public:
 
 private:
 
-#if defined(SAM3S)
 	Pio *port;			// PIO address
 	uint32_t mask;		// bit mask
-#else						// else assume Arduino
-	regtype *port;		// port address
-	regsize mask;		// bit number
-#endif
 };
-	
 
 #endif /* ONEBITPORT_H_ */

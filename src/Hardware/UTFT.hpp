@@ -178,6 +178,7 @@ public:
 #ifndef DISABLE_BITMAP_ROTATE
 	void drawBitmap(int x, int y, int sx, int sy, const uint16_t *data, int deg, int rox, int roy);
 #endif
+	void drawCompressedBitmap(int x, int y, int sx, int sy, const uint16_t *data);
 	void lcdOff();
 	void lcdOn();
 	void setContrast(uint8_t c);
@@ -211,7 +212,7 @@ private:
 	size_t writeNative(uint8_t c);
 
 	// Hardware interface
-	void LCD_Write_Bus(uint8_t VH, uint8_t VL);
+	void LCD_Write_Bus(uint16_t VHL);
 	void LCD_Write_Again(uint16_t num);
 	void _set_direction_registers();
 

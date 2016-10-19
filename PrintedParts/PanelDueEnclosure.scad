@@ -16,7 +16,7 @@
 /* [Size] */
 
 // Which display panel do you have?
-DisplayType=4;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Standard 4.3 inch,4:Standard 5 inch,5:7 inch]
+DisplayType=5;					// [1:Itead ITDB02-4.3,2:Itead ITDB02-5.0,3:Standard 4.3 inch,4:Standard 5 inch,5:7 inch]
 
 // Which version PanelDue controller board do you have?
 BoardVersion=2.0;				// [1.0,1.1,2.0]
@@ -27,7 +27,7 @@ BoardVersion=2.0;				// [1.0,1.1,2.0]
 Lid=0;								// [0:No,1:Yes]
 
 // Do you want a lip at the top for hanging the enclosure from a top horizontal extrusion?
-Lip=0;								// [0:No,1:Yes]
+Lip=1;								// [0:No,1:Yes]
 
 // Do you want a slot for the SD card?
 SDcard=1;							// [0:No,1:Yes]

@@ -107,10 +107,10 @@ namespace SerialIo
 		{
 			// We have a directory, so send it followed by '/' if necessary
 			char c;
-			while (*dir != 0)
+			while ((c = *dir) != 0)
 			{
-				c = *dir++;
 				SendChar(c);
+				++dir;
 			}
 			if (c != '/')
 			{
