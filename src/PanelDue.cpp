@@ -1492,22 +1492,9 @@ void ProcessReceivedValue(const char id[], const char data[], int index)
 			ShowLine;
 			{
 				float fval;
-				if (GetFloat(data, fval))
+				if (GetFloat(data, fval) && index < MAX_AXES)
 				{
-					switch(index)
-					{
-					case 0:
-						xPos->SetValue(fval);
-						break;
-					case 1:
-						yPos->SetValue(fval);
-						break;
-					case 2:
-						zPos->SetValue(fval);
-						break;
-					default:
-						break;
-					}
+					axisPos[index]->SetValue(fval);
 				}
 			}
 			break;
@@ -1821,6 +1808,7 @@ void UpdateDebugInfo()
 	freeMem->SetValue(getFreeMemory());
 }
 
+#if 0
 void SelfTest()
 {
 	// Measure the 3.3V supply against the internal reference
@@ -1836,16 +1824,15 @@ void SelfTest()
 	activeTemps[2]->SetValue(280);
 	standbyTemps[1]->SetValue(280);
 	standbyTemps[2]->SetValue(280);
-	xPos->SetValue(220.9);
-	yPos->SetValue(220.9);
-	zPos->SetValue(199.99);
-//	extrPos->SetValue(999.9);
+	axisPos[0]->SetValue(220.9);
+	axisPos[1]->SetValue(220.9);
+	axisPos[2]->SetValue(199.99);
 	zProbe->SetValue("1023 (1023)");
-//	fanRPM->SetValue(9999);
 	spd->SetValue(169);
 	extrusionFactors[0]->SetValue(169);
 	extrusionFactors[1]->SetValue(169);
 }
+#endif
 
 void SendRequest(const char *s, bool includeSeq = false)
 {

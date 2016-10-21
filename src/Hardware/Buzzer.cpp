@@ -16,7 +16,7 @@
 namespace Buzzer
 {
 	static const uint32_t pwmClockFrequency = 2000000;		// 2MHz clock (OK down to 30Hz PWM frequency)
-	static const uint32_t backlightPwmFrequency = 200;		// Working range is about 100Hz to 1KHz, but they are all noisy
+	static const uint32_t backlightPwmFrequency = 300;		// Working range is about 100Hz to 1KHz. Some frequencies causes flickering on the 4.3" display.
 	static const uint32_t backlightPeriod = pwmClockFrequency/backlightPwmFrequency; 
 
 	static pwm_channel_t buzzer_pwm_channel_instance =

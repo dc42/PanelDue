@@ -14,10 +14,10 @@
 #include "Icons/Icons.hpp"
 
 FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField;
-FloatField *xPos, *yPos, *zPos;
+FloatField *axisPos[MAX_AXES];
 IntegerButton *activeTemps[maxHeaters], *standbyTemps[maxHeaters];
 IntegerButton *spd, *extrusionFactors[maxHeaters - 1], *fanSpeed, *baudRateButton, *volumeButton;
-IntegerField *fanRpm, *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fileListErrorField;
+IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fileListErrorField;
 ProgressBar *printProgressBar;
 SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
 SingleButton *moveButton, *extrudeButton, *macroButton;
@@ -53,8 +53,10 @@ static_assert(sizeof(languageNames)/sizeof(languageNames[0]) == numLanguages, "W
 extern const char* const longLanguageNames[] = { "Keyboard EN", "Tastatur DE", "Clavier FR" };
 static_assert(sizeof(longLanguageNames)/sizeof(longLanguageNames[0]) == numLanguages, "Wrong number of long languages");
 
-const char* settingsNotSavedText = "Some settings are not saved!";
-const char* restartNeededText = "Touch Save & Restart to use new colour scheme";
+const char* array settingsNotSavedText = "Some settings are not saved!";
+const char*array  restartNeededText = "Touch Save & Restart to use new colour scheme";
+const char* array const axisNames[] = { "X", "Y", "Z", "U", "V", "W" };
+
 
 #if DISPLAY_X == 800
 const Icon heaterIcons[maxHeaters] = { IconBed, IconNozzle1, IconNozzle2, IconNozzle3, IconNozzle4, IconNozzle5, IconNozzle6 };
@@ -204,11 +206,19 @@ namespace Fields
 		mgr.SetRoot(commonRoot);
 
 		DisplayField::SetDefaultColours(colours.infoTextColour, colours.infoBackColour);
-		mgr.AddField(xPos = new FloatField(row6p3 + labelRowAdjust, columnX, xyFieldWidth, TextAlignment::Left, 1, "X "));
-		mgr.AddField(yPos = new FloatField(row6p3 + labelRowAdjust, columnY, xyFieldWidth, TextAlignment::Left, 1, "Y "));
-		mgr.AddField(zPos = new FloatField(row6p3 + labelRowAdjust, columnZ, zFieldWidth, TextAlignment::Left, 2, "Z "));
+		PixelNumber column = margin;
+		PixelNumber xyFieldWidth = (DISPLAY_X - (2 * margin) - (MAX_AXES * fieldSpacing))/(MAX_AXES + 1);
+		for (size_t i = 0; i < MAX_AXES; ++i)
+		{
+			FloatField *f = new FloatField(row6p3 + labelRowAdjust, column, xyFieldWidth, TextAlignment::Left, (i == 2) ? 2 : 1, axisNames[i]);
+			axisPos[i] = f;
+			f->SetValue(0.0);
+			mgr.AddField(f);
+			f->Show(i < MIN_AXES);
+			column += xyFieldWidth + fieldSpacing;
+		}
 		zprobeBuf[0] = 0;
-		mgr.AddField(zProbe = new TextField(row6p3 + labelRowAdjust, columnProbe, probeFieldWidth, TextAlignment::Left, "Probe ", zprobeBuf.c_str()));
+		mgr.AddField(zProbe = new TextField(row6p3 + labelRowAdjust, column, DISPLAY_X - column - margin, TextAlignment::Left, "Pr", zprobeBuf.c_str()));
 
 		DisplayField::SetDefaultColours(colours.buttonTextColour, colours.notHomedButtonBackColour);
 		homeAllButton = AddIconButton(row7p7, 0, MAX_AXES + 2, IconHomeAll, evSendCommand, "G28");
@@ -271,11 +281,6 @@ namespace Fields
 		mgr.AddField(fanSpeed = new IntegerButton(row7, fanColumn, pauseColumn - fanColumn - fieldSpacing, "Fan ", "%"));
 		fanSpeed->SetEvent(evAdjustFan, 0);
 			
-		//mgr.AddField(new StaticTextField(row7, columnY, DisplayX - columnY - margin, TextAlignment::Centre, "RPM"));
-		//DisplayField::SetDefaultColours(infoTextColour, defaultBackColour);
-		fanRpm = new IntegerField(row7, columnY, DisplayX - columnY - margin, TextAlignment::Centre);
-		//mgr.AddField(fanRpm);
-
 		DisplayField::SetDefaultColours(colours.buttonTextColour, colours.pauseButtonBackColour);
 		pauseButton = new TextButton(row7, pauseColumn, DisplayX - pauseColumn - margin, "Pause print", evPausePrint, "M25");
 		mgr.AddField(pauseButton);
@@ -374,7 +379,6 @@ namespace Fields
 	{
 		static const char * array const xyJogValues[] = { "-100", "-10", "-1", "-0.1", "0.1",  "1", "10", "100" };
 		static const char * array const zJogValues[] = { "-50", "-5", "-0.5", "-0.05", "0.05",  "0.5", "5", "50" };
-		static const char * array const axisNames[] = { "X", "Y", "Z", "U", "V", "W" };
 
 		movePopup = CreatePopupWindow(movePopupHeight, movePopupWidth, colours.popupBackColour, colours.popupBorderColour, colours.popupTextColour, "Move head");
 		PixelNumber ypos = popupTopMargin + buttonHeight + moveButtonRowSpacing;
@@ -658,11 +662,7 @@ namespace Fields
 		CreateMessagePopup(colours);
 
 		// Set initial values. We already did the temperature fields when we created them.
-		xPos->SetValue(0.0);
-		yPos->SetValue(0.0);
-		zPos->SetValue(0.0);
 		fanSpeed->SetValue(0);
-		fanRpm->SetValue(0);
 		spd->SetValue(100);
 	}
 	
@@ -710,7 +710,7 @@ namespace Fields
 		mgr.Show(resetButton, true);
 	}
 
-	// Show or hide an axis on the move button grid
+	// Show or hide an axis on the move button grid and on the axis display
 	void ShowAxis(size_t axis, bool b)
 	{
 		// The table gives us a pointer to the label field, which is followed by 8 buttons. So we need to show or hide 9 fields.
@@ -720,7 +720,8 @@ namespace Fields
 			f->Show(b);
 			f = f->next;
 		}
-	}
+		axisPos[axis]->Show(b)
+;	}
 }
 
 // End

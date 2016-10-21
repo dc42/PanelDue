@@ -74,9 +74,6 @@ const PixelNumber fieldSpacing = 6;
 const PixelNumber statusFieldWidth = 156;
 const PixelNumber bedColumn = 114;
 
-const PixelNumber xyFieldWidth = 80;
-const PixelNumber zFieldWidth = 90;
-
 const PixelNumber rowTextHeight = 21;	// height of the font we use
 const PixelNumber rowHeight = 28;
 const PixelNumber moveButtonRowSpacing = 12;
@@ -121,9 +118,6 @@ const PixelNumber outlinePixels = 3;
 const PixelNumber fieldSpacing = 12;
 const PixelNumber statusFieldWidth = 228;
 const PixelNumber bedColumn = 160;
-
-const PixelNumber xyFieldWidth = 120;
-const PixelNumber zFieldWidth = 140;
 
 const PixelNumber rowTextHeight = 32;	// height of the font we use
 const PixelNumber rowHeight = 48;
@@ -181,14 +175,9 @@ const PixelNumber row9 = row8 + rowHeight;
 const PixelNumber rowTabs = DisplayY - rowTextHeight;			// place at bottom of screen with no margin
 const PixelNumber labelRowAdjust = 2;							// how much to drop non-button fields to line up with buttons
 
-const PixelNumber columnX = margin;
-const PixelNumber columnY = columnX + xyFieldWidth + fieldSpacing;
-const PixelNumber columnZ = columnY + xyFieldWidth + fieldSpacing;
-const PixelNumber columnProbe = columnZ + zFieldWidth + fieldSpacing;
-const PixelNumber probeFieldWidth = DisplayX - columnProbe - margin;
-
 const PixelNumber speedColumn = margin;
 const PixelNumber fanColumn = DISPLAY_X/4 + 20;
+
 const PixelNumber pauseColumn = DISPLAY_X/2 + 10 + fieldSpacing;
 const PixelNumber resumeColumn = pauseColumn;
 const PixelNumber cancelColumn = pauseColumn + (DISPLAY_X - pauseColumn - fieldSpacing - margin)/2 + fieldSpacing;
@@ -267,11 +256,11 @@ extern String<generatedByTextLength> generatedByText;
 extern String<alertTextLength>alertText;
 
 extern FloatField *currentTemps[maxHeaters], *fpHeightField, *fpLayerHeightField;
-extern FloatField *xPos, *yPos, *zPos;
+extern FloatField *axisPos[MAX_AXES];
 extern IntegerButton *activeTemps[maxHeaters], *standbyTemps[maxHeaters];
 extern IntegerButton *spd, *fanSpeed, *baudRateButton, *volumeButton;
 extern IntegerButton *extrusionFactors[maxHeaters - 1];
-extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fanRpm, *fileListErrorField;
+extern IntegerField *freeMem, *touchX, *touchY, *fpSizeField, *fpFilamentField, *fileListErrorField;
 extern ProgressBar *printProgressBar;
 extern SingleButton *tabControl, *tabPrint, *tabFiles, *tabMsg, *tabSetup;
 extern SingleButton *moveButton, *extrudeButton, *macroButton;
