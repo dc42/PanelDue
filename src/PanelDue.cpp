@@ -356,11 +356,11 @@ void ChangeTab(ButtonBase *newTab)
 	}
 }
 
-void InitLcd(DisplayOrientation dor, bool is24bit, uint32_t language, uint32_t colourScheme)
+void InitLcd(DisplayOrientation dor, uint32_t language, uint32_t colourScheme)
 {
-	lcd.InitLCD(dor, is24bit);										// set up the LCD
+	lcd.InitLCD(dor, is24BitLcd);									// set up the LCD
 	colours = &colourSchemes[colourScheme];
-	Fields::CreateFields(language, *colours);	// create all the fields
+	Fields::CreateFields(language, *colours);						// create all the fields
 	mgr.Refresh(true);												// redraw everything
 
 	currentTab = NULL;
@@ -908,14 +908,14 @@ void ProcessTouch(ButtonPress bp)
 
 		case evInvertX:
 			nvData.lcdOrientation = static_cast<DisplayOrientation>(nvData.lcdOrientation ^ (ReverseX | InvertBitmap));
-			lcd.InitLCD(nvData.lcdOrientation);
+			lcd.InitLCD(nvData.lcdOrientation, is24BitLcd);
 			CalibrateTouch();
 			CheckSettingsAreSaved();
 			break;
 
 		case evInvertY:
 			nvData.lcdOrientation = static_cast<DisplayOrientation>(nvData.lcdOrientation ^ (ReverseX | ReverseY | InvertText | InvertBitmap));
-			lcd.InitLCD(nvData.lcdOrientation);
+			lcd.InitLCD(nvData.lcdOrientation, is24BitLcd);
 			CalibrateTouch();
 			CheckSettingsAreSaved();
 			break;
@@ -1872,7 +1872,7 @@ int main(void)
 	if (nvData.IsValid())
 	{
 		// The touch panel has already been calibrated
-		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language, nvData.colourScheme);
+		InitLcd(nvData.lcdOrientation, nvData.language, nvData.colourScheme);
 		touch.init(DisplayX, DisplayY, nvData.touchOrientation);
 		touch.calibrate(nvData.xmin, nvData.xmax, nvData.ymin, nvData.ymax, touchCalibMargin);
 		savedNvData = nvData;
@@ -1882,7 +1882,7 @@ int main(void)
 	{
 		// The touch panel has not been calibrated, and we do not know which way up it is
 		nvData.SetDefaults();
-		InitLcd(nvData.lcdOrientation, is24BitLcd, nvData.language, nvData.colourScheme);
+		InitLcd(nvData.lcdOrientation, nvData.language, nvData.colourScheme);
 		Buzzer::SetBacklight(nvData.brightness);	// must be done before touch calibration
 		CalibrateTouch();							// this includes the touch driver initialization
 		SaveSettings();

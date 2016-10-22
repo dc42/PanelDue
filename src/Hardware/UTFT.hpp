@@ -145,7 +145,7 @@ class UTFT : public Print
 {
 public:
 	UTFT(DisplayType model, TransferMode pMode, unsigned int RS, unsigned int WR, unsigned int CS, unsigned int RST, unsigned int SER_LATCH = 0);
-	void InitLCD(DisplayOrientation po = Landscape, bool is24bit = true);
+	void InitLCD(DisplayOrientation po, bool is24bit);
 	void clrScr();
 	void fillScr(Colour c);
 	void drawPixel(int x, int y);
