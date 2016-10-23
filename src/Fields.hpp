@@ -227,9 +227,6 @@ const uint32_t numMessageRows = (rowTabs - margin - rowHeight)/rowTextHeight;
 const PixelNumber messageTextX = margin + messageTimeWidth + 2;
 const PixelNumber messageTextWidth = DisplayX - margin - messageTextX;
 
-const Colour touchSpotBackColour = white;
-const Colour touchSpotColour = black;
-
 namespace Fields
 {
 	extern void CreateFields(uint32_t language, const ColourScheme& colours);

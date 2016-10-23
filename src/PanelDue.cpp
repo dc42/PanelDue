@@ -397,7 +397,7 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 	const PixelNumber touchCircleRadius = DisplayY/32;
 	const PixelNumber touchCalibMaxError = DisplayY/6;
 	
-	lcd.setColor(touchSpotColour);
+	lcd.setColor(colours->labelTextColour);
 	lcd.fillCircle(x, y, touchCircleRadius);
 	
 	for (;;)
@@ -416,7 +416,7 @@ void DoTouchCalib(PixelNumber x, PixelNumber y, PixelNumber altX, PixelNumber al
 		}
 	}
 	
-	lcd.setColor(touchSpotBackColour);
+	lcd.setColor(colours->defaultBackColour);
 	lcd.fillCircle(x, y, touchCircleRadius);
 }
 
@@ -764,10 +764,16 @@ void ProcessTouch(ButtonPress bp)
 				int head = bp.GetIParam();
 				if (head == 0)
 				{
-					// There is no command to switch the bed to standby temperature, so we always set it to the active temperature
-					SerialIo::SendString("M140 S");
-					SerialIo::SendInt(activeTemps[0]->GetValue());
-					SerialIo::SendChar('\n');
+					if (heaterStatus[0] == 2)			// if bed is active
+					{
+						SerialIo::SendString("M144\n");
+					}
+					else
+					{
+						SerialIo::SendString("M140 S");
+						SerialIo::SendInt(activeTemps[0]->GetValue());
+						SerialIo::SendChar('\n');
+					}
 				}
 				else if (head < (int)maxHeaters)
 				{
