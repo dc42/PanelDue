@@ -40,11 +40,10 @@
 #include "MessageLog.hpp"
 
 #ifdef OEM
-// Display the splash screen
 # if DISPLAY_X == 800
-#  include "SplashScreens/OemSplashScreen_800_480.hpp"
+#  include "OemSplashScreen_800_480.hpp"
 # else
-#  include "SplashScreens/OemSplashScreen_480_272.hpp"
+#  include "OemSplashScreen_480_272.hpp"
 # endif
 #endif
 
