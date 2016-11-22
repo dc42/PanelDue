@@ -1921,7 +1921,7 @@ int main(void)
 	
 #ifdef OEM
 	// Display the splash screen
-	lcd.drawCompressedBitmap(0, 0, 800, 480, splashScreenImage);
+	lcd.drawCompressedBitmap(0, 0, DISPLAY_X, DISPLAY_Y, splashScreenImage);
 	const uint32_t now = SystemTick::GetTickCount();
 	while (SystemTick::GetTickCount() - now < 5000) { }		// hold it there for 5 seconds
 #endif
