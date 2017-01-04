@@ -162,7 +162,7 @@ LCDsupW=1;						// Width of boss supports
 // The 40-pin connector is assumed to be oriented with the long edge in the Y direction.
 // Coordinates are from front of PCB.
 PCB =[	0,
-		(BoardVersion >= 2) ? 66.3 : 47.3,	// version 2 board is actually 65.3, the extra 1mm is to make wiring easier
+		(BoardVersion >= 2) ? 67.3 : 47.3,	// version 2 board is actually 65.3, the extra 2mm is to make wiring easier
 		0,
 		(BoardVersion > 1) ? 73.0 : 69.2
 	  ];	// The edges of the controller PCB [Left,Right,Bottom,Top]
@@ -345,8 +345,13 @@ module RoundCube(Len,Wid,Ht,Rad)
 }
 
 module Lid(){
-	translate([0,LidSep+MWid,0])RoundBox(MLen+2*MWall,MWid+2*MWall,MBase+2,MRad,MWall,MBase);
-	translate([0,LidSep+MWid,4])RoundCube(MLen-Tol,MWid-Tol,MBase+2,0);
+	difference() {
+		union() {
+			translate([0,LidSep+MWid,0])RoundBox(MLen+2*MWall,MWid+2*MWall,MBase+2,MRad,MWall,MBase);
+			translate([0,LidSep+MWid,4])RoundCube(MLen-Tol,MWid-Tol,MBase+2,0);
+		}
+		translate([-MLen/2,LidSep+MWid,0]) cube([10,PCB[3]-6,20],center=true);		// cutout for wires
+	}
 }
 
 module Lidscrewhole(){
