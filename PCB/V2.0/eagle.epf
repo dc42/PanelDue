@@ -1,0 +1,43 @@
+[Eagle]
+Version="07 02 00"
+Platform="Windows"
+Serial="62191E841E-LSR-WLM-1EL"
+Globals="Globals"
+Desktop="Desktop"
+
+[Globals]
+AutoSaveProject=1
+UsedLibrary="C:/EAGLE-7.2.0/lbr/frames.lbr"
+UsedLibrary="C:/EAGLE-7.2.0/lbr/testpad.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/Atmel_By_element14_Batch_1.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/Epcos_By_element14_Batch_1.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/INF-SC74L.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/INF-SC74M.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/INF-SC74N.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/Microchip_By_element14_Batch_1.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/Panasonic-ELC.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/SparkFun-Connectors.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/SparkFun-DigitalIC.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/TCRT1000.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/Taiwan_Semiconductor_By_element14_Batch_1.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/Vishay_By_element14_Batch_1.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/carrilib.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/escher/eschertechnologies.lbr"
+UsedLibrary="C:/Program Files (x86)/EAGLE-6.5.0/lbr/zumbik/rectifier.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/con-molex-usb.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/usb_con-update.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/adafruit-Adafruit-Eagle-Library-39885d1/adafruit.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/bourns.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/Diodes_Inc/Diodes_Inc_By_element14_Batch_1.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/switch-tact.lbr"
+UsedLibrary="C:/Users/David/Documents/eagle/lbr/SparkFun/SparkFun-Connectors.lbr"
+
+[Win_1]
+Type="Control Panel"
+Loc="306 241 1313 844"
+State=2
+Number=0
+
+[Desktop]
+Screen="3840 1225"
+Window="Win_1"
