@@ -348,7 +348,7 @@ module Lid(){
 	difference() {
 		union() {
 			translate([0,LidSep+MWid,0])RoundBox(MLen+2*MWall,MWid+2*MWall,MBase+2,MRad,MWall,MBase);
-			translate([0,LidSep+MWid,4])RoundCube(MLen-Tol,MWid-Tol,MBase+2,0);
+			translate([0,LidSep+MWid,overlap])RoundCube(MLen-Tol,MWid-Tol,MBase+4-overlap,0);
 		}
 		translate([-MLen/2,LidSep+MWid,0]) cube([10,PCB[3]-6,20],center=true);		// cutout for wires
 	}
