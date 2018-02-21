@@ -1,7 +1,7 @@
 PanelDue
 ========
 
-This is the OLD source code for firmware versions 1.15x and earlier to run the PanelDue 3D printer user interface board. Source code for firmware versions 1.16 and later is in repository PanelDueFirmware.
+This is the OLD source code for firmware versions 1.15x and earlier to run the PanelDue 3D printer user interface board. Source code for firmware versions 1.16 and later is in repository PanelDueFirmware, see https://github.com/dc42/PanelDueFirmware.
 
 Build instructions: load file PanelDue.cppproj into Atmel Studio 7.0. For those wishing to build it under operating systems other than Windows, it should not be difficult to port it to Eclipse. The only libraries needed that are not included in this repository are the GCC toolchain libraries for the SAM3S.
 
